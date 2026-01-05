@@ -53,8 +53,10 @@ func NewWhatsmeowClient(ctx context.Context, config ClientConfig) (*WhatsmeowCli
 	// Create a logger
 	logger := waLog.Stdout("WhatsApp", "INFO", true)
 
-	// Create the SQL store container
-	container, err := sqlstore.New(ctx, "sqlite", config.DBPath+"?_journal_mode=WAL&_busy_timeout=5000", logger)
+	// Create the SQL store container with foreign keys enabled (required by whatsmeow)
+	// Using modernc.org/sqlite pragma syntax: _pragma=foreign_keys(1)
+	dsn := config.DBPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	container, err := sqlstore.New(ctx, "sqlite", dsn, logger)
 	if err != nil {
 		return nil, errors.ErrDatabaseError.WithCause(err).WithMessage("failed to create whatsmeow store")
 	}
