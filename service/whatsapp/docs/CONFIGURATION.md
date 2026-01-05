@@ -132,6 +132,135 @@ export WHATSAPP_LOG_LEVEL=debug
 export WHATSAPP_LOG_FORMAT=text
 ```
 
+### Rate Limiting Configuration
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `WHATSAPP_RATELIMIT_ENABLED` | bool | `true` | Enable/disable rate limiting |
+| `WHATSAPP_RATELIMIT_RPS` | float | `10.0` | Requests per second |
+| `WHATSAPP_RATELIMIT_BURST` | int | `20` | Burst size (max concurrent requests) |
+| `WHATSAPP_RATELIMIT_BY_IP` | bool | `true` | Rate limit by IP address |
+| `WHATSAPP_RATELIMIT_BY_API_KEY` | bool | `false` | Rate limit by API key |
+| `WHATSAPP_RATELIMIT_CLEANUP_INTERVAL` | duration | `5m` | Interval to clean up stale limiters |
+| `WHATSAPP_RATELIMIT_MAX_AGE` | duration | `1h` | Max age for unused limiters |
+
+**Notes:**
+
+- Rate limiting uses a token bucket algorithm
+- When `BY_IP` is enabled, each IP address gets its own rate limit bucket
+- Headers `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` are included in responses
+- Returns `429 Too Many Requests` with `Retry-After` header when limit exceeded
+
+**Example:**
+
+```bash
+export WHATSAPP_RATELIMIT_ENABLED=true
+export WHATSAPP_RATELIMIT_RPS=20
+export WHATSAPP_RATELIMIT_BURST=50
+export WHATSAPP_RATELIMIT_BY_IP=true
+```
+
+### CORS Configuration
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `WHATSAPP_CORS_ORIGINS` | string[] | `*` | Allowed origins (comma-separated) |
+| `WHATSAPP_CORS_METHODS` | string[] | `GET,POST,PUT,DELETE,OPTIONS` | Allowed HTTP methods |
+| `WHATSAPP_CORS_HEADERS` | string[] | `Origin,Content-Type,Accept,Authorization,X-Request-ID,X-API-Key` | Allowed headers |
+| `WHATSAPP_CORS_EXPOSE_HEADERS` | string[] | `X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset` | Exposed headers |
+| `WHATSAPP_CORS_ALLOW_CREDENTIALS` | bool | `false` | Allow credentials |
+| `WHATSAPP_CORS_MAX_AGE` | int | `86400` | Preflight cache duration (seconds) |
+
+**Notes:**
+
+- Use `*` for allowed origins in development only
+- In production, specify exact origins for security
+- WebSocket connections also validate origin against this list
+
+**Example:**
+
+```bash
+export WHATSAPP_CORS_ORIGINS=https://app.example.com,https://admin.example.com
+export WHATSAPP_CORS_ALLOW_CREDENTIALS=true
+```
+
+### API Key Authentication Configuration
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `WHATSAPP_API_KEY_ENABLED` | bool | `false` | Enable API key authentication |
+| `WHATSAPP_API_KEYS` | string[] | `[]` | Valid API keys (comma-separated) |
+| `WHATSAPP_API_KEY_HEADER` | string | `X-API-Key` | Header name for API key |
+
+**Notes:**
+
+- When enabled, all `/api/*` endpoints require a valid API key
+- Health endpoints (`/health`, `/ready`) and metrics (`/metrics`) bypass authentication
+- Multiple API keys can be configured for key rotation
+- API keys are case-sensitive
+
+**Example:**
+
+```bash
+export WHATSAPP_API_KEY_ENABLED=true
+export WHATSAPP_API_KEYS=sk_live_abc123,sk_live_def456
+export WHATSAPP_API_KEY_HEADER=X-API-Key
+```
+
+### Metrics Configuration
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `WHATSAPP_METRICS_ENABLED` | bool | `true` | Enable Prometheus metrics |
+| `WHATSAPP_METRICS_PATH` | string | `/metrics` | Metrics endpoint path |
+| `WHATSAPP_METRICS_NAMESPACE` | string | `whatsapp` | Prometheus namespace prefix |
+
+**Available Metrics:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `whatsapp_http_requests_total` | Counter | Total HTTP requests by method, path, status |
+| `whatsapp_http_request_duration_seconds` | Histogram | HTTP request duration |
+| `whatsapp_messages_total` | Counter | Total messages by type and status |
+| `whatsapp_sessions_total` | Counter | Total sessions by status |
+| `whatsapp_active_connections` | Gauge | Current active WebSocket connections |
+| `whatsapp_circuit_breaker_state` | Gauge | Circuit breaker state |
+
+**Example:**
+
+```bash
+export WHATSAPP_METRICS_ENABLED=true
+export WHATSAPP_METRICS_PATH=/metrics
+export WHATSAPP_METRICS_NAMESPACE=whatsapp_service
+```
+
+### Circuit Breaker Configuration
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `WHATSAPP_CIRCUIT_BREAKER_ENABLED` | bool | `true` | Enable circuit breaker |
+| `WHATSAPP_CIRCUIT_BREAKER_MAX_REQUESTS` | int | `3` | Max requests in half-open state |
+| `WHATSAPP_CIRCUIT_BREAKER_INTERVAL` | duration | `60s` | Interval for clearing counts |
+| `WHATSAPP_CIRCUIT_BREAKER_TIMEOUT` | duration | `30s` | Timeout before half-open |
+| `WHATSAPP_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | int | `5` | Failures to open circuit |
+| `WHATSAPP_CIRCUIT_BREAKER_SUCCESS_THRESHOLD` | int | `2` | Successes to close circuit |
+
+**Circuit Breaker States:**
+
+| State | Description |
+|-------|-------------|
+| Closed | Normal operation, requests pass through |
+| Open | Circuit tripped, requests fail immediately |
+| Half-Open | Testing if service recovered |
+
+**Example:**
+
+```bash
+export WHATSAPP_CIRCUIT_BREAKER_ENABLED=true
+export WHATSAPP_CIRCUIT_BREAKER_FAILURE_THRESHOLD=10
+export WHATSAPP_CIRCUIT_BREAKER_TIMEOUT=60s
+```
+
 ## Configuration Validation
 
 The service validates all configuration at startup. Invalid configuration causes the service to fail fast with a descriptive error message.
@@ -171,6 +300,10 @@ WHATSAPP_SQLITE_PATH=./data/whatsapp.db
 WHATSAPP_WEBSOCKET_URL=ws://localhost:3000/ws/whatsapp
 WHATSAPP_LOG_LEVEL=debug
 WHATSAPP_LOG_FORMAT=text
+WHATSAPP_CORS_ORIGINS=*
+WHATSAPP_API_KEY_ENABLED=false
+WHATSAPP_RATELIMIT_ENABLED=false
+WHATSAPP_CIRCUIT_BREAKER_ENABLED=false
 ```
 
 ### Production
@@ -186,6 +319,14 @@ WHATSAPP_LOG_FORMAT=json
 WHATSAPP_QR_TIMEOUT=3m
 WHATSAPP_MESSAGE_RATE_LIMIT=60
 WHATSAPP_WEBSOCKET_QUEUE_SIZE=5000
+WHATSAPP_CORS_ORIGINS=https://app.example.com
+WHATSAPP_API_KEY_ENABLED=true
+WHATSAPP_API_KEYS=sk_live_your_secure_key_here
+WHATSAPP_RATELIMIT_ENABLED=true
+WHATSAPP_RATELIMIT_RPS=20
+WHATSAPP_RATELIMIT_BURST=50
+WHATSAPP_METRICS_ENABLED=true
+WHATSAPP_CIRCUIT_BREAKER_ENABLED=true
 ```
 
 ### Docker
@@ -198,6 +339,9 @@ docker run -d \
   -e WHATSAPP_SQLITE_PATH=/data/whatsapp.db \
   -e WHATSAPP_WEBSOCKET_URL=ws://host.docker.internal:3000/ws/whatsapp \
   -e WHATSAPP_LOG_LEVEL=info \
+  -e WHATSAPP_API_KEY_ENABLED=true \
+  -e WHATSAPP_API_KEYS=sk_live_your_key \
+  -e WHATSAPP_CORS_ORIGINS=https://app.example.com \
   pharmabroker-whatsapp
 ```
 
@@ -222,6 +366,12 @@ services:
       WHATSAPP_LOG_FORMAT: "json"
       WHATSAPP_QR_TIMEOUT: "2m"
       WHATSAPP_MESSAGE_RATE_LIMIT: "30"
+      WHATSAPP_API_KEY_ENABLED: "true"
+      WHATSAPP_API_KEYS: "${WHATSAPP_API_KEYS}"
+      WHATSAPP_CORS_ORIGINS: "https://app.example.com"
+      WHATSAPP_RATELIMIT_ENABLED: "true"
+      WHATSAPP_RATELIMIT_RPS: "20"
+      WHATSAPP_METRICS_ENABLED: "true"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
       interval: 30s
@@ -248,6 +398,19 @@ data:
   WHATSAPP_LOG_FORMAT: "json"
   WHATSAPP_QR_TIMEOUT: "2m"
   WHATSAPP_MESSAGE_RATE_LIMIT: "30"
+  WHATSAPP_API_KEY_ENABLED: "true"
+  WHATSAPP_CORS_ORIGINS: "https://app.example.com"
+  WHATSAPP_RATELIMIT_ENABLED: "true"
+  WHATSAPP_RATELIMIT_RPS: "20"
+  WHATSAPP_METRICS_ENABLED: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: whatsapp-secrets
+type: Opaque
+stringData:
+  WHATSAPP_API_KEYS: "sk_live_your_secure_key_here"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -262,6 +425,10 @@ spec:
     metadata:
       labels:
         app: whatsapp
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: whatsapp
@@ -271,6 +438,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: whatsapp-config
+            - secretRef:
+                name: whatsapp-secrets
           volumeMounts:
             - name: data
               mountPath: /data
@@ -286,6 +455,13 @@ spec:
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
       volumes:
         - name: data
           persistentVolumeClaim:

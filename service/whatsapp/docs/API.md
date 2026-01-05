@@ -10,7 +10,22 @@ http://localhost:8080
 
 ## Authentication
 
-Currently, the API does not require authentication. In production, implement appropriate authentication middleware.
+The API supports optional API key authentication. When enabled, all `/api/*` endpoints require a valid API key.
+
+### API Key Authentication
+
+Include the API key in the request header:
+
+```bash
+curl -H "X-API-Key: your-api-key" http://localhost:8080/api/sessions
+```
+
+Configure API key authentication via environment variables:
+- `WHATSAPP_API_KEY_ENABLED=true` - Enable API key authentication
+- `WHATSAPP_API_KEYS=key1,key2,key3` - Comma-separated list of valid API keys
+- `WHATSAPP_API_KEY_HEADER=X-API-Key` - Custom header name (default: X-API-Key)
+
+**Note:** Health endpoints (`/health`, `/ready`) and metrics endpoint (`/metrics`) do not require authentication.
 
 ## Response Format
 
@@ -46,6 +61,7 @@ All responses follow a consistent JSON structure:
 |--------|----------|-------------|
 | `Content-Type` | Yes (POST/PUT) | Must be `application/json` |
 | `X-Request-ID` | No | Request tracking ID (auto-generated if not provided) |
+| `X-API-Key` | Conditional | Required when API key authentication is enabled |
 
 ### Response Headers
 
@@ -53,6 +69,10 @@ All responses follow a consistent JSON structure:
 |--------|-------------|
 | `X-Request-ID` | Request tracking ID |
 | `Access-Control-Allow-Origin` | CORS header |
+| `X-RateLimit-Limit` | Maximum requests allowed per window |
+| `X-RateLimit-Remaining` | Remaining requests in current window |
+| `X-RateLimit-Reset` | Unix timestamp when the rate limit resets |
+| `Retry-After` | Seconds to wait before retrying (when rate limited) |
 
 ---
 
@@ -75,17 +95,58 @@ Health check endpoint for load balancers and monitoring.
 
 ### GET /ready
 
-Readiness probe for Kubernetes deployments.
+Readiness probe for Kubernetes deployments. Checks database connectivity, WhatsApp client health, and event publisher status.
 
-**Response**
+**Response** `200 OK`
 
 ```json
 {
   "success": true,
   "data": {
-    "status": "ready"
+    "status": "ready",
+    "checks": {
+      "database": "healthy",
+      "whatsapp": "healthy",
+      "event_publisher": "healthy"
+    }
   }
 }
+```
+
+**Response** `503 Service Unavailable` (when not ready)
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_READY",
+    "message": "Service is not ready",
+    "details": {
+      "database": "healthy",
+      "whatsapp": "unhealthy",
+      "event_publisher": "healthy"
+    }
+  }
+}
+```
+
+---
+
+## Metrics Endpoint
+
+### GET /metrics
+
+Prometheus metrics endpoint for monitoring and observability.
+
+**Response** `200 OK`
+
+Returns Prometheus-formatted metrics including:
+- `whatsapp_http_requests_total` - Total HTTP requests by method, path, and status
+- `whatsapp_http_request_duration_seconds` - HTTP request duration histogram
+- `whatsapp_messages_total` - Total messages by type and status
+- `whatsapp_sessions_total` - Total sessions by status
+- `whatsapp_active_connections` - Current active WebSocket connections
+- `whatsapp_circuit_breaker_state` - Circuit breaker state (0=closed, 1=half-open, 2=open)
 ```
 
 ---
@@ -239,8 +300,10 @@ Send a WhatsApp message.
 | Type | Required Fields | Description |
 |------|-----------------|-------------|
 | `text` | `content.text` | Plain text message |
-| `image` | `content.image_url` | Image message (not yet implemented) |
-| `document` | `content.doc_url` | Document message (not yet implemented) |
+| `image` | `content.image_url` | Image message with optional caption |
+| `document` | `content.doc_url` | Document message with optional caption |
+| `audio` | `content.audio_url` | Audio message |
+| `video` | `content.video_url` | Video message with optional caption |
 
 **Request Schema**
 
@@ -248,12 +311,15 @@ Send a WhatsApp message.
 {
   "session_id": "string (required, UUID)",
   "to": "string (required, E.164 format: +1234567890)",
-  "type": "string (required, one of: text, image, document)",
+  "type": "string (required, one of: text, image, document, audio, video)",
   "content": {
     "text": "string (required for type=text, max 4096 chars)",
     "image_url": "string (required for type=image, valid URL)",
     "doc_url": "string (required for type=document, valid URL)",
-    "caption": "string (optional, max 1024 chars)"
+    "audio_url": "string (required for type=audio, valid URL)",
+    "video_url": "string (required for type=video, valid URL)",
+    "caption": "string (optional, max 1024 chars)",
+    "filename": "string (optional, for documents)"
   }
 }
 ```
@@ -481,12 +547,47 @@ ws.onclose = () => {
 
 ## Rate Limiting
 
-The service implements rate limiting for message sending:
+The service implements configurable rate limiting for all API endpoints:
 
-- Default: 30 messages per minute per session
-- Configurable via `WHATSAPP_MESSAGE_RATE_LIMIT`
-- Messages exceeding the rate limit are queued
-- Queue size: 1000 messages (configurable)
+- Default: 10 requests per second with burst of 20
+- Configurable via environment variables
+- Per-IP rate limiting by default
+- Returns `429 Too Many Requests` when limit exceeded
+
+### Rate Limit Headers
+
+All API responses include rate limit headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed per window |
+| `X-RateLimit-Remaining` | Remaining requests in current window |
+| `X-RateLimit-Reset` | Unix timestamp when the rate limit resets |
+
+### Rate Limited Response
+
+When rate limit is exceeded, the API returns:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Rate limit exceeded. Please retry after X seconds"
+  }
+}
+```
+
+The `Retry-After` header indicates how many seconds to wait before retrying.
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WHATSAPP_RATELIMIT_ENABLED` | `true` | Enable/disable rate limiting |
+| `WHATSAPP_RATELIMIT_RPS` | `10` | Requests per second |
+| `WHATSAPP_RATELIMIT_BURST` | `20` | Burst size |
+| `WHATSAPP_RATELIMIT_BY_IP` | `true` | Rate limit by IP address |
 
 ---
 
