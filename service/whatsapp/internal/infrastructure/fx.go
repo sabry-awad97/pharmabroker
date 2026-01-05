@@ -138,6 +138,11 @@ func NewMediaUploader(waClient repository.WhatsAppClient, cfg *config.Config) re
 	// Create downloader
 	downloader := whatsapp.NewHTTPMediaDownloader(downloaderConfig, constraints)
 
-	// Create and return the media uploader
-	return whatsapp.NewWhatsmeowMediaUploader(whatsmeowClient, downloader, constraints)
+	// Create the media uploader
+	mediaUploader := whatsapp.NewWhatsmeowMediaUploader(whatsmeowClient, downloader, constraints)
+
+	// Wire the media uploader to the client for sending media messages
+	whatsmeowClient.SetMediaUploader(mediaUploader)
+
+	return mediaUploader
 }

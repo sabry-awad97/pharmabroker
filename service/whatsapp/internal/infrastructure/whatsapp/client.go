@@ -52,6 +52,7 @@ type WhatsmeowClient struct {
 	handlers       []repository.EventHandler
 	logger         waLog.Logger
 	circuitBreaker *CircuitBreaker
+	mediaUploader  *WhatsmeowMediaUploader
 }
 
 // NewWhatsmeowClient creates a new WhatsApp client
@@ -194,6 +195,7 @@ func (c *WhatsmeowClient) SendMessage(ctx context.Context, msg *entity.Message) 
 func (c *WhatsmeowClient) sendMessageInternal(ctx context.Context, msg *entity.Message) error {
 	c.mu.RLock()
 	client, exists := c.clients[msg.SessionID]
+	mediaUploader := c.mediaUploader
 	c.mu.RUnlock()
 
 	if !exists {
@@ -211,9 +213,83 @@ func (c *WhatsmeowClient) sendMessageInternal(ctx context.Context, msg *entity.M
 	}
 
 	// Build message based on type
-	waMsg, err := buildWhatsAppMessage(msg)
-	if err != nil {
-		return err
+	var waMsg *waE2E.Message
+
+	switch msg.Type {
+	case entity.MessageTypeImage:
+		if mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+		if msg.Content.ImageURL == nil || *msg.Content.ImageURL == "" {
+			return errors.ErrEmptyContent.WithMessage("image URL is required")
+		}
+		uploadResult, err := mediaUploader.UploadImage(ctx, msg.SessionID, *msg.Content.ImageURL)
+		if err != nil {
+			return errors.ErrMediaUploadFailed.WithCause(err)
+		}
+		caption := ""
+		if msg.Content.Caption != nil {
+			caption = *msg.Content.Caption
+		}
+		waMsg = BuildImageMessage(uploadResult, caption)
+
+	case entity.MessageTypeDocument:
+		if mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+		if msg.Content.DocURL == nil || *msg.Content.DocURL == "" {
+			return errors.ErrEmptyContent.WithMessage("document URL is required")
+		}
+		filename := ""
+		if msg.Content.Caption != nil {
+			filename = *msg.Content.Caption // Use caption as filename for documents
+		}
+		uploadResult, err := mediaUploader.UploadDocument(ctx, msg.SessionID, *msg.Content.DocURL, filename)
+		if err != nil {
+			return errors.ErrMediaUploadFailed.WithCause(err)
+		}
+		caption := ""
+		if msg.Content.Caption != nil {
+			caption = *msg.Content.Caption
+		}
+		waMsg = BuildDocumentMessage(uploadResult, filename, caption)
+
+	case entity.MessageTypeAudio:
+		if mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+		if msg.Content.AudioURL == nil || *msg.Content.AudioURL == "" {
+			return errors.ErrEmptyContent.WithMessage("audio URL is required")
+		}
+		uploadResult, err := mediaUploader.UploadAudio(ctx, msg.SessionID, *msg.Content.AudioURL)
+		if err != nil {
+			return errors.ErrMediaUploadFailed.WithCause(err)
+		}
+		waMsg = BuildAudioMessage(uploadResult)
+
+	case entity.MessageTypeVideo:
+		if mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+		if msg.Content.VideoURL == nil || *msg.Content.VideoURL == "" {
+			return errors.ErrEmptyContent.WithMessage("video URL is required")
+		}
+		uploadResult, err := mediaUploader.UploadVideo(ctx, msg.SessionID, *msg.Content.VideoURL)
+		if err != nil {
+			return errors.ErrMediaUploadFailed.WithCause(err)
+		}
+		caption := ""
+		if msg.Content.Caption != nil {
+			caption = *msg.Content.Caption
+		}
+		waMsg = BuildVideoMessage(uploadResult, caption)
+
+	default:
+		// Text message - use the existing buildWhatsAppMessage function
+		waMsg, err = buildWhatsAppMessage(msg)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Send message with retry
@@ -433,6 +509,13 @@ func (c *WhatsmeowClient) IsCircuitBreakerOpen() bool {
 		return false
 	}
 	return c.circuitBreaker.IsOpen()
+}
+
+// SetMediaUploader sets the media uploader for handling media messages
+func (c *WhatsmeowClient) SetMediaUploader(uploader *WhatsmeowMediaUploader) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mediaUploader = uploader
 }
 
 // getOrCreateDevice gets or creates a device store for the session

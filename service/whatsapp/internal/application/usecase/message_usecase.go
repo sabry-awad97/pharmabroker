@@ -357,8 +357,17 @@ func (uc *MessageUseCase) buildMessageContent(req dto.SendMessageRequest) entity
 	if req.Content.DocURL != nil {
 		content.DocURL = req.Content.DocURL
 	}
+	if req.Content.AudioURL != nil {
+		content.AudioURL = req.Content.AudioURL
+	}
+	if req.Content.VideoURL != nil {
+		content.VideoURL = req.Content.VideoURL
+	}
 	if req.Content.Caption != nil {
 		content.Caption = req.Content.Caption
+	}
+	if req.Content.Filename != nil {
+		content.Filename = req.Content.Filename
 	}
 
 	return content
@@ -373,6 +382,10 @@ func (uc *MessageUseCase) getMessageType(typeStr string) entity.MessageType {
 		return entity.MessageTypeImage
 	case "document":
 		return entity.MessageTypeDocument
+	case "audio":
+		return entity.MessageTypeAudio
+	case "video":
+		return entity.MessageTypeVideo
 	default:
 		return entity.MessageTypeText
 	}
@@ -396,10 +409,16 @@ func (uc *MessageUseCase) validateMediaMessage(msg *entity.Message) error {
 			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
 		}
 	case entity.MessageTypeAudio:
+		if msg.Content.AudioURL == nil || *msg.Content.AudioURL == "" {
+			return errors.ErrEmptyContent.WithMessage("audio URL is required for audio messages")
+		}
 		if uc.mediaUploader == nil {
 			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
 		}
 	case entity.MessageTypeVideo:
+		if msg.Content.VideoURL == nil || *msg.Content.VideoURL == "" {
+			return errors.ErrEmptyContent.WithMessage("video URL is required for video messages")
+		}
 		if uc.mediaUploader == nil {
 			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
 		}

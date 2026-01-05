@@ -9,7 +9,7 @@ type CreateSessionRequest struct {
 type SendMessageRequest struct {
 	SessionID string                  `json:"session_id" validate:"required,uuid"`
 	To        string                  `json:"to" validate:"required,e164"`
-	Type      string                  `json:"type" validate:"required,oneof=text image document"`
+	Type      string                  `json:"type" validate:"required,oneof=text image document audio video"`
 	Content   SendMessageContentInput `json:"content" validate:"required"`
 }
 
@@ -18,7 +18,10 @@ type SendMessageContentInput struct {
 	Text     *string `json:"text,omitempty" validate:"required_if=Type text,omitempty,max=4096"`
 	ImageURL *string `json:"image_url,omitempty" validate:"required_if=Type image,omitempty,url"`
 	DocURL   *string `json:"doc_url,omitempty" validate:"required_if=Type document,omitempty,url"`
+	AudioURL *string `json:"audio_url,omitempty" validate:"required_if=Type audio,omitempty,url"`
+	VideoURL *string `json:"video_url,omitempty" validate:"required_if=Type video,omitempty,url"`
 	Caption  *string `json:"caption,omitempty" validate:"omitempty,max=1024"`
+	Filename *string `json:"filename,omitempty" validate:"omitempty,max=255"`
 }
 
 // GetSessionRequest represents a request to get a session by ID
@@ -51,6 +54,14 @@ func (r *SendMessageRequest) Validate() error {
 	case "document":
 		if r.Content.DocURL == nil || *r.Content.DocURL == "" {
 			return ErrDocURLRequired
+		}
+	case "audio":
+		if r.Content.AudioURL == nil || *r.Content.AudioURL == "" {
+			return ErrAudioURLRequired
+		}
+	case "video":
+		if r.Content.VideoURL == nil || *r.Content.VideoURL == "" {
+			return ErrVideoURLRequired
 		}
 	}
 	return nil

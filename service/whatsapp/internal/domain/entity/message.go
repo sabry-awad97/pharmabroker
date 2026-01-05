@@ -61,7 +61,10 @@ type MessageContent struct {
 	Text     *string `json:"text,omitempty"`
 	ImageURL *string `json:"image_url,omitempty"`
 	DocURL   *string `json:"doc_url,omitempty"`
+	AudioURL *string `json:"audio_url,omitempty"`
+	VideoURL *string `json:"video_url,omitempty"`
 	Caption  *string `json:"caption,omitempty"`
+	Filename *string `json:"filename,omitempty"`
 }
 
 // NewTextContent creates a MessageContent with text
@@ -81,7 +84,7 @@ func NewDocumentContent(docURL string, caption *string) MessageContent {
 
 // IsEmpty checks if the content is empty
 func (mc MessageContent) IsEmpty() bool {
-	return mc.Text == nil && mc.ImageURL == nil && mc.DocURL == nil
+	return mc.Text == nil && mc.ImageURL == nil && mc.DocURL == nil && mc.AudioURL == nil && mc.VideoURL == nil
 }
 
 // GetContentType returns the type of content based on what's populated
@@ -94,6 +97,12 @@ func (mc MessageContent) GetContentType() MessageType {
 	}
 	if mc.DocURL != nil {
 		return MessageTypeDocument
+	}
+	if mc.AudioURL != nil {
+		return MessageTypeAudio
+	}
+	if mc.VideoURL != nil {
+		return MessageTypeVideo
 	}
 	return MessageTypeText // default
 }
