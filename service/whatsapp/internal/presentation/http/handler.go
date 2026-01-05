@@ -14,6 +14,7 @@ import (
 type Handler struct {
 	sessionUC *usecase.SessionUseCase
 	messageUC *usecase.MessageUseCase
+	healthUC  *usecase.HealthUseCase
 }
 
 // NewHandler creates a new Handler
@@ -21,7 +22,22 @@ func NewHandler(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUse
 	return &Handler{
 		sessionUC: sessionUC,
 		messageUC: messageUC,
+		healthUC:  nil,
 	}
+}
+
+// NewHandlerWithHealth creates a new Handler with health use case
+func NewHandlerWithHealth(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUseCase, healthUC *usecase.HealthUseCase) *Handler {
+	return &Handler{
+		sessionUC: sessionUC,
+		messageUC: messageUC,
+		healthUC:  healthUC,
+	}
+}
+
+// SetHealthUseCase sets the health use case (for dependency injection)
+func (h *Handler) SetHealthUseCase(healthUC *usecase.HealthUseCase) {
+	h.healthUC = healthUC
 }
 
 // CreateSession handles POST /api/sessions
@@ -123,18 +139,55 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	})
 }
 
-// Health handles GET /health
+// Health handles GET /health (liveness probe)
 func (h *Handler) Health(c *gin.Context) {
+	if h.healthUC != nil {
+		response := h.healthUC.CheckLiveness(c.Request.Context())
+		if !response.Alive {
+			c.JSON(http.StatusServiceUnavailable, map[string]interface{}{
+				"status":  "unhealthy",
+				"message": response.Message,
+			})
+			return
+		}
+
+		// Include additional details if requested
+		if c.Query("details") == "true" {
+			details := h.healthUC.GetHealthDetails(c.Request.Context())
+			c.JSON(http.StatusOK, map[string]interface{}{
+				"status":  "healthy",
+				"message": response.Message,
+				"details": details,
+			})
+			return
+		}
+	}
+
 	respondWithSuccess(c, http.StatusOK, map[string]string{
 		"status": "healthy",
 	})
 }
 
-// Ready handles GET /ready
+// Ready handles GET /ready (readiness probe)
 func (h *Handler) Ready(c *gin.Context) {
-	// Check if dependencies are ready
-	// For now, we just return OK
-	// In production, this would check DB connection, WhatsApp client, etc.
+	if h.healthUC != nil {
+		response := h.healthUC.CheckReadiness(c.Request.Context())
+
+		statusCode := http.StatusOK
+		status := "ready"
+		if !response.Ready {
+			statusCode = http.StatusServiceUnavailable
+			status = "not_ready"
+		}
+
+		c.JSON(statusCode, map[string]interface{}{
+			"status":     status,
+			"components": response.Components,
+		})
+		return
+	}
+
+	// Fallback if health use case is not configured
 	respondWithSuccess(c, http.StatusOK, map[string]string{
 		"status": "ready",
 	})

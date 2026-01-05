@@ -5,6 +5,7 @@ import (
 
 	"github.com/pharmabroker/whatsapp/internal/application/usecase"
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
+	"github.com/pharmabroker/whatsapp/internal/infrastructure"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/config"
 	"go.uber.org/fx"
 )
@@ -14,6 +15,7 @@ var Module = fx.Module("application",
 	fx.Provide(
 		NewSessionUseCase,
 		NewMessageUseCase,
+		NewHealthUseCase,
 	),
 )
 
@@ -55,4 +57,13 @@ func NewMessageUseCase(
 	})
 
 	return uc
+}
+
+// NewHealthUseCase creates a new health use case with all health checkers
+func NewHealthUseCase(checkers *infrastructure.HealthCheckers) *usecase.HealthUseCase {
+	return usecase.NewHealthUseCase(
+		checkers.SQLite,
+		checkers.WhatsAppClient,
+		checkers.EventPublisher,
+	)
 }

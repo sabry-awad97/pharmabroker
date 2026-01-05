@@ -24,6 +24,53 @@ type Config struct {
 
 	// Logging configuration
 	Log LogConfig `mapstructure:"log"`
+
+	// Rate limiting configuration
+	RateLimit RateLimitConfig `mapstructure:"ratelimit"`
+
+	// CORS configuration
+	CORS CORSConfig `mapstructure:"cors"`
+
+	// API Key authentication configuration
+	APIKey APIKeyConfig `mapstructure:"apikey"`
+
+	// Metrics configuration
+	Metrics MetricsConfig `mapstructure:"metrics"`
+}
+
+// MetricsConfig holds Prometheus metrics configuration
+type MetricsConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`
+	Path      string `mapstructure:"path"`      // Metrics endpoint path (default: /metrics)
+	Namespace string `mapstructure:"namespace"` // Prometheus namespace (default: whatsapp)
+}
+
+// APIKeyConfig holds API key authentication configuration
+type APIKeyConfig struct {
+	Enabled bool     `mapstructure:"enabled"`
+	Keys    []string `mapstructure:"keys"`   // List of valid API keys
+	Header  string   `mapstructure:"header"` // Header name for API key (default: X-API-Key)
+}
+
+// CORSConfig holds CORS configuration
+type CORSConfig struct {
+	AllowedOrigins   []string `mapstructure:"allowed_origins"`
+	AllowedMethods   []string `mapstructure:"allowed_methods"`
+	AllowedHeaders   []string `mapstructure:"allowed_headers"`
+	ExposeHeaders    []string `mapstructure:"expose_headers"`
+	AllowCredentials bool     `mapstructure:"allow_credentials"`
+	MaxAge           int      `mapstructure:"max_age"` // seconds
+}
+
+// RateLimitConfig holds rate limiting configuration
+type RateLimitConfig struct {
+	Enabled           bool          `mapstructure:"enabled"`
+	RequestsPerSecond float64       `mapstructure:"requests_per_second"`
+	BurstSize         int           `mapstructure:"burst_size"`
+	ByIP              bool          `mapstructure:"by_ip"`
+	ByAPIKey          bool          `mapstructure:"by_api_key"`
+	CleanupInterval   time.Duration `mapstructure:"cleanup_interval"`
+	MaxAge            time.Duration `mapstructure:"max_age"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -188,6 +235,22 @@ func (c *Config) Validate() error {
 		})
 	}
 
+	// Validate RateLimit config
+	if c.RateLimit.Enabled {
+		if c.RateLimit.RequestsPerSecond <= 0 {
+			errs = append(errs, ValidationError{
+				Field:   "ratelimit.requests_per_second",
+				Message: "must be positive when rate limiting is enabled",
+			})
+		}
+		if c.RateLimit.BurstSize <= 0 {
+			errs = append(errs, ValidationError{
+				Field:   "ratelimit.burst_size",
+				Message: "must be positive when rate limiting is enabled",
+			})
+		}
+	}
+
 	if len(errs) > 0 {
 		return errs
 	}
@@ -264,6 +327,33 @@ func setDefaults(v *viper.Viper) {
 	// Log defaults
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "json")
+
+	// RateLimit defaults
+	v.SetDefault("ratelimit.enabled", true)
+	v.SetDefault("ratelimit.requests_per_second", 10.0)
+	v.SetDefault("ratelimit.burst_size", 20)
+	v.SetDefault("ratelimit.by_ip", true)
+	v.SetDefault("ratelimit.by_api_key", false)
+	v.SetDefault("ratelimit.cleanup_interval", 5*time.Minute)
+	v.SetDefault("ratelimit.max_age", time.Hour)
+
+	// CORS defaults
+	v.SetDefault("cors.allowed_origins", []string{"*"})
+	v.SetDefault("cors.allowed_methods", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
+	v.SetDefault("cors.allowed_headers", []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-API-Key"})
+	v.SetDefault("cors.expose_headers", []string{"X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"})
+	v.SetDefault("cors.allow_credentials", false)
+	v.SetDefault("cors.max_age", 86400) // 24 hours
+
+	// APIKey defaults
+	v.SetDefault("apikey.enabled", false)
+	v.SetDefault("apikey.keys", []string{})
+	v.SetDefault("apikey.header", "X-API-Key")
+
+	// Metrics defaults
+	v.SetDefault("metrics.enabled", true)
+	v.SetDefault("metrics.path", "/metrics")
+	v.SetDefault("metrics.namespace", "whatsapp")
 }
 
 func bindEnvVars(v *viper.Viper) {
@@ -292,6 +382,33 @@ func bindEnvVars(v *viper.Viper) {
 	// Log
 	_ = v.BindEnv("log.level", "WHATSAPP_LOG_LEVEL", "LOG_LEVEL")
 	_ = v.BindEnv("log.format", "WHATSAPP_LOG_FORMAT", "LOG_FORMAT")
+
+	// RateLimit
+	_ = v.BindEnv("ratelimit.enabled", "WHATSAPP_RATELIMIT_ENABLED")
+	_ = v.BindEnv("ratelimit.requests_per_second", "WHATSAPP_RATELIMIT_RPS")
+	_ = v.BindEnv("ratelimit.burst_size", "WHATSAPP_RATELIMIT_BURST")
+	_ = v.BindEnv("ratelimit.by_ip", "WHATSAPP_RATELIMIT_BY_IP")
+	_ = v.BindEnv("ratelimit.by_api_key", "WHATSAPP_RATELIMIT_BY_API_KEY")
+	_ = v.BindEnv("ratelimit.cleanup_interval", "WHATSAPP_RATELIMIT_CLEANUP_INTERVAL")
+	_ = v.BindEnv("ratelimit.max_age", "WHATSAPP_RATELIMIT_MAX_AGE")
+
+	// CORS
+	_ = v.BindEnv("cors.allowed_origins", "WHATSAPP_CORS_ORIGINS")
+	_ = v.BindEnv("cors.allowed_methods", "WHATSAPP_CORS_METHODS")
+	_ = v.BindEnv("cors.allowed_headers", "WHATSAPP_CORS_HEADERS")
+	_ = v.BindEnv("cors.expose_headers", "WHATSAPP_CORS_EXPOSE_HEADERS")
+	_ = v.BindEnv("cors.allow_credentials", "WHATSAPP_CORS_ALLOW_CREDENTIALS")
+	_ = v.BindEnv("cors.max_age", "WHATSAPP_CORS_MAX_AGE")
+
+	// APIKey
+	_ = v.BindEnv("apikey.enabled", "WHATSAPP_API_KEY_ENABLED")
+	_ = v.BindEnv("apikey.keys", "WHATSAPP_API_KEYS")
+	_ = v.BindEnv("apikey.header", "WHATSAPP_API_KEY_HEADER")
+
+	// Metrics
+	_ = v.BindEnv("metrics.enabled", "WHATSAPP_METRICS_ENABLED")
+	_ = v.BindEnv("metrics.path", "WHATSAPP_METRICS_PATH")
+	_ = v.BindEnv("metrics.namespace", "WHATSAPP_METRICS_NAMESPACE")
 }
 
 // MustLoad loads configuration and panics on error (for use in main)

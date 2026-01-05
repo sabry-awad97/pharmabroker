@@ -40,6 +40,38 @@ type QREvent struct {
 	Message string // optional message
 }
 
+// NewQRCodeEvent creates a QR code event
+func NewQRCodeEvent(base64Image string) QREvent {
+	return QREvent{
+		Type: "qr",
+		Data: base64Image,
+	}
+}
+
+// NewAuthenticatedEvent creates an authenticated event
+func NewAuthenticatedEvent(jid string) QREvent {
+	return QREvent{
+		Type: "authenticated",
+		Data: jid,
+	}
+}
+
+// NewQRErrorEvent creates an error event
+func NewQRErrorEvent(message string) QREvent {
+	return QREvent{
+		Type:    "error",
+		Message: message,
+	}
+}
+
+// NewQRTimeoutEvent creates a timeout event
+func NewQRTimeoutEvent() QREvent {
+	return QREvent{
+		Type:    "timeout",
+		Message: "QR authentication timed out",
+	}
+}
+
 // WhatsAppClient defines WhatsApp operations
 type WhatsAppClient interface {
 	// Connect establishes a connection for the given session

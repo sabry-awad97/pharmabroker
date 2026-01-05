@@ -7,7 +7,7 @@ import (
 	"github.com/pharmabroker/whatsapp/internal/domain/entity"
 	"github.com/pharmabroker/whatsapp/internal/domain/errors"
 	"github.com/skip2/go-qrcode"
-	waProto "go.mau.fi/whatsmeow/binary/proto"
+	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -54,8 +54,8 @@ func DecodeBase64ToQR(base64Str string) ([]byte, error) {
 }
 
 // buildWhatsAppMessage builds a WhatsApp protocol message from a domain message
-func buildWhatsAppMessage(msg *entity.Message) (*waProto.Message, error) {
-	waMsg := &waProto.Message{}
+func buildWhatsAppMessage(msg *entity.Message) (*waE2E.Message, error) {
+	waMsg := &waE2E.Message{}
 
 	switch msg.Type {
 	case entity.MessageTypeText:

@@ -2,14 +2,21 @@ package infrastructure
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/config"
+	"github.com/pharmabroker/whatsapp/internal/infrastructure/health"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/persistence"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/websocket"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/whatsapp"
 	"go.uber.org/fx"
 )
+
+// SQLiteDB is a wrapper type for the database connection to use with fx
+type SQLiteDB struct {
+	DB *sql.DB
+}
 
 // Module provides all infrastructure layer dependencies
 var Module = fx.Module("infrastructure",
@@ -17,15 +24,16 @@ var Module = fx.Module("infrastructure",
 		NewSQLiteSessionRepository,
 		NewWhatsmeowClient,
 		NewGorillaEventPublisher,
+		NewHealthCheckers,
 	),
 )
 
 // NewSQLiteSessionRepository creates a new SQLite session repository
-func NewSQLiteSessionRepository(lc fx.Lifecycle, cfg *config.Config) (repository.SessionRepository, error) {
+func NewSQLiteSessionRepository(lc fx.Lifecycle, cfg *config.Config) (repository.SessionRepository, *SQLiteDB, error) {
 	dsn := cfg.SQLite.DSN()
 	repo, err := persistence.NewSQLiteSessionRepository(dsn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	lc.Append(fx.Hook{
@@ -34,7 +42,7 @@ func NewSQLiteSessionRepository(lc fx.Lifecycle, cfg *config.Config) (repository
 		},
 	})
 
-	return repo, nil
+	return repo, &SQLiteDB{DB: repo.DB()}, nil
 }
 
 // NewWhatsmeowClient creates a new WhatsApp client
@@ -88,4 +96,24 @@ func NewGorillaEventPublisher(lc fx.Lifecycle, cfg *config.Config) repository.Ev
 	})
 
 	return publisher
+}
+
+// HealthCheckers holds all health checker instances
+type HealthCheckers struct {
+	SQLite         *health.SQLiteHealthChecker
+	WhatsAppClient *health.WhatsAppClientHealthChecker
+	EventPublisher *health.EventPublisherHealthChecker
+}
+
+// NewHealthCheckers creates all health checkers
+func NewHealthCheckers(
+	sqliteDB *SQLiteDB,
+	waClient repository.WhatsAppClient,
+	publisher repository.EventPublisher,
+) *HealthCheckers {
+	return &HealthCheckers{
+		SQLite:         health.NewSQLiteHealthChecker(sqliteDB.DB),
+		WhatsAppClient: health.NewWhatsAppClientHealthChecker(waClient),
+		EventPublisher: health.NewEventPublisherHealthChecker(publisher),
+	}
 }

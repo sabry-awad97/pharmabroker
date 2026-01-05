@@ -11,9 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/pharmabroker/whatsapp/internal/application/usecase"
-	"github.com/pharmabroker/whatsapp/internal/domain/entity"
 	"github.com/pharmabroker/whatsapp/internal/domain/errors"
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
+	httpPkg "github.com/pharmabroker/whatsapp/internal/presentation/http"
 )
 
 // QRHandlerConfig holds configuration for the QR WebSocket handler
@@ -24,14 +24,18 @@ type QRHandlerConfig struct {
 	WriteTimeout time.Duration
 	// PingInterval is the interval for sending ping messages
 	PingInterval time.Duration
+	// AllowedOrigins is the list of allowed origins for WebSocket connections
+	// Use "*" to allow all origins (not recommended for production)
+	AllowedOrigins []string
 }
 
 // DefaultQRHandlerConfig returns the default configuration
 func DefaultQRHandlerConfig() QRHandlerConfig {
 	return QRHandlerConfig{
-		AuthTimeout:  2 * time.Minute,
-		WriteTimeout: 10 * time.Second,
-		PingInterval: 30 * time.Second,
+		AuthTimeout:    2 * time.Minute,
+		WriteTimeout:   10 * time.Second,
+		PingInterval:   30 * time.Second,
+		AllowedOrigins: []string{"*"}, // Default to allow all (override in production)
 	}
 }
 
@@ -48,19 +52,31 @@ type QRHandler struct {
 
 // NewQRHandler creates a new QR WebSocket handler
 func NewQRHandler(sessionUC *usecase.SessionUseCase, config QRHandlerConfig) *QRHandler {
-	return &QRHandler{
-		sessionUC: sessionUC,
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool {
-				// In production, implement proper origin checking
-				return true
-			},
-		},
+	h := &QRHandler{
+		sessionUC:   sessionUC,
 		config:      config,
 		activeConns: make(map[string]*websocket.Conn),
 	}
+
+	h.upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     h.checkOrigin,
+	}
+
+	return h
+}
+
+// checkOrigin validates the origin of a WebSocket connection request
+func (h *QRHandler) checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+
+	// If no origin header, allow (same-origin request)
+	if origin == "" {
+		return true
+	}
+
+	return httpPkg.IsOriginAllowed(origin, h.config.AllowedOrigins)
 }
 
 // QRWebSocketMessage represents a message sent over the QR WebSocket
@@ -283,11 +299,8 @@ func NewQREvent(eventType, data, message string) repository.QREvent {
 	}
 }
 
-// ConvertEntityQREvent converts an entity.QREvent to repository.QREvent
-func ConvertEntityQREvent(e entity.QREvent) repository.QREvent {
-	return repository.QREvent{
-		Type:    e.Type,
-		Data:    e.Data,
-		Message: e.Message,
-	}
+// IsOriginAllowed is a convenience wrapper for WebSocket origin validation
+// It delegates to the shared implementation in the http package
+func IsOriginAllowed(origin string, allowedOrigins []string) bool {
+	return httpPkg.IsOriginAllowed(origin, allowedOrigins)
 }
