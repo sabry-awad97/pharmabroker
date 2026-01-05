@@ -230,7 +230,7 @@ func TestMessageStatusEventEmission_Property9(t *testing.T) {
 	properties.Property("No event emitted when publisher is disconnected", prop.ForAll(
 		func(statusIndex int) bool {
 			publisher := newMockEventPublisher()
-			publisher.Disconnect(context.Background()) // Disconnect the publisher
+			_ = publisher.Disconnect(context.Background()) // Disconnect the publisher
 
 			config := usecase.DefaultMessageUseCaseConfig()
 			uc := usecase.NewMessageUseCase(nil, publisher, nil, config)

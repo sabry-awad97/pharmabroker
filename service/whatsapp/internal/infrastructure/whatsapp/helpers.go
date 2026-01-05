@@ -95,8 +95,8 @@ func buildWhatsAppMessage(msg *entity.Message) (*waE2E.Message, error) {
 	return waMsg, nil
 }
 
-// buildImageMessage builds a WhatsApp image message from upload result
-func buildImageMessage(uploadResult *entity.MediaUploadResult, caption string) *waE2E.Message {
+// BuildImageMessage builds a WhatsApp image message from upload result
+func BuildImageMessage(uploadResult *entity.MediaUploadResult, caption string) *waE2E.Message {
 	imageMsg := &waE2E.ImageMessage{
 		URL:           proto.String(uploadResult.URL),
 		DirectPath:    proto.String(uploadResult.DirectPath),
@@ -116,8 +116,8 @@ func buildImageMessage(uploadResult *entity.MediaUploadResult, caption string) *
 	}
 }
 
-// buildDocumentMessage builds a WhatsApp document message from upload result
-func buildDocumentMessage(uploadResult *entity.MediaUploadResult, filename, caption string) *waE2E.Message {
+// BuildDocumentMessage builds a WhatsApp document message from upload result
+func BuildDocumentMessage(uploadResult *entity.MediaUploadResult, filename, caption string) *waE2E.Message {
 	docMsg := &waE2E.DocumentMessage{
 		URL:           proto.String(uploadResult.URL),
 		DirectPath:    proto.String(uploadResult.DirectPath),
@@ -141,8 +141,8 @@ func buildDocumentMessage(uploadResult *entity.MediaUploadResult, filename, capt
 	}
 }
 
-// buildAudioMessage builds a WhatsApp audio message from upload result
-func buildAudioMessage(uploadResult *entity.MediaUploadResult) *waE2E.Message {
+// BuildAudioMessage builds a WhatsApp audio message from upload result
+func BuildAudioMessage(uploadResult *entity.MediaUploadResult) *waE2E.Message {
 	audioMsg := &waE2E.AudioMessage{
 		URL:           proto.String(uploadResult.URL),
 		DirectPath:    proto.String(uploadResult.DirectPath),
@@ -158,8 +158,8 @@ func buildAudioMessage(uploadResult *entity.MediaUploadResult) *waE2E.Message {
 	}
 }
 
-// buildVideoMessage builds a WhatsApp video message from upload result
-func buildVideoMessage(uploadResult *entity.MediaUploadResult, caption string) *waE2E.Message {
+// BuildVideoMessage builds a WhatsApp video message from upload result
+func BuildVideoMessage(uploadResult *entity.MediaUploadResult, caption string) *waE2E.Message {
 	videoMsg := &waE2E.VideoMessage{
 		URL:           proto.String(uploadResult.URL),
 		DirectPath:    proto.String(uploadResult.DirectPath),

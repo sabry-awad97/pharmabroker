@@ -4,7 +4,6 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/pharmabroker/whatsapp/internal/domain/errors"
@@ -51,7 +50,6 @@ func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 type CircuitBreaker struct {
 	cb     *gobreaker.CircuitBreaker[any]
 	config CircuitBreakerConfig
-	mu     sync.RWMutex
 }
 
 // NewCircuitBreaker creates a new circuit breaker with the given configuration

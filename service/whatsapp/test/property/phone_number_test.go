@@ -17,17 +17,6 @@ import (
 // and reject all invalid formats.
 // **Validates: Requirements 4.3**
 
-// genDigitString generates a string of digits with specified length
-func genDigitString(length int) gopter.Gen {
-	return gen.SliceOfN(length, gen.IntRange(0, 9)).Map(func(digits []int) string {
-		var sb strings.Builder
-		for _, d := range digits {
-			sb.WriteString(fmt.Sprintf("%d", d))
-		}
-		return sb.String()
-	})
-}
-
 func TestPhoneNumberValidation_Property7(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100

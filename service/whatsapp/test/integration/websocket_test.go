@@ -70,7 +70,7 @@ func TestWebSocket_QRFlow_Success(t *testing.T) {
 	}()
 
 	// Read QR message
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, message, err := conn.ReadMessage()
 	require.NoError(t, err)
 
@@ -113,7 +113,7 @@ func TestWebSocket_QRFlow_Authentication(t *testing.T) {
 	}()
 
 	// Read authenticated message
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, message, err := conn.ReadMessage()
 	require.NoError(t, err)
 
@@ -144,7 +144,7 @@ func TestWebSocket_QRFlow_SessionNotFound(t *testing.T) {
 	defer conn.Close()
 
 	// Read error message
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, message, err := conn.ReadMessage()
 	require.NoError(t, err)
 
@@ -188,7 +188,7 @@ func TestWebSocket_QRFlow_DuplicateConnection(t *testing.T) {
 	defer conn2.Close()
 
 	// Read error message from second connection
-	conn2.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn2.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, message, err := conn2.ReadMessage()
 	require.NoError(t, err)
 
@@ -231,7 +231,7 @@ func TestWebSocket_QRFlow_ErrorEvent(t *testing.T) {
 	}()
 
 	// Read error message
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, message, err := conn.ReadMessage()
 	require.NoError(t, err)
 

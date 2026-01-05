@@ -2,7 +2,6 @@ package whatsapp
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pharmabroker/whatsapp/internal/domain/entity"
 	"github.com/pharmabroker/whatsapp/internal/domain/errors"
@@ -15,7 +14,6 @@ type WhatsmeowMediaUploader struct {
 	client      *WhatsmeowClient
 	downloader  *HTTPMediaDownloader
 	constraints *valueobject.MediaConstraints
-	mu          sync.RWMutex
 }
 
 // NewWhatsmeowMediaUploader creates a new media uploader

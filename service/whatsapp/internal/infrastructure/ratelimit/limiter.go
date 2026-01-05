@@ -44,7 +44,6 @@ type limiterEntry struct {
 type Limiter struct {
 	config   Config
 	limiters sync.Map // map[string]*limiterEntry
-	mu       sync.RWMutex
 	stopCh   chan struct{}
 }
 

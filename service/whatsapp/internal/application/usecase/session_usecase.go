@@ -93,9 +93,8 @@ func (uc *SessionUseCase) DeleteSession(ctx context.Context, id string) error {
 
 	// Disconnect the WhatsApp client if connected
 	if uc.waClient != nil && uc.waClient.IsConnected(id) {
-		if err := uc.waClient.Disconnect(ctx, id); err != nil {
-			// Log but don't fail - we still want to delete the session
-		}
+		// Ignore error - we still want to delete the session even if disconnect fails
+		_ = uc.waClient.Disconnect(ctx, id)
 	}
 
 	// Delete from repository

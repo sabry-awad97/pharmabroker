@@ -267,11 +267,7 @@ func TestAPIResponseStructureConsistency_Property10(t *testing.T) {
 			// Nil slice
 			var nilSlice []string
 			sliceResp := dto.NewSuccessResponse(nilSlice)
-			if !sliceResp.Success {
-				return false
-			}
-
-			return true
+			return sliceResp.Success
 		},
 		gen.Const(0),
 	))
