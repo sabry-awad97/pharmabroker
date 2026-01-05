@@ -54,3 +54,6 @@ pg_data
 
 # Bun
 bun.lock
+
+# Kiro
+.kiro
