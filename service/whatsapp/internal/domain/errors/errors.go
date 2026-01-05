@@ -126,4 +126,16 @@ var (
 
 	// Internal errors
 	ErrInternal = NewDomainError("INTERNAL_ERROR", "internal server error")
+
+	// Media errors
+	ErrInvalidMediaSize     = NewDomainError("INVALID_MEDIA_SIZE", "invalid media size")
+	ErrMediaTooLarge        = NewDomainError("MEDIA_TOO_LARGE", "media file exceeds maximum allowed size")
+	ErrUnsupportedMediaType = NewDomainError("UNSUPPORTED_MEDIA_TYPE", "unsupported media type")
+	ErrInvalidMimeType      = NewDomainError("INVALID_MIME_TYPE", "invalid or empty MIME type")
+	ErrUnsupportedMimeType  = NewDomainError("UNSUPPORTED_MIME_TYPE", "MIME type not supported for this media type")
+	ErrMediaDownloadFailed  = NewDomainError("MEDIA_DOWNLOAD_FAILED", "failed to download media from URL")
+	ErrMediaUploadFailed    = NewDomainError("MEDIA_UPLOAD_FAILED", "failed to upload media to WhatsApp")
+
+	// Circuit breaker errors
+	ErrCircuitOpen = NewDomainError("CIRCUIT_OPEN", "circuit breaker is open, service temporarily unavailable")
 )

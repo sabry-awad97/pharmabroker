@@ -34,9 +34,10 @@ func DefaultMessageUseCaseConfig() MessageUseCaseConfig {
 
 // MessageUseCase handles message business logic
 type MessageUseCase struct {
-	waClient  repository.WhatsAppClient
-	publisher repository.EventPublisher
-	config    MessageUseCaseConfig
+	waClient      repository.WhatsAppClient
+	publisher     repository.EventPublisher
+	mediaUploader repository.MediaUploader
+	config        MessageUseCaseConfig
 
 	// Rate limiting
 	mu            sync.Mutex
@@ -53,11 +54,13 @@ type MessageUseCase struct {
 func NewMessageUseCase(
 	waClient repository.WhatsAppClient,
 	publisher repository.EventPublisher,
+	mediaUploader repository.MediaUploader,
 	config MessageUseCaseConfig,
 ) *MessageUseCase {
 	uc := &MessageUseCase{
 		waClient:      waClient,
 		publisher:     publisher,
+		mediaUploader: mediaUploader,
 		config:        config,
 		rateLimitChan: make(chan struct{}, config.RateLimitPerSecond),
 		queue:         make(chan *entity.Message, config.QueueSize),
@@ -91,6 +94,11 @@ func (uc *MessageUseCase) SendMessage(ctx context.Context, req dto.SendMessageRe
 		content,
 		msgType,
 	)
+
+	// Validate media if it's a media message
+	if err := uc.validateMediaMessage(msg); err != nil {
+		return nil, err
+	}
 
 	// Enqueue the message for rate-limited sending
 	select {
@@ -368,4 +376,50 @@ func (uc *MessageUseCase) getMessageType(typeStr string) entity.MessageType {
 	default:
 		return entity.MessageTypeText
 	}
+}
+
+// validateMediaMessage validates media messages before sending
+func (uc *MessageUseCase) validateMediaMessage(msg *entity.Message) error {
+	switch msg.Type {
+	case entity.MessageTypeImage:
+		if msg.Content.ImageURL == nil || *msg.Content.ImageURL == "" {
+			return errors.ErrEmptyContent.WithMessage("image URL is required for image messages")
+		}
+		if uc.mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+	case entity.MessageTypeDocument:
+		if msg.Content.DocURL == nil || *msg.Content.DocURL == "" {
+			return errors.ErrEmptyContent.WithMessage("document URL is required for document messages")
+		}
+		if uc.mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+	case entity.MessageTypeAudio:
+		if uc.mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+	case entity.MessageTypeVideo:
+		if uc.mediaUploader == nil {
+			return errors.ErrMediaUploadFailed.WithMessage("media uploader not available")
+		}
+	case entity.MessageTypeText:
+		if msg.Content.Text == nil || *msg.Content.Text == "" {
+			return errors.ErrEmptyContent.WithMessage("text content is required for text messages")
+		}
+	}
+	return nil
+}
+
+// IsMediaUploadAvailable returns true if media upload is available
+func (uc *MessageUseCase) IsMediaUploadAvailable() bool {
+	return uc.mediaUploader != nil
+}
+
+// GetMediaConstraints returns the media constraints if media upload is available
+func (uc *MessageUseCase) GetMediaConstraints() *valueobject.MediaConstraints {
+	if uc.mediaUploader == nil {
+		return nil
+	}
+	return uc.mediaUploader.GetConstraints()
 }

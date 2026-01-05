@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
+	"github.com/pharmabroker/whatsapp/internal/domain/valueobject"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/config"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/health"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/persistence"
@@ -25,6 +26,7 @@ var Module = fx.Module("infrastructure",
 		NewWhatsmeowClient,
 		NewGorillaEventPublisher,
 		NewHealthCheckers,
+		NewMediaUploader,
 	),
 )
 
@@ -116,4 +118,26 @@ func NewHealthCheckers(
 		WhatsAppClient: health.NewWhatsAppClientHealthChecker(waClient),
 		EventPublisher: health.NewEventPublisherHealthChecker(publisher),
 	}
+}
+
+// NewMediaUploader creates a new media uploader
+func NewMediaUploader(waClient repository.WhatsAppClient, cfg *config.Config) repository.MediaUploader {
+	// Get the underlying WhatsmeowClient
+	whatsmeowClient, ok := waClient.(*whatsapp.WhatsmeowClient)
+	if !ok {
+		// If not a WhatsmeowClient, return nil (media upload won't be available)
+		return nil
+	}
+
+	// Create media constraints
+	constraints := valueobject.DefaultMediaConstraints()
+
+	// Create downloader config
+	downloaderConfig := whatsapp.DefaultDownloaderConfig()
+
+	// Create downloader
+	downloader := whatsapp.NewHTTPMediaDownloader(downloaderConfig, constraints)
+
+	// Create and return the media uploader
+	return whatsapp.NewWhatsmeowMediaUploader(whatsmeowClient, downloader, constraints)
 }

@@ -33,6 +33,7 @@ func NewMessageUseCase(
 	lc fx.Lifecycle,
 	waClient repository.WhatsAppClient,
 	publisher repository.EventPublisher,
+	mediaUploader repository.MediaUploader,
 	cfg *config.Config,
 ) *usecase.MessageUseCase {
 	// Convert rate limit from per minute to per second
@@ -47,7 +48,7 @@ func NewMessageUseCase(
 		QueueSize:          1000,
 	}
 
-	uc := usecase.NewMessageUseCase(waClient, publisher, msgConfig)
+	uc := usecase.NewMessageUseCase(waClient, publisher, mediaUploader, msgConfig)
 
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

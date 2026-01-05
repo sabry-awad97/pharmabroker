@@ -36,6 +36,19 @@ type Config struct {
 
 	// Metrics configuration
 	Metrics MetricsConfig `mapstructure:"metrics"`
+
+	// Circuit breaker configuration
+	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuitbreaker"`
+}
+
+// CircuitBreakerConfig holds circuit breaker configuration
+type CircuitBreakerConfig struct {
+	Enabled          bool          `mapstructure:"enabled"`
+	MaxRequests      uint32        `mapstructure:"max_requests"`      // Max requests in half-open state
+	Interval         time.Duration `mapstructure:"interval"`          // Interval for clearing counts in closed state
+	Timeout          time.Duration `mapstructure:"timeout"`           // Timeout before transitioning from open to half-open
+	FailureThreshold uint32        `mapstructure:"failure_threshold"` // Consecutive failures to open circuit
+	SuccessThreshold uint32        `mapstructure:"success_threshold"` // Consecutive successes to close circuit
 }
 
 // MetricsConfig holds Prometheus metrics configuration
@@ -354,6 +367,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("metrics.enabled", true)
 	v.SetDefault("metrics.path", "/metrics")
 	v.SetDefault("metrics.namespace", "whatsapp")
+
+	// CircuitBreaker defaults
+	v.SetDefault("circuitbreaker.enabled", true)
+	v.SetDefault("circuitbreaker.max_requests", 3)
+	v.SetDefault("circuitbreaker.interval", 60*time.Second)
+	v.SetDefault("circuitbreaker.timeout", 30*time.Second)
+	v.SetDefault("circuitbreaker.failure_threshold", 5)
+	v.SetDefault("circuitbreaker.success_threshold", 2)
 }
 
 func bindEnvVars(v *viper.Viper) {
@@ -409,6 +430,14 @@ func bindEnvVars(v *viper.Viper) {
 	_ = v.BindEnv("metrics.enabled", "WHATSAPP_METRICS_ENABLED")
 	_ = v.BindEnv("metrics.path", "WHATSAPP_METRICS_PATH")
 	_ = v.BindEnv("metrics.namespace", "WHATSAPP_METRICS_NAMESPACE")
+
+	// CircuitBreaker
+	_ = v.BindEnv("circuitbreaker.enabled", "WHATSAPP_CIRCUIT_BREAKER_ENABLED")
+	_ = v.BindEnv("circuitbreaker.max_requests", "WHATSAPP_CIRCUIT_BREAKER_MAX_REQUESTS")
+	_ = v.BindEnv("circuitbreaker.interval", "WHATSAPP_CIRCUIT_BREAKER_INTERVAL")
+	_ = v.BindEnv("circuitbreaker.timeout", "WHATSAPP_CIRCUIT_BREAKER_TIMEOUT")
+	_ = v.BindEnv("circuitbreaker.failure_threshold", "WHATSAPP_CIRCUIT_BREAKER_FAILURE_THRESHOLD")
+	_ = v.BindEnv("circuitbreaker.success_threshold", "WHATSAPP_CIRCUIT_BREAKER_SUCCESS_THRESHOLD")
 }
 
 // MustLoad loads configuration and panics on error (for use in main)

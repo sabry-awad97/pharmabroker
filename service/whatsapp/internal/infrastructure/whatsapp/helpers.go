@@ -54,6 +54,7 @@ func DecodeBase64ToQR(base64Str string) ([]byte, error) {
 }
 
 // buildWhatsAppMessage builds a WhatsApp protocol message from a domain message
+// For media messages, the upload result must be provided
 func buildWhatsAppMessage(msg *entity.Message) (*waE2E.Message, error) {
 	waMsg := &waE2E.Message{}
 
@@ -65,29 +66,117 @@ func buildWhatsAppMessage(msg *entity.Message) (*waE2E.Message, error) {
 		waMsg.Conversation = proto.String(*msg.Content.Text)
 
 	case entity.MessageTypeImage:
-		// For image messages, we would need to upload the image first
-		// This is a simplified version
 		if msg.Content.ImageURL == nil {
 			return nil, errors.ErrEmptyContent
 		}
-		// In a real implementation, you would:
-		// 1. Download the image from ImageURL
-		// 2. Upload it to WhatsApp servers
-		// 3. Create an ImageMessage with the upload response
-		return nil, errors.ErrInvalidMessageType.WithMessage("image upload not implemented")
+		// Image messages require upload first - this is handled by MessageUseCase
+		// This function only builds text messages directly
+		return nil, errors.ErrInvalidMessageType.WithMessage("image messages must be built with upload result")
 
 	case entity.MessageTypeDocument:
-		// Similar to image, document upload would be needed
 		if msg.Content.DocURL == nil {
 			return nil, errors.ErrEmptyContent
 		}
-		return nil, errors.ErrInvalidMessageType.WithMessage("document upload not implemented")
+		// Document messages require upload first - this is handled by MessageUseCase
+		return nil, errors.ErrInvalidMessageType.WithMessage("document messages must be built with upload result")
+
+	case entity.MessageTypeAudio:
+		// Audio messages require upload first - this is handled by MessageUseCase
+		return nil, errors.ErrInvalidMessageType.WithMessage("audio messages must be built with upload result")
+
+	case entity.MessageTypeVideo:
+		// Video messages require upload first - this is handled by MessageUseCase
+		return nil, errors.ErrInvalidMessageType.WithMessage("video messages must be built with upload result")
 
 	default:
 		return nil, errors.ErrInvalidMessageType
 	}
 
 	return waMsg, nil
+}
+
+// buildImageMessage builds a WhatsApp image message from upload result
+func buildImageMessage(uploadResult *entity.MediaUploadResult, caption string) *waE2E.Message {
+	imageMsg := &waE2E.ImageMessage{
+		URL:           proto.String(uploadResult.URL),
+		DirectPath:    proto.String(uploadResult.DirectPath),
+		MediaKey:      uploadResult.MediaKey,
+		FileEncSHA256: uploadResult.FileEncHash,
+		FileSHA256:    uploadResult.FileHash,
+		FileLength:    proto.Uint64(uploadResult.FileLength),
+		Mimetype:      proto.String(uploadResult.MimeType),
+	}
+
+	if caption != "" {
+		imageMsg.Caption = proto.String(caption)
+	}
+
+	return &waE2E.Message{
+		ImageMessage: imageMsg,
+	}
+}
+
+// buildDocumentMessage builds a WhatsApp document message from upload result
+func buildDocumentMessage(uploadResult *entity.MediaUploadResult, filename, caption string) *waE2E.Message {
+	docMsg := &waE2E.DocumentMessage{
+		URL:           proto.String(uploadResult.URL),
+		DirectPath:    proto.String(uploadResult.DirectPath),
+		MediaKey:      uploadResult.MediaKey,
+		FileEncSHA256: uploadResult.FileEncHash,
+		FileSHA256:    uploadResult.FileHash,
+		FileLength:    proto.Uint64(uploadResult.FileLength),
+		Mimetype:      proto.String(uploadResult.MimeType),
+	}
+
+	if filename != "" {
+		docMsg.FileName = proto.String(filename)
+	}
+
+	if caption != "" {
+		docMsg.Caption = proto.String(caption)
+	}
+
+	return &waE2E.Message{
+		DocumentMessage: docMsg,
+	}
+}
+
+// buildAudioMessage builds a WhatsApp audio message from upload result
+func buildAudioMessage(uploadResult *entity.MediaUploadResult) *waE2E.Message {
+	audioMsg := &waE2E.AudioMessage{
+		URL:           proto.String(uploadResult.URL),
+		DirectPath:    proto.String(uploadResult.DirectPath),
+		MediaKey:      uploadResult.MediaKey,
+		FileEncSHA256: uploadResult.FileEncHash,
+		FileSHA256:    uploadResult.FileHash,
+		FileLength:    proto.Uint64(uploadResult.FileLength),
+		Mimetype:      proto.String(uploadResult.MimeType),
+	}
+
+	return &waE2E.Message{
+		AudioMessage: audioMsg,
+	}
+}
+
+// buildVideoMessage builds a WhatsApp video message from upload result
+func buildVideoMessage(uploadResult *entity.MediaUploadResult, caption string) *waE2E.Message {
+	videoMsg := &waE2E.VideoMessage{
+		URL:           proto.String(uploadResult.URL),
+		DirectPath:    proto.String(uploadResult.DirectPath),
+		MediaKey:      uploadResult.MediaKey,
+		FileEncSHA256: uploadResult.FileEncHash,
+		FileSHA256:    uploadResult.FileHash,
+		FileLength:    proto.Uint64(uploadResult.FileLength),
+		Mimetype:      proto.String(uploadResult.MimeType),
+	}
+
+	if caption != "" {
+		videoMsg.Caption = proto.String(caption)
+	}
+
+	return &waE2E.Message{
+		VideoMessage: videoMsg,
+	}
 }
 
 // generateEventID generates a unique event ID

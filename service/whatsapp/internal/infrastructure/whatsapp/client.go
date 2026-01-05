@@ -10,7 +10,7 @@ import (
 	"github.com/pharmabroker/whatsapp/internal/domain/errors"
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
 	"go.mau.fi/whatsmeow"
-	waProto "go.mau.fi/whatsmeow/binary/proto"
+	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -25,27 +25,33 @@ type ClientConfig struct {
 	ReconnectDelay   time.Duration
 	MaxReconnects    int
 	MessageRateLimit int
+	// Circuit breaker configuration
+	CircuitBreakerEnabled bool
+	CircuitBreakerConfig  CircuitBreakerConfig
 }
 
 // DefaultClientConfig returns default configuration
 func DefaultClientConfig() ClientConfig {
 	return ClientConfig{
-		DBPath:           "/data/whatsapp.db",
-		QRTimeout:        2 * time.Minute,
-		ReconnectDelay:   5 * time.Second,
-		MaxReconnects:    10,
-		MessageRateLimit: 30,
+		DBPath:                "/data/whatsapp.db",
+		QRTimeout:             2 * time.Minute,
+		ReconnectDelay:        5 * time.Second,
+		MaxReconnects:         10,
+		MessageRateLimit:      30,
+		CircuitBreakerEnabled: true,
+		CircuitBreakerConfig:  DefaultCircuitBreakerConfig(),
 	}
 }
 
 // WhatsmeowClient implements WhatsAppClient using whatsmeow
 type WhatsmeowClient struct {
-	config    ClientConfig
-	container *sqlstore.Container
-	clients   map[string]*whatsmeow.Client
-	mu        sync.RWMutex
-	handlers  []repository.EventHandler
-	logger    waLog.Logger
+	config         ClientConfig
+	container      *sqlstore.Container
+	clients        map[string]*whatsmeow.Client
+	mu             sync.RWMutex
+	handlers       []repository.EventHandler
+	logger         waLog.Logger
+	circuitBreaker *CircuitBreaker
 }
 
 // NewWhatsmeowClient creates a new WhatsApp client
@@ -61,17 +67,36 @@ func NewWhatsmeowClient(ctx context.Context, config ClientConfig) (*WhatsmeowCli
 		return nil, errors.ErrDatabaseError.WithCause(err).WithMessage("failed to create whatsmeow store")
 	}
 
-	return &WhatsmeowClient{
+	client := &WhatsmeowClient{
 		config:    config,
 		container: container,
 		clients:   make(map[string]*whatsmeow.Client),
 		handlers:  make([]repository.EventHandler, 0),
 		logger:    logger,
-	}, nil
+	}
+
+	// Initialize circuit breaker if enabled
+	if config.CircuitBreakerEnabled {
+		client.circuitBreaker = NewCircuitBreaker(config.CircuitBreakerConfig)
+	}
+
+	return client, nil
 }
 
 // Connect establishes a connection for the given session
 func (c *WhatsmeowClient) Connect(ctx context.Context, sessionID string) error {
+	// Use circuit breaker if enabled
+	if c.circuitBreaker != nil {
+		_, err := c.circuitBreaker.Execute(ctx, func() (any, error) {
+			return nil, c.connectInternal(ctx, sessionID)
+		})
+		return err
+	}
+	return c.connectInternal(ctx, sessionID)
+}
+
+// connectInternal performs the actual connection logic
+func (c *WhatsmeowClient) connectInternal(ctx context.Context, sessionID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -155,6 +180,18 @@ func (c *WhatsmeowClient) Disconnect(ctx context.Context, sessionID string) erro
 
 // SendMessage sends a message through WhatsApp
 func (c *WhatsmeowClient) SendMessage(ctx context.Context, msg *entity.Message) error {
+	// Use circuit breaker if enabled
+	if c.circuitBreaker != nil {
+		_, err := c.circuitBreaker.Execute(ctx, func() (any, error) {
+			return nil, c.sendMessageInternal(ctx, msg)
+		})
+		return err
+	}
+	return c.sendMessageInternal(ctx, msg)
+}
+
+// sendMessageInternal performs the actual message sending logic
+func (c *WhatsmeowClient) sendMessageInternal(ctx context.Context, msg *entity.Message) error {
 	c.mu.RLock()
 	client, exists := c.clients[msg.SessionID]
 	c.mu.RUnlock()
@@ -189,7 +226,7 @@ func (c *WhatsmeowClient) SendMessage(ctx context.Context, msg *entity.Message) 
 }
 
 // sendWithRetry sends a message with exponential backoff retry
-func (c *WhatsmeowClient) sendWithRetry(ctx context.Context, client *whatsmeow.Client, to types.JID, msg *waProto.Message) (whatsmeow.SendResponse, error) {
+func (c *WhatsmeowClient) sendWithRetry(ctx context.Context, client *whatsmeow.Client, to types.JID, msg *waE2E.Message) (whatsmeow.SendResponse, error) {
 	var lastErr error
 	delay := c.config.ReconnectDelay
 	maxAttempts := 3 // Max 3 attempts for message sending
@@ -379,6 +416,23 @@ func (c *WhatsmeowClient) Close() error {
 	c.clients = make(map[string]*whatsmeow.Client)
 
 	return nil
+}
+
+// GetCircuitBreakerState returns the current state of the circuit breaker
+// Returns empty string if circuit breaker is not enabled
+func (c *WhatsmeowClient) GetCircuitBreakerState() string {
+	if c.circuitBreaker == nil {
+		return ""
+	}
+	return c.circuitBreaker.State().String()
+}
+
+// IsCircuitBreakerOpen returns true if the circuit breaker is open
+func (c *WhatsmeowClient) IsCircuitBreakerOpen() bool {
+	if c.circuitBreaker == nil {
+		return false
+	}
+	return c.circuitBreaker.IsOpen()
 }
 
 // getOrCreateDevice gets or creates a device store for the session
