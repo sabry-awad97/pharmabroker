@@ -215,12 +215,36 @@ func (p *RetryPolicy) ResetBudget() {
 	p.windowStart = time.Now()
 }
 
+// CalculateBackoff calculates the next backoff delay using exponential backoff
+// delay = currentDelay * 2, capped at maxAttempts minutes
+func CalculateBackoff(currentDelay time.Duration, maxAttempts int) time.Duration {
+	maxDelay := time.Duration(maxAttempts) * time.Minute
+	nextDelay := currentDelay * 2
+	if nextDelay > maxDelay {
+		return maxDelay
+	}
+	return nextDelay
+}
+
+// CalculateBackoffWithBase calculates backoff with a specific base delay and attempt number
+// delay = baseDelay * 2^attempt, capped at maxDelay
+func CalculateBackoffWithBase(baseDelay time.Duration, attempt int, maxDelay time.Duration) time.Duration {
+	delay := baseDelay
+	for range attempt {
+		delay *= 2
+		if delay > maxDelay {
+			return maxDelay
+		}
+	}
+	return delay
+}
+
 // CalculateDelayWithJitter calculates a delay with jitter for a given attempt
-// This is a standalone function for use outside of RetryPolicy
+// This is useful for distributed systems to avoid thundering herd
 func CalculateDelayWithJitter(baseDelay time.Duration, attempt int, maxDelay time.Duration, jitterFactor float64) time.Duration {
 	// Calculate base delay with exponential backoff
 	delay := float64(baseDelay)
-	for i := 0; i < attempt; i++ {
+	for range attempt {
 		delay *= 2
 	}
 

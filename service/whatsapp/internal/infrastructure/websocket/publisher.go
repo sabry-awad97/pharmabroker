@@ -356,7 +356,7 @@ func (p *GorillaEventPublisher) GetQueuedEvents() []*entity.Event {
 	}
 }
 
-// calculateBackoff calculates the next backoff delay
+// calculateBackoff calculates the next backoff delay with exponential growth
 func calculateBackoff(currentDelay, maxDelay time.Duration) time.Duration {
 	nextDelay := currentDelay * 2
 	if nextDelay > maxDelay {

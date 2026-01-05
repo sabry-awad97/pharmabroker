@@ -132,36 +132,23 @@ func (c *WhatsmeowClient) connectInternal(ctx context.Context, sessionID string)
 
 // connectWithRetry implements exponential backoff retry for connections
 func (c *WhatsmeowClient) connectWithRetry(ctx context.Context, client *whatsmeow.Client) error {
-	var lastErr error
-	delay := c.config.ReconnectDelay
+	retryPolicy := NewRetryPolicy(RetryConfig{
+		MaxAttempts:  c.config.MaxReconnects,
+		InitialDelay: c.config.ReconnectDelay,
+		MaxDelay:     time.Duration(c.config.MaxReconnects) * time.Minute,
+		Multiplier:   2.0,
+		JitterFactor: 0.1,
+	})
 
-	for attempt := 0; attempt <= c.config.MaxReconnects; attempt++ {
-		select {
-		case <-ctx.Done():
-			return errors.ErrConnectionFailed.WithCause(ctx.Err())
-		default:
-		}
+	err := retryPolicy.Execute(ctx, func() error {
+		return client.Connect()
+	})
 
-		err := client.Connect()
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-
-		if attempt < c.config.MaxReconnects {
-			// Wait with exponential backoff
-			select {
-			case <-ctx.Done():
-				return errors.ErrConnectionFailed.WithCause(ctx.Err())
-			case <-time.After(delay):
-				delay = CalculateBackoff(delay, c.config.MaxReconnects)
-			}
-		}
+	if err != nil {
+		return errors.ErrConnectionFailed.WithCause(err).WithMessage(
+			fmt.Sprintf("failed to connect after %d attempts", c.config.MaxReconnects+1))
 	}
-
-	return errors.ErrConnectionFailed.WithCause(lastErr).WithMessage(
-		fmt.Sprintf("failed to connect after %d attempts", c.config.MaxReconnects+1))
+	return nil
 }
 
 // Disconnect closes the connection for the given session
@@ -285,8 +272,8 @@ func (c *WhatsmeowClient) sendMessageInternal(ctx context.Context, msg *entity.M
 		waMsg = BuildVideoMessage(uploadResult, caption)
 
 	default:
-		// Text message - use the existing buildWhatsAppMessage function
-		waMsg, err = buildWhatsAppMessage(msg)
+		// Text message
+		waMsg, err = BuildTextMessage(msg)
 		if err != nil {
 			return err
 		}
@@ -303,35 +290,22 @@ func (c *WhatsmeowClient) sendMessageInternal(ctx context.Context, msg *entity.M
 
 // sendWithRetry sends a message with exponential backoff retry
 func (c *WhatsmeowClient) sendWithRetry(ctx context.Context, client *whatsmeow.Client, to types.JID, msg *waE2E.Message) (whatsmeow.SendResponse, error) {
-	var lastErr error
-	delay := c.config.ReconnectDelay
-	maxAttempts := 3 // Max 3 attempts for message sending
+	retryPolicy := NewRetryPolicy(RetryConfig{
+		MaxAttempts:  3,
+		InitialDelay: c.config.ReconnectDelay,
+		MaxDelay:     30 * time.Second,
+		Multiplier:   2.0,
+		JitterFactor: 0.1,
+	})
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		select {
-		case <-ctx.Done():
-			return whatsmeow.SendResponse{}, ctx.Err()
-		default:
-		}
+	result, err := retryPolicy.ExecuteWithResult(ctx, func() (any, error) {
+		return client.SendMessage(ctx, to, msg)
+	})
 
-		resp, err := client.SendMessage(ctx, to, msg)
-		if err == nil {
-			return resp, nil
-		}
-
-		lastErr = err
-
-		if attempt < maxAttempts-1 {
-			select {
-			case <-ctx.Done():
-				return whatsmeow.SendResponse{}, ctx.Err()
-			case <-time.After(delay):
-				delay = CalculateBackoff(delay, maxAttempts)
-			}
-		}
+	if err != nil {
+		return whatsmeow.SendResponse{}, err
 	}
-
-	return whatsmeow.SendResponse{}, lastErr
+	return result.(whatsmeow.SendResponse), nil
 }
 
 // GetQRChannel returns a channel that receives QR code events for authentication
@@ -406,7 +380,7 @@ func (c *WhatsmeowClient) GetQRChannel(ctx context.Context, sessionID string) (<
 				switch evt.Event {
 				case "code":
 					// Encode QR code as base64 PNG
-					qrBase64, err := encodeQRToBase64(evt.Code)
+					qrBase64, err := EncodeQRToBase64(evt.Code)
 					if err != nil {
 						qrChan <- repository.QREvent{
 							Type:    "error",

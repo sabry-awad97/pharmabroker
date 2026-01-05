@@ -11,29 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// CalculateBackoff calculates the next backoff delay using exponential backoff
-// delay = base * 2^attempt, capped at maxDelay
-func CalculateBackoff(currentDelay time.Duration, maxAttempts int) time.Duration {
-	maxDelay := time.Duration(maxAttempts) * time.Minute
-	nextDelay := currentDelay * 2
-	if nextDelay > maxDelay {
-		return maxDelay
-	}
-	return nextDelay
-}
-
-// CalculateBackoffWithBase calculates backoff with a specific base delay
-func CalculateBackoffWithBase(baseDelay time.Duration, attempt int, maxDelay time.Duration) time.Duration {
-	delay := baseDelay
-	for i := 0; i < attempt; i++ {
-		delay *= 2
-		if delay > maxDelay {
-			return maxDelay
-		}
-	}
-	return delay
-}
-
 // EncodeQRToBase64 encodes a QR code string to a base64 PNG image
 func EncodeQRToBase64(qrCode string) (string, error) {
 	png, err := qrcode.Encode(qrCode, qrcode.Medium, 256)
@@ -43,56 +20,9 @@ func EncodeQRToBase64(qrCode string) (string, error) {
 	return base64.StdEncoding.EncodeToString(png), nil
 }
 
-// encodeQRToBase64 is an internal alias for EncodeQRToBase64
-func encodeQRToBase64(qrCode string) (string, error) {
-	return EncodeQRToBase64(qrCode)
-}
-
 // DecodeBase64ToQR decodes a base64 PNG image (for testing)
 func DecodeBase64ToQR(base64Str string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(base64Str)
-}
-
-// buildWhatsAppMessage builds a WhatsApp protocol message from a domain message
-// For media messages, the upload result must be provided
-func buildWhatsAppMessage(msg *entity.Message) (*waE2E.Message, error) {
-	waMsg := &waE2E.Message{}
-
-	switch msg.Type {
-	case entity.MessageTypeText:
-		if msg.Content.Text == nil || *msg.Content.Text == "" {
-			return nil, errors.ErrEmptyContent
-		}
-		waMsg.Conversation = proto.String(*msg.Content.Text)
-
-	case entity.MessageTypeImage:
-		if msg.Content.ImageURL == nil {
-			return nil, errors.ErrEmptyContent
-		}
-		// Image messages require upload first - this is handled by MessageUseCase
-		// This function only builds text messages directly
-		return nil, errors.ErrInvalidMessageType.WithMessage("image messages must be built with upload result")
-
-	case entity.MessageTypeDocument:
-		if msg.Content.DocURL == nil {
-			return nil, errors.ErrEmptyContent
-		}
-		// Document messages require upload first - this is handled by MessageUseCase
-		return nil, errors.ErrInvalidMessageType.WithMessage("document messages must be built with upload result")
-
-	case entity.MessageTypeAudio:
-		// Audio messages require upload first - this is handled by MessageUseCase
-		return nil, errors.ErrInvalidMessageType.WithMessage("audio messages must be built with upload result")
-
-	case entity.MessageTypeVideo:
-		// Video messages require upload first - this is handled by MessageUseCase
-		return nil, errors.ErrInvalidMessageType.WithMessage("video messages must be built with upload result")
-
-	default:
-		return nil, errors.ErrInvalidMessageType
-	}
-
-	return waMsg, nil
 }
 
 // BuildImageMessage builds a WhatsApp image message from upload result
@@ -177,6 +107,16 @@ func BuildVideoMessage(uploadResult *entity.MediaUploadResult, caption string) *
 	return &waE2E.Message{
 		VideoMessage: videoMsg,
 	}
+}
+
+// BuildTextMessage builds a WhatsApp text message from a domain message
+func BuildTextMessage(msg *entity.Message) (*waE2E.Message, error) {
+	if msg.Content.Text == nil || *msg.Content.Text == "" {
+		return nil, errors.ErrEmptyContent
+	}
+	return &waE2E.Message{
+		Conversation: proto.String(*msg.Content.Text),
+	}, nil
 }
 
 // generateEventID generates a unique event ID
