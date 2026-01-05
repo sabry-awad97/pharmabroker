@@ -10,6 +10,12 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
+import {
+  ActionButton,
+  ActivityItem,
+  DashboardStatCard,
+  StatusRow,
+} from '@/components/dashboard';
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
 import { orpc } from '@/utils/orpc';
@@ -51,32 +57,32 @@ function RouteComponent() {
 
       {/* Stats Row */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
+        <DashboardStatCard
           icon={<Pill className="h-4 w-4" />}
           label="Active Listings"
           value="24"
           change="+3"
-          positive
+          trend="positive"
         />
-        <StatCard
+        <DashboardStatCard
           icon={<Search className="h-4 w-4" />}
           label="Requests"
           value="156"
           change="+12%"
-          positive
+          trend="positive"
         />
-        <StatCard
+        <DashboardStatCard
           icon={<MessageCircle className="h-4 w-4" />}
           label="Messages"
           value="89"
           change="5 new"
         />
-        <StatCard
+        <DashboardStatCard
           icon={<TrendingUp className="h-4 w-4" />}
           label="Match Rate"
           value="78%"
           change="+5%"
-          positive
+          trend="positive"
         />
       </div>
 
@@ -97,24 +103,28 @@ function RouteComponent() {
                 title="New medication match"
                 description="Paracetamol 500mg • 3 pharmacies"
                 time="2m"
+                variant="emerald"
               />
               <ActivityItem
                 icon={<MessageCircle className="h-3.5 w-3.5 text-blue-500" />}
                 title="Message received"
                 description="Cairo Pharmacy inquiry"
                 time="15m"
+                variant="blue"
               />
               <ActivityItem
                 icon={<Activity className="h-3.5 w-3.5 text-violet-500" />}
                 title="Price update"
                 description="Amoxicillin • 12 listings"
                 time="1h"
+                variant="violet"
               />
               <ActivityItem
                 icon={<Bell className="h-3.5 w-3.5 text-amber-500" />}
                 title="Low stock alert"
                 description="Insulin • Alexandria"
                 time="3h"
+                variant="amber"
               />
             </div>
           </div>
@@ -146,97 +156,6 @@ function RouteComponent() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  change,
-  positive,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  change: string;
-  positive?: boolean;
-}) {
-  return (
-    <div className="rounded-md border border-border bg-card p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <div className="text-muted-foreground">{icon}</div>
-      </div>
-      <div className="text-xl font-bold">{value}</div>
-      <div
-        className={`text-xs ${positive ? 'text-emerald-500' : 'text-muted-foreground'}`}
-      >
-        {change}
-      </div>
-    </div>
-  );
-}
-
-function ActivityItem({
-  icon,
-  title,
-  description,
-  time,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  time: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50">
-      <div className="rounded bg-muted p-1.5">{icon}</div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="truncate text-xs text-muted-foreground">{description}</p>
-      </div>
-      <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
-    </div>
-  );
-}
-
-function ActionButton({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground [&_svg]:h-3.5 [&_svg]:w-3.5">
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function StatusRow({
-  label,
-  status,
-}: {
-  label: string;
-  status: 'online' | 'offline' | 'checking';
-}) {
-  const config = {
-    online: { color: 'bg-emerald-500', text: 'Online' },
-    offline: { color: 'bg-red-500', text: 'Offline' },
-    checking: { color: 'bg-yellow-500 animate-pulse', text: '...' },
-  }[status];
-
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-1.5">
-        <div className={`h-1.5 w-1.5 rounded-full ${config.color}`} />
-        <span>{config.text}</span>
       </div>
     </div>
   );

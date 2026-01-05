@@ -1,5 +1,6 @@
 {
   "evenBetterToml.schema.associations": {
     "**/.air.toml": false
-  }
+  },
+  "typescript.autoClosingTags": false
 }

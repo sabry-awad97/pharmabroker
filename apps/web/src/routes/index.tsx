@@ -13,7 +13,9 @@ import {
   Zap,
 } from 'lucide-react';
 
+import { FeatureCard, StatCard } from '@/components/home';
 import { Button } from '@/components/ui/button';
+import { authClient } from '@/lib/auth-client';
 import { orpc } from '@/utils/orpc';
 
 export const Route = createFileRoute('/')({
@@ -22,6 +24,8 @@ export const Route = createFileRoute('/')({
 
 function HomeComponent() {
   const healthCheck = useQuery(orpc.healthCheck.queryOptions());
+  const { data: session } = authClient.useSession();
+  const isSignedIn = !!session?.user;
 
   return (
     <div className="p-6">
@@ -35,8 +39,19 @@ function HomeComponent() {
             </div>
 
             <h1 className="mb-2 text-3xl font-bold">
-              Welcome to{' '}
-              <span className="text-emerald-500">PharmaBroker</span>
+              {isSignedIn ? (
+                <>
+                  Welcome back,{' '}
+                  <span className="text-emerald-500">
+                    {session.user.name?.split(' ')[0] || 'User'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  Welcome to{' '}
+                  <span className="text-emerald-500">PharmaBroker</span>
+                </>
+              )}
             </h1>
 
             <p className="mb-6 max-w-lg text-sm text-muted-foreground">
@@ -45,19 +60,31 @@ function HomeComponent() {
             </p>
 
             <div className="flex gap-2">
-              <Link
-                to="/dashboard"
-                className="inline-flex h-8 items-center gap-2 rounded-md bg-emerald-600 px-4 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
-              >
-                Get Started
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-              <Link
-                to="/login"
-                className="inline-flex h-8 items-center rounded-md border border-border bg-background px-4 text-xs font-medium transition-colors hover:bg-muted"
-              >
-                Sign In
-              </Link>
+              {isSignedIn ? (
+                <Link
+                  to="/dashboard"
+                  className="inline-flex h-8 items-center gap-2 rounded-md bg-emerald-600 px-4 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                >
+                  Go to Dashboard
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="inline-flex h-8 items-center gap-2 rounded-md bg-emerald-600 px-4 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                  >
+                    Get Started
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                  <Link
+                    to="/login"
+                    className="inline-flex h-8 items-center rounded-md border border-border bg-background px-4 text-xs font-medium transition-colors hover:bg-muted"
+                  >
+                    Sign In
+                  </Link>
+                </>
+              )}
             </div>
           </div>
 
@@ -153,57 +180,6 @@ function HomeComponent() {
           value="50K+"
           label="Messages"
         />
-      </div>
-    </div>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  description,
-  color,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  color: string;
-}) {
-  const colorClasses: Record<string, string> = {
-    emerald: 'bg-emerald-500/10 text-emerald-500',
-    teal: 'bg-teal-500/10 text-teal-500',
-    cyan: 'bg-cyan-500/10 text-cyan-500',
-    blue: 'bg-blue-500/10 text-blue-500',
-    indigo: 'bg-indigo-500/10 text-indigo-500',
-    violet: 'bg-violet-500/10 text-violet-500',
-  };
-
-  return (
-    <div className="flex items-start gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted/50">
-      <div className={`rounded-md p-2 ${colorClasses[color]}`}>{icon}</div>
-      <div className="min-w-0">
-        <h3 className="text-sm font-medium">{title}</h3>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  value,
-  label,
-}: {
-  icon: React.ReactNode;
-  value: string;
-  label: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-border bg-card p-3">
-      <div className="text-muted-foreground">{icon}</div>
-      <div>
-        <div className="text-lg font-bold text-emerald-500">{value}</div>
-        <div className="text-xs text-muted-foreground">{label}</div>
       </div>
     </div>
   );

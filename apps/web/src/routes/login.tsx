@@ -1,19 +1,30 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { Pill } from 'lucide-react';
 import { useState } from 'react';
 
 import SignInForm from '@/components/sign-in-form';
 import SignUpForm from '@/components/sign-up-form';
+import { authClient } from '@/lib/auth-client';
 
 export const Route = createFileRoute('/login')({
   component: RouteComponent,
+  beforeLoad: async () => {
+    const session = await authClient.getSession();
+    // Redirect to dashboard if already signed in
+    if (session.data) {
+      redirect({
+        to: '/dashboard',
+        throw: true,
+      });
+    }
+  },
 });
 
 function RouteComponent() {
   const [showSignIn, setShowSignIn] = useState(false);
 
   return (
-    <div className="flex h-full items-center justify-center p-6">
+    <div className="flex min-h-full items-center justify-center p-6">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-6 text-center">
