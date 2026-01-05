@@ -58,7 +58,7 @@ export function FeatureCard({
       <div className={iconVariants({ color })}>{icon}</div>
       <div className="min-w-0">
         <h3 className="text-sm font-medium">{title}</h3>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground text-xs">{description}</p>
       </div>
     </div>
   );

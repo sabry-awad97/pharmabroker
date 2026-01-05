@@ -13,7 +13,7 @@ import { useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
-import { Button } from './ui/button';
+import { Button } from '../ui/button';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Home' },
@@ -27,7 +27,7 @@ const bottomItems = [
   { to: '/settings', icon: Settings, label: 'Settings' },
 ] as const;
 
-export default function Sidebar() {
+export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const router = useRouterState();
   const currentPath = router.location.pathname;
@@ -35,7 +35,7 @@ export default function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex h-full flex-col border-r border-border bg-card/50 transition-all duration-200',
+        'border-border bg-card/50 flex h-full flex-col border-r transition-all duration-200',
         collapsed ? 'w-12' : 'w-48',
       )}
     >
@@ -54,7 +54,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom Items */}
-      <div className="space-y-1 border-t border-border p-2">
+      <div className="border-border space-y-1 border-t p-2">
         {bottomItems.map(item => (
           <NavItem
             key={item.to}
@@ -72,7 +72,7 @@ export default function Sidebar() {
           size="sm"
           onClick={() => setCollapsed(!collapsed)}
           className={cn(
-            'w-full justify-start gap-3 text-muted-foreground hover:bg-muted hover:text-foreground',
+            'text-muted-foreground hover:bg-muted hover:text-foreground w-full justify-start gap-3',
             collapsed && 'justify-center px-0',
           )}
         >

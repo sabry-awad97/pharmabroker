@@ -46,7 +46,7 @@ function RouteComponent() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">Dashboard</h1>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Welcome back, {firstName}
           </p>
         </div>
@@ -90,14 +90,14 @@ function RouteComponent() {
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Activity List */}
         <div className="lg:col-span-2">
-          <div className="rounded-md border border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <div className="border-border bg-card rounded-md border">
+            <div className="border-border flex items-center justify-between border-b px-4 py-2">
               <h2 className="text-sm font-medium">Recent Activity</h2>
               <Button variant="ghost" size="sm" className="h-7 text-xs">
                 View All
               </Button>
             </div>
-            <div className="divide-y divide-border">
+            <div className="divide-border divide-y">
               <ActivityItem
                 icon={<Pill className="h-3.5 w-3.5 text-emerald-500" />}
                 title="New medication match"
@@ -133,7 +133,7 @@ function RouteComponent() {
         {/* Sidebar Panels */}
         <div className="space-y-4">
           {/* Quick Actions */}
-          <div className="rounded-md border border-border bg-card p-3">
+          <div className="border-border bg-card rounded-md border p-3">
             <h2 className="mb-3 text-sm font-medium">Quick Actions</h2>
             <div className="space-y-1">
               <ActionButton icon={<Search />} label="Search Medications" />
@@ -143,7 +143,7 @@ function RouteComponent() {
           </div>
 
           {/* System Status */}
-          <div className="rounded-md border border-border bg-card p-3">
+          <div className="border-border bg-card rounded-md border p-3">
             <h2 className="mb-3 text-sm font-medium">System Status</h2>
             <div className="space-y-2">
               <StatusRow

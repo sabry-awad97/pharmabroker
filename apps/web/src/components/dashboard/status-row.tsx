@@ -37,9 +37,7 @@ export function StatusRow({
   className,
 }: StatusRowProps) {
   return (
-    <div
-      className={cn('flex items-center justify-between text-xs', className)}
-    >
+    <div className={cn('flex items-center justify-between text-xs', className)}>
       <span className="text-muted-foreground">{label}</span>
       <div className="flex items-center gap-1.5">
         <div className={statusDotVariants({ status })} />

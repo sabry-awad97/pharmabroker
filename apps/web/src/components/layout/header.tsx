@@ -1,13 +1,13 @@
 import { Pill } from 'lucide-react';
 
 import { ModeToggle } from './mode-toggle';
-import UserMenu from './user-menu';
+import { UserMenu } from './user-menu';
 
-export default function Header() {
+export function Header() {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur"
+      className="border-border bg-background/80 flex h-10 shrink-0 items-center justify-between border-b px-3 backdrop-blur"
     >
       {/* App Title - draggable area */}
       <div data-tauri-drag-region className="flex items-center gap-2">

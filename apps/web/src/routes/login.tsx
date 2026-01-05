@@ -2,8 +2,8 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { Pill } from 'lucide-react';
 import { useState } from 'react';
 
-import SignInForm from '@/components/sign-in-form';
-import SignUpForm from '@/components/sign-up-form';
+import SignInForm from '@/components/login/sign-in-form';
+import SignUpForm from '@/components/login/sign-up-form';
 import { authClient } from '@/lib/auth-client';
 
 export const Route = createFileRoute('/login')({
@@ -32,11 +32,11 @@ function RouteComponent() {
             <Pill className="h-6 w-6 text-emerald-500" />
           </div>
           <h1 className="text-lg font-semibold">PharmaBroker</h1>
-          <p className="text-xs text-muted-foreground">Sign in to continue</p>
+          <p className="text-muted-foreground text-xs">Sign in to continue</p>
         </div>
 
         {/* Form */}
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="border-border bg-card rounded-lg border p-4">
           {showSignIn ? (
             <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
           ) : (
@@ -44,7 +44,7 @@ function RouteComponent() {
           )}
         </div>
 
-        <p className="mt-4 text-center text-xs text-muted-foreground">
+        <p className="text-muted-foreground mt-4 text-center text-xs">
           By continuing, you agree to our Terms and Privacy Policy
         </p>
       </div>

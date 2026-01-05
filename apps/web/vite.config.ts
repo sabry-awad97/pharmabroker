@@ -1,4 +1,5 @@
 import tailwindcss from '@tailwindcss/vite';
+import { devtools } from '@tanstack/devtools-vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
@@ -7,7 +8,7 @@ import { defineConfig } from 'vite';
 const API_URL = 'http://localhost:3000';
 
 export default defineConfig({
-  plugins: [tailwindcss(), tanstackRouter({}), react()],
+  plugins: [devtools(), tailwindcss(), tanstackRouter({}), react()],
   envDir: path.resolve(__dirname, '../..'),
   resolve: {
     alias: {

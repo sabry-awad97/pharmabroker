@@ -3,18 +3,14 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { createORPCClient } from '@orpc/client';
 import { createTanstackQueryUtils } from '@orpc/tanstack-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import {
   HeadContent,
   Outlet,
   createRootRouteWithContext,
 } from '@tanstack/react-router';
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import { useState } from 'react';
 
-import Header from '@/components/header';
-import Sidebar from '@/components/sidebar';
-import { ThemeProvider } from '@/components/theme-provider';
+import { Header, Sidebar } from '@/components/layout';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Toaster } from '@/components/ui/sonner';
 import { link } from '@/utils/orpc';
@@ -54,32 +50,16 @@ function RootComponent() {
   return (
     <>
       <HeadContent />
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        disableTransitionOnChange
-        storageKey="vite-ui-theme"
-      >
-        {/* Windows-style layout: Title bar + Sidebar + Content */}
-        <div className="flex h-screen flex-col overflow-hidden bg-background">
-          {/* Title Bar */}
-          <Header />
-
-          {/* Main Area: Sidebar + Content */}
-          <div className="flex min-h-0 flex-1">
-            {/* Sidebar Navigation */}
-            <Sidebar />
-
-            {/* Content Area */}
-            <ScrollArea className="flex-1 bg-background">
-              <Outlet />
-            </ScrollArea>
-          </div>
+      <div className="bg-background flex h-screen flex-col overflow-hidden">
+        <Header />
+        <div className="flex min-h-0 flex-1">
+          <Sidebar />
+          <ScrollArea className="bg-background flex-1">
+            <Outlet />
+          </ScrollArea>
         </div>
-        <Toaster richColors />
-      </ThemeProvider>
-      <TanStackRouterDevtools position="bottom-left" />
-      <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+      </div>
+      <Toaster richColors />
     </>
   );
 }

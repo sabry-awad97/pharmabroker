@@ -65,7 +65,7 @@ export function StatCard({
       <div className="text-muted-foreground">{icon}</div>
       <div>
         <div className={valueVariants({ color, size })}>{value}</div>
-        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-muted-foreground text-xs">{label}</div>
       </div>
     </div>
   );

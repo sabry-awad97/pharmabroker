@@ -33,7 +33,10 @@ export function ActionButton({
   ...props
 }: ActionButtonProps) {
   return (
-    <button className={cn(actionButtonVariants({ size }), className)} {...props}>
+    <button
+      className={cn(actionButtonVariants({ size }), className)}
+      {...props}
+    >
       {icon}
       {label}
     </button>

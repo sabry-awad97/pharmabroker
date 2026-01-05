@@ -50,7 +50,7 @@ export function DashboardStatCard({
   return (
     <div className={cn(statCardVariants({ size }), className)}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-muted-foreground text-xs">{label}</span>
         <div className="text-muted-foreground">{icon}</div>
       </div>
       <div className="text-xl font-bold">{value}</div>

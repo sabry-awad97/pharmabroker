@@ -58,9 +58,9 @@ export function ActivityItem({
       <div className={iconWrapperVariants({ variant })}>{icon}</div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{title}</p>
-        <p className="truncate text-xs text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground truncate text-xs">{description}</p>
       </div>
-      <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
+      <span className="text-muted-foreground shrink-0 text-xs">{time}</span>
     </div>
   );
 }

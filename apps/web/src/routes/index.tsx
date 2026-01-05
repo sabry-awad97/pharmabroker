@@ -30,7 +30,7 @@ function HomeComponent() {
   return (
     <div className="p-6">
       {/* Hero Section */}
-      <div className="mb-8 rounded-lg border border-border bg-linear-to-br from-emerald-950/30 via-background to-background p-8">
+      <div className="border-border via-background to-background mb-8 rounded-lg border bg-linear-to-br from-emerald-950/30 p-8">
         <div className="flex items-start justify-between">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
@@ -54,7 +54,7 @@ function HomeComponent() {
               )}
             </h1>
 
-            <p className="mb-6 max-w-lg text-sm text-muted-foreground">
+            <p className="text-muted-foreground mb-6 max-w-lg text-sm">
               Bridging medication supply and demand through intelligent
               automation. Connect pharmacies with patients seamlessly.
             </p>
@@ -79,7 +79,7 @@ function HomeComponent() {
                   </Link>
                   <Link
                     to="/login"
-                    className="inline-flex h-8 items-center rounded-md border border-border bg-background px-4 text-xs font-medium transition-colors hover:bg-muted"
+                    className="border-border bg-background hover:bg-muted inline-flex h-8 items-center rounded-md border px-4 text-xs font-medium transition-colors"
                   >
                     Sign In
                   </Link>
@@ -89,7 +89,7 @@ function HomeComponent() {
           </div>
 
           {/* Status */}
-          <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+          <div className="border-border bg-card flex items-center gap-2 rounded-md border px-3 py-2">
             <div
               className={`h-2 w-2 rounded-full ${
                 healthCheck.data
@@ -99,7 +99,7 @@ function HomeComponent() {
                     : 'bg-red-500'
               }`}
             />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-muted-foreground text-xs">
               {healthCheck.isLoading
                 ? 'Connecting...'
                 : healthCheck.data
