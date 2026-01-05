@@ -1,0 +1,5 @@
+{
+  "evenBetterToml.schema.associations": {
+    "**/.air.toml": false
+  }
+}

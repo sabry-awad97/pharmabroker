@@ -1,0 +1,305 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  🏥 PharmaBroker - Task Runner
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Run 'task --list' to see all available tasks
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: '3'
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Environment & Variables
+# ─────────────────────────────────────────────────────────────────────────────
+vars:
+  DOCKER_COMPOSE: docker compose
+  BUN: bun
+  TURBO: '{{.BUN}} turbo'
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Task Groups
+# ─────────────────────────────────────────────────────────────────────────────
+tasks:
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  🚀 Development
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  default:
+    desc: 'Show available tasks'
+    cmds:
+      - task --list
+
+  dev:
+    desc: '🔥 Start all development servers (local)'
+    deps: [infra:up]
+    cmds:
+      - '{{.TURBO}} dev'
+
+  dev:web:
+    desc: '🌐 Start web development server (local)'
+    cmds:
+      - '{{.TURBO}} -F web dev'
+
+  dev:server:
+    desc: '⚡ Start API server (local)'
+    cmds:
+      - '{{.TURBO}} -F server dev'
+
+  dev:docker:
+    desc: '🐳 Start infrastructure (Postgres + WhatsApp) in Docker'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} up -d'
+      - 'echo "🚀 Infrastructure running:"'
+      - 'echo "   Postgres: localhost:5432"'
+      - 'echo "   WhatsApp: internal (Docker network)"'
+      - 'echo ""'
+      - 'echo "Now run ''task tauri:dev'' to start the desktop app"'
+
+  dev:docker:full:
+    desc: '🐳 Start infrastructure + API in Docker'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} --profile full up -d --build'
+      - 'echo "🚀 Services running:"'
+      - 'echo "   API: http://localhost:3000"'
+      - 'echo "   Postgres: localhost:5432"'
+      - 'echo "   WhatsApp: internal (Docker network)"'
+      - 'echo ""'
+      - 'echo "Now run ''task tauri:dev'' to start the desktop app"'
+
+  dev:docker:prod:
+    desc: '🐳 Start all services in production mode'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} --profile full --profile prod up -d --build'
+      - 'echo "🚀 Production services running:"'
+      - 'echo "   API: http://localhost:3000"'
+      - 'echo "   Postgres: localhost:5432"'
+      - 'echo "   WhatsApp: internal (Docker network)"'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  🏗️ Build & Check
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  build:
+    desc: '📦 Build all packages'
+    cmds:
+      - '{{.TURBO}} build'
+
+  check:
+    desc: '✅ Run type checking'
+    cmds:
+      - '{{.TURBO}} check-types'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  🗄️ Database
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  db:push:
+    desc: '⬆️  Push schema to database'
+    cmds:
+      - '{{.TURBO}} -F @pharmabroker/db db:push'
+
+  db:generate:
+    desc: '🔄 Generate Prisma client'
+    cmds:
+      - '{{.TURBO}} -F @pharmabroker/db db:generate'
+
+  db:migrate:
+    desc: '📝 Run database migrations'
+    cmds:
+      - '{{.TURBO}} -F @pharmabroker/db db:migrate'
+
+  db:studio:
+    desc: '🎨 Open Prisma Studio'
+    cmds:
+      - '{{.TURBO}} -F @pharmabroker/db db:studio'
+
+  db:watch:
+    desc: '👀 Watch for schema changes'
+    cmds:
+      - '{{.TURBO}} -F @pharmabroker/db db:watch'
+
+  db:reset:
+    desc: '🗑️  Reset database (DESTRUCTIVE)'
+    prompt: 'This will reset the database. Continue?'
+    cmds:
+      - '{{.TURBO}} -F @pharmabroker/db db:push -- --force-reset'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  🐳 Infrastructure (Docker)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  infra:up:
+    desc: '🚀 Start infrastructure (Postgres + AI Models)'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} up -d'
+
+  infra:down:
+    desc: '🛑 Stop infrastructure'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} down'
+
+  infra:logs:
+    desc: '📋 View infrastructure logs'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} logs -f'
+
+  infra:ps:
+    desc: '📊 Show running containers'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} ps'
+
+  infra:restart:
+    desc: '🔄 Restart infrastructure'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} restart'
+
+  infra:clean:
+    desc: '🧹 Remove all containers and volumes (DESTRUCTIVE)'
+    prompt: 'This will remove all data. Continue?'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} down -v --remove-orphans'
+
+  infra:rebuild:
+    desc: '🔨 Rebuild all Docker Compose services'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} up -d --build --force-recreate'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  🤖 AI Models (Docker Model Runner)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  ai:pull:
+    desc: '📥 Pull all AI models'
+    cmds:
+      - docker model pull ai/qwen3-vl:latest
+      - docker model pull ai/ministral3:latest
+      - docker model pull ai/gemma3:latest
+      - docker model pull ai/embeddinggemma:latest
+
+  ai:list:
+    desc: '📋 List available AI models'
+    cmds:
+      - docker model list
+
+  ai:run:qwen:
+    desc: '🧠 Run Qwen model interactively'
+    cmds:
+      - docker model run ai/qwen3-vl:latest
+
+  ai:run:gemma:
+    desc: '🧠 Run Gemma model interactively'
+    cmds:
+      - docker model run ai/gemma3:latest
+
+  ai:run:ministral:
+    desc: '🧠 Run Ministral model interactively'
+    cmds:
+      - docker model run ai/ministral3:latest
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  �️ Tauri Desktop App
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  tauri:dev:
+    desc: '🖥️  Start Tauri desktop app in dev mode'
+    dir: apps/web
+    cmds:
+      - '{{.BUN}} tauri dev'
+
+  tauri:build:
+    desc: '📦 Build Tauri desktop app'
+    dir: apps/web
+    cmds:
+      - '{{.BUN}} tauri build'
+
+  tauri:build:debug:
+    desc: '🐛 Build Tauri app with debug symbols'
+    dir: apps/web
+    cmds:
+      - '{{.BUN}} tauri build --debug'
+
+  tauri:icon:
+    desc: '🎨 Generate app icons from source'
+    dir: apps/web
+    cmds:
+      - '{{.BUN}} tauri icon'
+
+  tauri:info:
+    desc: 'ℹ️  Show Tauri environment info'
+    dir: apps/web
+    cmds:
+      - '{{.BUN}} tauri info'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  📱 WhatsApp Service (Go)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  whatsapp:dev:
+    desc: '📱 Run WhatsApp service locally'
+    dir: service/whatsapp
+    cmds:
+      - go run ./cmd/whatsapp
+
+  whatsapp:build:
+    desc: '📦 Build WhatsApp service binary'
+    dir: service/whatsapp
+    cmds:
+      - go build -o bin/whatsapp ./cmd/whatsapp
+
+  whatsapp:test:
+    desc: '🧪 Run WhatsApp service tests'
+    dir: service/whatsapp
+    cmds:
+      - go test -v ./...
+
+  whatsapp:docker:
+    desc: '🐳 Build WhatsApp Docker image'
+    cmds:
+      - docker build -t pharmabroker-whatsapp ./service/whatsapp
+
+  whatsapp:tidy:
+    desc: '🧹 Tidy Go modules'
+    dir: service/whatsapp
+    cmds:
+      - go mod tidy
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  📦 Dependencies
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  install:
+    desc: '📥 Install all dependencies'
+    cmds:
+      - '{{.BUN}} install'
+
+  update:
+    desc: '⬆️  Update dependencies'
+    cmds:
+      - '{{.BUN}} update'
+
+  clean:
+    desc: '🧹 Clean build artifacts'
+    cmds:
+      - rm -rf node_modules/.cache
+      - '{{.TURBO}} clean'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  🎯 Quick Workflows
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  setup:
+    desc: '🎯 First-time setup (install + infra + db)'
+    cmds:
+      - task: install
+      - task: infra:up
+      - cmd: sleep 5
+        silent: true
+      - task: db:push
+      - task: db:generate
+      - 'echo "✨ Setup complete! Run ''task dev'' to start"'
+
+  fresh:
+    desc: '🔄 Fresh start (clean + setup)'
+    prompt: 'This will reset everything. Continue?'
+    cmds:
+      - task: infra:clean
+      - task: clean
+      - task: setup

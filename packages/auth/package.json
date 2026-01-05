@@ -1,0 +1,24 @@
+{
+  "name": "@pharmabroker/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@pharmabroker/db": "workspace:*",
+    "@pharmabroker/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@pharmabroker/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

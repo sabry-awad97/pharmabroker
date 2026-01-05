@@ -1,0 +1,36 @@
+{
+  "name": "@pharmabroker/db",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:start": "docker compose up -d",
+    "db:watch": "docker compose up",
+    "db:stop": "docker compose stop",
+    "db:down": "docker compose down"
+  },
+  "dependencies": {
+    "@pharmabroker/env": "workspace:*",
+    "@prisma/adapter-pg": "^7.1.0",
+    "@prisma/client": "catalog:",
+    "dotenv": "catalog:",
+    "pg": "^8.16.3",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@pharmabroker/config": "workspace:*",
+    "@types/pg": "^8.15.6",
+    "prisma": "^7.1.0",
+    "typescript": "catalog:"
+  }
+}

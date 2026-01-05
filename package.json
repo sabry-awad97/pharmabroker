@@ -1,0 +1,58 @@
+{
+  "name": "pharmabroker",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "dotenv": "^17.2.2",
+      "zod": "^4.1.13",
+      "typescript": "^5",
+      "@types/bun": "^1.3.4",
+      "@orpc/server": "^1.12.2",
+      "@orpc/openapi": "^1.12.2",
+      "@orpc/zod": "^1.12.2",
+      "better-auth": "^1.4.9",
+      "@prisma/client": "^7.1.0",
+      "@orpc/client": "^1.12.2"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:native": "turbo -F native dev",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F server dev",
+    "db:push": "turbo -F @pharmabroker/db db:push",
+    "db:studio": "turbo -F @pharmabroker/db db:studio",
+    "db:generate": "turbo -F @pharmabroker/db db:generate",
+    "db:migrate": "turbo -F @pharmabroker/db db:migrate",
+    "db:start": "turbo -F @pharmabroker/db db:start",
+    "db:watch": "turbo -F @pharmabroker/db db:watch",
+    "db:stop": "turbo -F @pharmabroker/db db:stop",
+    "db:down": "turbo -F @pharmabroker/db db:down",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@pharmabroker/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@pharmabroker/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "turbo": "^2.6.3",
+    "typescript": "catalog:"
+  },
+  "lint-staged": {
+    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,vue,astro,svelte}": ""
+  },
+  "packageManager": "bun@1.3.5"
+}

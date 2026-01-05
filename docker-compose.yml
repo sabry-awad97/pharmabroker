@@ -1,0 +1,135 @@
+name: pharmabroker
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Port Allocation Strategy
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Service         │ Internal │ External │ Notes
+#  ────────────────┼──────────┼──────────┼────────────────────────────────────────
+#  PostgreSQL      │ 5432     │ 5432     │ Database
+#  API (Bun/Hono)  │ 3000     │ 3000     │ Main API gateway
+#  WhatsApp (Go)   │ 8080     │ -        │ Internal only (via Docker network)
+#  Web (Vite)      │ 5173     │ 5173     │ Frontend dev server (run locally)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 🗄️ PostgreSQL + pgvector
+  # ─────────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg18-trixie
+    container_name: pharmabroker-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pharmabroker}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pharmabroker
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # ⚡ API Server (Bun/Hono)
+  # ─────────────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: pharmabroker-api
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-pharmabroker}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-super-secret-key-change-in-production}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      WHATSAPP_SERVICE_URL: http://whatsapp:8080
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pharmabroker
+    profiles:
+      - full
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 📱 WhatsApp Service (Go) - Development with Air hot reload
+  # ─────────────────────────────────────────────────────────────────────────────
+  whatsapp-dev:
+    image: cosmtrek/air:latest
+    container_name: pharmabroker-whatsapp
+    working_dir: /app
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-pharmabroker}
+      API_SERVICE_URL: http://api:3000
+    expose:
+      - '8080'
+    volumes:
+      - ./service/whatsapp:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pharmabroker
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 📱 WhatsApp Service (Go) - Production build
+  # ─────────────────────────────────────────────────────────────────────────────
+  whatsapp:
+    build:
+      context: ./service/whatsapp
+      dockerfile: Dockerfile
+    container_name: pharmabroker-whatsapp-prod
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-pharmabroker}
+      API_SERVICE_URL: http://api:3000
+    expose:
+      - '8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pharmabroker
+    profiles:
+      - prod
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Networks
+# ═══════════════════════════════════════════════════════════════════════════════
+networks:
+  pharmabroker:
+    driver: bridge
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AI Models (Docker Model Runner)
+# ═══════════════════════════════════════════════════════════════════════════════
+models:
+  qwen:
+    model: ai/qwen3-vl:latest
+    context_size: 32768
+
+  ministral:
+    model: ai/ministral3:latest
+    context_size: 32768
+
+  gemma:
+    model: ai/gemma3:latest
+    context_size: 32768
+
+  embedding:
+    model: ai/embeddinggemma:latest
+    context_size: 32768

@@ -1,0 +1,28 @@
+{
+  "name": "@pharmabroker/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@orpc/client": "catalog:",
+    "@orpc/openapi": "catalog:",
+    "@orpc/server": "catalog:",
+    "@orpc/zod": "catalog:",
+    "@pharmabroker/auth": "workspace:*",
+    "@pharmabroker/db": "workspace:*",
+    "@pharmabroker/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@pharmabroker/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

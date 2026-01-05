@@ -1,0 +1,3 @@
+{
+  "extends": "@pharmabroker/config/tsconfig.base.json"
+}
