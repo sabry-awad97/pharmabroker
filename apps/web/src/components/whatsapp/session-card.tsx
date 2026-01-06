@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Radio,
   Smartphone,
+  Loader2,
+  LogOut,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -54,8 +56,10 @@ const statusVariants = cva('', {
   variants: {
     status: {
       connected: '',
+      connecting: '',
       pending: '',
       disconnected: '',
+      logged_out: '',
       expired: '',
     },
   },
@@ -70,8 +74,10 @@ const avatarVariants = cva(
     variants: {
       status: {
         connected: 'bg-emerald-500/10',
+        connecting: 'bg-blue-500/10',
         pending: 'bg-amber-500/10',
         disconnected: 'bg-muted',
+        logged_out: 'bg-orange-500/10',
         expired: 'bg-red-500/10',
       },
     },
@@ -85,8 +91,10 @@ const iconVariants = cva('h-6 w-6', {
   variants: {
     status: {
       connected: 'text-emerald-500',
+      connecting: 'text-blue-500',
       pending: 'text-amber-500',
       disconnected: 'text-muted-foreground',
+      logged_out: 'text-orange-500',
       expired: 'text-red-500',
     },
   },
@@ -101,8 +109,10 @@ const borderVariants = cva(
     variants: {
       status: {
         connected: 'border-l-emerald-500',
+        connecting: 'border-l-blue-500',
         pending: 'border-l-amber-500',
         disconnected: 'border-l-muted-foreground',
+        logged_out: 'border-l-orange-500',
         expired: 'border-l-red-500',
       },
     },
@@ -116,8 +126,10 @@ const pulseVariants = cva('', {
   variants: {
     status: {
       connected: 'bg-emerald-500',
+      connecting: 'bg-blue-500',
       pending: 'bg-amber-500',
       disconnected: 'bg-muted-foreground',
+      logged_out: 'bg-orange-500',
       expired: 'bg-red-500',
     },
   },
@@ -126,7 +138,13 @@ const pulseVariants = cva('', {
   },
 });
 
-type SessionStatus = 'connected' | 'pending' | 'disconnected' | 'expired';
+type SessionStatus =
+  | 'connected'
+  | 'connecting'
+  | 'pending'
+  | 'disconnected'
+  | 'logged_out'
+  | 'expired';
 
 const statusConfig: Record<
   SessionStatus,
@@ -137,8 +155,10 @@ const statusConfig: Record<
   }
 > = {
   connected: { label: 'Connected', variant: 'default', icon: Wifi },
+  connecting: { label: 'Connecting', variant: 'secondary', icon: Loader2 },
   pending: { label: 'Pending', variant: 'secondary', icon: Clock },
   disconnected: { label: 'Disconnected', variant: 'outline', icon: WifiOff },
+  logged_out: { label: 'Logged Out', variant: 'outline', icon: LogOut },
   expired: { label: 'Expired', variant: 'destructive', icon: AlertCircle },
 };
 
@@ -162,8 +182,12 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
     );
   };
 
-  const needsAuth = status === 'pending' || status === 'disconnected';
+  const needsAuth =
+    status === 'pending' ||
+    status === 'disconnected' ||
+    status === 'logged_out';
   const isConnected = status === 'connected';
+  const isConnecting = status === 'connecting';
 
   return (
     <>

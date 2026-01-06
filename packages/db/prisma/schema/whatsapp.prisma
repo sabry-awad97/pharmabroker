@@ -1,0 +1,29 @@
+// WhatsApp Session Management
+// Sessions are owned by the Node.js API and stored in PostgreSQL
+// The Go WhatsApp service only handles connection state and message routing
+
+model WhatsAppSession {
+    id        String                @id @default(cuid())
+    name      String
+    jid       String? // WhatsApp JID (set after authentication)
+    status    WhatsAppSessionStatus @default(pending)
+    userId    String
+    user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt DateTime              @default(now())
+    updatedAt DateTime              @updatedAt
+
+    @@index([userId])
+    @@index([status])
+    @@map("whatsapp_session")
+}
+
+enum WhatsAppSessionStatus {
+    pending
+    connecting
+    connected
+    disconnected
+    logged_out
+    expired
+
+    @@map("whatsapp_session_status")
+}

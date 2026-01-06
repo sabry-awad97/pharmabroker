@@ -11,6 +11,9 @@ import (
 )
 
 // SessionUseCase handles session business logic
+// DEPRECATED: Session CRUD is now handled by Node.js API with PostgreSQL.
+// This usecase is kept for WhatsApp client operations (connect, disconnect, QR).
+// TODO: Remove session CRUD methods in next major version.
 type SessionUseCase struct {
 	repo      repository.SessionRepository
 	waClient  repository.WhatsAppClient
@@ -31,6 +34,7 @@ func NewSessionUseCase(
 }
 
 // CreateSession creates a new WhatsApp session
+// DEPRECATED: Sessions should be created via Node.js API
 func (uc *SessionUseCase) CreateSession(ctx context.Context, req dto.CreateSessionRequest) (*entity.Session, error) {
 	// Generate a new UUID for the session
 	id := uuid.New().String()
@@ -59,7 +63,22 @@ func (uc *SessionUseCase) CreateSession(ctx context.Context, req dto.CreateSessi
 	return session, nil
 }
 
+// CreateSessionWithID creates a new WhatsApp session with a specific ID
+// Called by Node.js API to register sessions for WhatsApp client tracking
+func (uc *SessionUseCase) CreateSessionWithID(ctx context.Context, id, name string) (*entity.Session, error) {
+	// Create the session entity with provided ID
+	session := entity.NewSession(id, name)
+
+	// Persist the session
+	if err := uc.repo.Create(ctx, session); err != nil {
+		return nil, errors.ErrDatabaseError.WithCause(err)
+	}
+
+	return session, nil
+}
+
 // GetSession retrieves a session by ID
+// DEPRECATED: Use Node.js API instead
 func (uc *SessionUseCase) GetSession(ctx context.Context, id string) (*entity.Session, error) {
 	session, err := uc.repo.GetByID(ctx, id)
 	if err != nil {
@@ -72,6 +91,7 @@ func (uc *SessionUseCase) GetSession(ctx context.Context, id string) (*entity.Se
 }
 
 // ListSessions retrieves all sessions
+// DEPRECATED: Use Node.js API instead
 func (uc *SessionUseCase) ListSessions(ctx context.Context) ([]*entity.Session, error) {
 	sessions, err := uc.repo.GetAll(ctx)
 	if err != nil {
@@ -81,6 +101,7 @@ func (uc *SessionUseCase) ListSessions(ctx context.Context) ([]*entity.Session, 
 }
 
 // DeleteSession removes a session
+// DEPRECATED: Use Node.js API instead - this is now called via internal endpoint
 func (uc *SessionUseCase) DeleteSession(ctx context.Context, id string) error {
 	// Check if session exists
 	session, err := uc.repo.GetByID(ctx, id)

@@ -14,8 +14,10 @@ import { sessionId, whatsappJid, datetime } from '../common';
 
 export const sessionStatus = z.enum([
   'pending',
+  'connecting',
   'connected',
   'disconnected',
+  'logged_out',
   'expired',
 ]);
 

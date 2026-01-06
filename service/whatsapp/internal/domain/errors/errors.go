@@ -85,6 +85,15 @@ func GetDomainError(err error) *DomainError {
 	return nil
 }
 
+// IsNotFound checks if an error is a not found error
+func IsNotFound(err error) bool {
+	domainErr := GetDomainError(err)
+	if domainErr == nil {
+		return false
+	}
+	return domainErr.Code == "SESSION_NOT_FOUND" || domainErr.Code == "NOT_FOUND" || domainErr.Code == "MESSAGE_NOT_FOUND"
+}
+
 // Pre-defined domain errors
 var (
 	// Session errors

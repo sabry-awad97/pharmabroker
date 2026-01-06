@@ -13,6 +13,9 @@ import (
 )
 
 // SQLiteSessionRepository implements SessionRepository with SQLite
+// DEPRECATED: Session management is now handled by Node.js API with PostgreSQL.
+// This repository is kept for backward compatibility and WhatsApp client state tracking.
+// TODO: Remove in next major version - migrate to using Node.js API as source of truth.
 type SQLiteSessionRepository struct {
 	db *sql.DB
 	mu sync.RWMutex // Mutex for write operations to handle SQLite's single-writer limitation

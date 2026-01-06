@@ -1,8 +1,9 @@
 /**
  * WhatsApp Router
  *
- * Type-safe oRPC router proxying to the WhatsApp Go microservice.
- * Uses centralized schemas from @pharmabroker/schemas.
+ * Type-safe oRPC router for WhatsApp session management.
+ * Sessions are stored in PostgreSQL via Prisma.
+ * WhatsApp operations (connect, QR, messages) are proxied to Go microservice.
  */
 
 import { o, protectedProcedure } from '..';
@@ -45,7 +46,7 @@ export const whatsappEventPublisher = new EventPublisher<{
 
 export const whatsappRouter = o.router({
   // ─────────────────────────────────────────────────────────────────────────
-  // Session Management
+  // Session Management (Prisma)
   // ─────────────────────────────────────────────────────────────────────────
 
   createSession: protectedProcedure
@@ -61,7 +62,10 @@ export const whatsappRouter = o.router({
     })
     .input(createSessionInput)
     .output(session)
-    .handler(async ({ input }) => whatsappService.createSession(input)),
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return whatsappService.createSession(userId, input);
+    }),
 
   listSessions: protectedProcedure
     .meta({
@@ -75,7 +79,10 @@ export const whatsappRouter = o.router({
       },
     })
     .output(sessionList)
-    .handler(async () => whatsappService.listSessions()),
+    .handler(async ({ context }) => {
+      const userId = context.session!.user.id;
+      return whatsappService.listSessions(userId);
+    }),
 
   getSession: protectedProcedure
     .meta({
@@ -89,7 +96,10 @@ export const whatsappRouter = o.router({
     })
     .input(sessionIdInput)
     .output(session)
-    .handler(async ({ input }) => whatsappService.getSession(input.id)),
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return whatsappService.getSession(userId, input.id);
+    }),
 
   deleteSession: protectedProcedure
     .meta({
@@ -104,13 +114,14 @@ export const whatsappRouter = o.router({
     })
     .input(sessionIdInput)
     .output(deleteSessionResponse)
-    .handler(async ({ input }) => {
-      await whatsappService.deleteSession(input.id);
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      await whatsappService.deleteSession(userId, input.id);
       return { success: true as const };
     }),
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Messaging
+  // Messaging (Go Service)
   // ─────────────────────────────────────────────────────────────────────────
 
   sendMessage: protectedProcedure
@@ -129,7 +140,7 @@ export const whatsappRouter = o.router({
     .handler(async ({ input }) => whatsappService.sendMessage(input)),
 
   // ─────────────────────────────────────────────────────────────────────────
-  // QR Authentication Stream
+  // QR Authentication Stream (Go Service WebSocket)
   // ─────────────────────────────────────────────────────────────────────────
 
   streamQR: protectedProcedure
@@ -145,7 +156,12 @@ export const whatsappRouter = o.router({
     })
     .input(streamQrInput)
     .output(eventIterator(qrEvent))
-    .handler(async function* ({ input, signal }) {
+    .handler(async function* ({ input, signal, context }) {
+      const userId = context.session!.user.id;
+
+      // Verify session belongs to user
+      await whatsappService.getSession(userId, input.session_id);
+
       const wsUrl = whatsappService.getQRWebSocketUrl(input.session_id);
       const ws = new WebSocket(wsUrl);
 
@@ -158,6 +174,13 @@ export const whatsappRouter = o.router({
           const data = JSON.parse(event.data as string);
           const parsed = qrEvent.safeParse(data);
           if (parsed.success) {
+            // Update session status on authentication
+            if (parsed.data.type === 'authenticated' && parsed.data.data) {
+              whatsappService
+                .updateSessionJid(input.session_id, String(parsed.data.data))
+                .catch(() => {});
+            }
+
             if (resolveNext) {
               resolveNext(parsed.data);
               resolveNext = null;
@@ -235,7 +258,7 @@ export const whatsappRouter = o.router({
     }),
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Health Checks
+  // Health Checks (Go Service)
   // ─────────────────────────────────────────────────────────────────────────
 
   health: protectedProcedure
