@@ -19,7 +19,7 @@ import { authClient } from '@/lib/auth-client';
 import { useWhatsappSessions, useInvalidateWhatsapp } from '@/hooks/whatsapp';
 import { cn } from '@/lib/utils';
 
-export const Route = createFileRoute('/whatsapp')({
+export const Route = createFileRoute('/whatsapp/sessions/')({
   component: WhatsappPage,
   beforeLoad: async () => {
     const session = await authClient.getSession();

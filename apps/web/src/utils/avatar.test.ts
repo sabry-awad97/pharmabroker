@@ -6,7 +6,7 @@
  * Validates: Requirements 1.4
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { getInitials } from './avatar';
 

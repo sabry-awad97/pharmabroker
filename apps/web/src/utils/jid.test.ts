@@ -6,7 +6,7 @@
  * Validates: Requirements 4.4
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { extractPhoneFromJid, isGroupJid, isUserJid } from './jid';
 

@@ -1,33 +1,23 @@
-// Session card components
-export {
-  WhatsappSessionCard,
-  WhatsappSessionDialogs,
-  SessionAvatar,
-  SessionStatusBadge,
-  SessionActionsMenu,
-  SessionStatusIndicator,
-  SendTestMessageDialog,
-  DeleteSessionDialog,
-  type SessionStatus,
-} from './session-card';
+/**
+ * WhatsApp Groups Components
+ *
+ * Barrel export for all group-related components.
+ */
 
-// Other whatsapp components
-export { WhatsappQRDialog } from './qr-dialog';
-export { WhatsappNewSessionDialog } from './new-session-dialog';
-export { WhatsappServiceStatus } from './service-status';
+// Avatar component
+export { GroupAvatar, type GroupAvatarProps } from './group-avatar';
 
-// Groups components
+// Status badges component
 export {
-  // Avatar
-  GroupAvatar,
-  type GroupAvatarProps,
-  // Status badges
   GroupStatusBadges,
   hasActiveSettings,
   getActiveSettingNames,
   type GroupSettings,
   type GroupStatusBadgesProps,
-  // Group card
+} from './group-status-badges';
+
+// Group card component
+export {
   GroupCard,
   extractGroupCardData,
   isGroupCardDataComplete,
@@ -36,7 +26,10 @@ export {
   type GroupCardProps,
   type GroupQuickAction,
   type SessionInfo,
-  // Filter panel
+} from './group-card';
+
+// Filter panel component
+export {
   GroupFilterPanel,
   filterGroupsBySearch,
   filterGroupsBySession,
@@ -44,15 +37,24 @@ export {
   applyGroupFilters,
   type GroupFilterPanelProps,
   type FilterCounts,
-  // Empty state
+} from './group-filter-panel';
+
+// Empty state component
+export {
   GroupsEmptyState,
   type GroupsEmptyStateProps,
   type EmptyStateVariant,
-  // Skeleton
+} from './groups-empty-state';
+
+// Skeleton component
+export {
   GroupsSkeleton,
   GroupCardSkeleton,
   type GroupsSkeletonProps,
-  // Participant card
+} from './groups-skeleton';
+
+// Participant card component
+export {
   ParticipantCard,
   getParticipantDisplayName,
   getRoleLabel,
@@ -60,27 +62,42 @@ export {
   sortParticipantsByRole,
   groupParticipantsByRole,
   type ParticipantCardProps,
-  // Participant list
+} from './participant-card';
+
+// Participant list component
+export {
   ParticipantList,
   ParticipantListSkeleton,
   ParticipantCardSkeleton,
   filterParticipantsBySearch,
   type ParticipantListProps,
-  // Group detail header
+} from './participant-list';
+
+// Group detail header component
+export {
   GroupDetailHeader,
   type GroupDetailHeaderProps,
-  // Sync groups dialog
+} from './group-detail-header';
+
+// Sync groups dialog component
+export {
   SyncGroupsDialog,
   type SyncGroupsDialogProps,
   type SyncStatus,
   type SyncResult,
-  // Error state
+} from './sync-groups-dialog';
+
+// Error state component
+export {
   GroupErrorState,
   getErrorType,
   sanitizeErrorForLogging,
   type GroupErrorStateProps,
   type GroupErrorType,
-  // Error boundary
+} from './group-error-state';
+
+// Error boundary component
+export {
   GroupCardErrorBoundary,
   withGroupCardErrorBoundary,
-} from './groups';
+} from './group-card-error-boundary';

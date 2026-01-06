@@ -9,16 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WhatsappRouteImport } from './routes/whatsapp'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WhatsappSessionsIndexRouteImport } from './routes/whatsapp/sessions/index'
+import { Route as WhatsappGroupsIndexRouteImport } from './routes/whatsapp/groups/index'
+import { Route as WhatsappGroupsGroupIdRouteImport } from './routes/whatsapp/groups/$groupId'
 
-const WhatsappRoute = WhatsappRouteImport.update({
-  id: '/whatsapp',
-  path: '/whatsapp',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -34,50 +31,85 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WhatsappSessionsIndexRoute = WhatsappSessionsIndexRouteImport.update({
+  id: '/whatsapp/sessions/',
+  path: '/whatsapp/sessions/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WhatsappGroupsIndexRoute = WhatsappGroupsIndexRouteImport.update({
+  id: '/whatsapp/groups/',
+  path: '/whatsapp/groups/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WhatsappGroupsGroupIdRoute = WhatsappGroupsGroupIdRouteImport.update({
+  id: '/whatsapp/groups/$groupId',
+  path: '/whatsapp/groups/$groupId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/whatsapp': typeof WhatsappRoute
+  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute
+  '/whatsapp/groups': typeof WhatsappGroupsIndexRoute
+  '/whatsapp/sessions': typeof WhatsappSessionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/whatsapp': typeof WhatsappRoute
+  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute
+  '/whatsapp/groups': typeof WhatsappGroupsIndexRoute
+  '/whatsapp/sessions': typeof WhatsappSessionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/whatsapp': typeof WhatsappRoute
+  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute
+  '/whatsapp/groups/': typeof WhatsappGroupsIndexRoute
+  '/whatsapp/sessions/': typeof WhatsappSessionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/login' | '/whatsapp'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/whatsapp/groups/$groupId'
+    | '/whatsapp/groups'
+    | '/whatsapp/sessions'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login' | '/whatsapp'
-  id: '__root__' | '/' | '/dashboard' | '/login' | '/whatsapp'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/whatsapp/groups/$groupId'
+    | '/whatsapp/groups'
+    | '/whatsapp/sessions'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/whatsapp/groups/$groupId'
+    | '/whatsapp/groups/'
+    | '/whatsapp/sessions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
-  WhatsappRoute: typeof WhatsappRoute
+  WhatsappGroupsGroupIdRoute: typeof WhatsappGroupsGroupIdRoute
+  WhatsappGroupsIndexRoute: typeof WhatsappGroupsIndexRoute
+  WhatsappSessionsIndexRoute: typeof WhatsappSessionsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/whatsapp': {
-      id: '/whatsapp'
-      path: '/whatsapp'
-      fullPath: '/whatsapp'
-      preLoaderRoute: typeof WhatsappRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -99,6 +131,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/whatsapp/sessions/': {
+      id: '/whatsapp/sessions/'
+      path: '/whatsapp/sessions'
+      fullPath: '/whatsapp/sessions'
+      preLoaderRoute: typeof WhatsappSessionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/whatsapp/groups/': {
+      id: '/whatsapp/groups/'
+      path: '/whatsapp/groups'
+      fullPath: '/whatsapp/groups'
+      preLoaderRoute: typeof WhatsappGroupsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/whatsapp/groups/$groupId': {
+      id: '/whatsapp/groups/$groupId'
+      path: '/whatsapp/groups/$groupId'
+      fullPath: '/whatsapp/groups/$groupId'
+      preLoaderRoute: typeof WhatsappGroupsGroupIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,7 +159,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
-  WhatsappRoute: WhatsappRoute,
+  WhatsappGroupsGroupIdRoute: WhatsappGroupsGroupIdRoute,
+  WhatsappGroupsIndexRoute: WhatsappGroupsIndexRoute,
+  WhatsappSessionsIndexRoute: WhatsappSessionsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
