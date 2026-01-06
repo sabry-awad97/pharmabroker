@@ -2,8 +2,6 @@ package property
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -24,21 +22,8 @@ func TestConcurrentSessionsIndependence_Property3(t *testing.T) {
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
 
-	// Create a temporary database for testing
-	tmpDir, err := os.MkdirTemp("", "whatsapp-concurrent-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	dbPath := filepath.Join(tmpDir, "test.db")
-	dsn := persistence.CreateDSN(dbPath, 5000)
-
-	repo, err := persistence.NewSQLiteSessionRepository(dsn)
-	if err != nil {
-		t.Fatalf("failed to create repository: %v", err)
-	}
-	defer repo.Close()
+	// Use in-memory repository for testing
+	repo := persistence.NewInMemorySessionRepository()
 
 	ctx := context.Background()
 

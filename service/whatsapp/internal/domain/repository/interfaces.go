@@ -88,6 +88,9 @@ type WhatsAppClient interface {
 
 	// GetSessionJID returns the JID for a connected session
 	GetSessionJID(sessionID string) (string, error)
+
+	// SetSessionJIDMapping sets the JID mapping for a session (used for reconnection after restart)
+	SetSessionJIDMapping(sessionID, jid string)
 }
 
 // EventPublisher defines event propagation operations to the API server

@@ -2,7 +2,6 @@ package infrastructure
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
 	"github.com/pharmabroker/whatsapp/internal/domain/valueobject"
@@ -14,15 +13,10 @@ import (
 	"go.uber.org/fx"
 )
 
-// SQLiteDB is a wrapper type for the database connection to use with fx
-type SQLiteDB struct {
-	DB *sql.DB
-}
-
 // Module provides all infrastructure layer dependencies
 var Module = fx.Module("infrastructure",
 	fx.Provide(
-		NewSQLiteSessionRepository,
+		NewInMemorySessionRepository,
 		NewWhatsmeowClient,
 		NewGorillaEventPublisher,
 		NewHealthCheckers,
@@ -30,27 +24,16 @@ var Module = fx.Module("infrastructure",
 	),
 )
 
-// NewSQLiteSessionRepository creates a new SQLite session repository
-func NewSQLiteSessionRepository(lc fx.Lifecycle, cfg *config.Config) (repository.SessionRepository, *SQLiteDB, error) {
-	dsn := cfg.SQLite.DSN()
-	repo, err := persistence.NewSQLiteSessionRepository(dsn)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			return repo.Close()
-		},
-	})
-
-	return repo, &SQLiteDB{DB: repo.DB()}, nil
+// NewInMemorySessionRepository creates a new in-memory session repository
+// Session state is stored in memory; whatsmeow's SQLite preserves auth for auto-reconnect
+func NewInMemorySessionRepository() repository.SessionRepository {
+	return persistence.NewInMemorySessionRepository()
 }
 
 // NewWhatsmeowClient creates a new WhatsApp client
 func NewWhatsmeowClient(lc fx.Lifecycle, cfg *config.Config) (repository.WhatsAppClient, error) {
 	clientConfig := whatsapp.ClientConfig{
-		DBPath:           cfg.SQLite.WhatsmeowPath,
+		DBPath:           cfg.WhatsApp.DBPath,
 		QRTimeout:        cfg.WhatsApp.QRTimeout,
 		ReconnectDelay:   cfg.WhatsApp.ReconnectDelay,
 		MaxReconnects:    cfg.WhatsApp.MaxReconnects,
@@ -102,19 +85,16 @@ func NewGorillaEventPublisher(lc fx.Lifecycle, cfg *config.Config) repository.Ev
 
 // HealthCheckers holds all health checker instances
 type HealthCheckers struct {
-	SQLite         *health.SQLiteHealthChecker
 	WhatsAppClient *health.WhatsAppClientHealthChecker
 	EventPublisher *health.EventPublisherHealthChecker
 }
 
 // NewHealthCheckers creates all health checkers
 func NewHealthCheckers(
-	sqliteDB *SQLiteDB,
 	waClient repository.WhatsAppClient,
 	publisher repository.EventPublisher,
 ) *HealthCheckers {
 	return &HealthCheckers{
-		SQLite:         health.NewSQLiteHealthChecker(sqliteDB.DB),
 		WhatsAppClient: health.NewWhatsAppClientHealthChecker(waClient),
 		EventPublisher: health.NewEventPublisherHealthChecker(publisher),
 	}

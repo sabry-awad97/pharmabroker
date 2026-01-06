@@ -157,6 +157,53 @@ func (h *Handler) UpdateSessionStatus(c *gin.Context) {
 	respondWithSuccess(c, http.StatusOK, map[string]string{"message": "Status updated successfully"})
 }
 
+// ReconnectSession handles POST /api/internal/sessions/:id/reconnect
+// Attempts to reconnect a session using stored WhatsApp credentials
+func (h *Handler) ReconnectSession(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		respondWithError(c, http.StatusBadRequest, "INVALID_ID", "Session ID is required", nil)
+		return
+	}
+
+	// Parse optional JID from request body
+	var req struct {
+		JID string `json:"jid,omitempty"`
+	}
+	// Ignore binding errors - JID is optional
+	_ = c.ShouldBindJSON(&req)
+
+	if err := h.sessionUC.ReconnectSessionWithJID(c.Request.Context(), id, req.JID); err != nil {
+		handleDomainError(c, err)
+		return
+	}
+
+	respondWithSuccess(c, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Session reconnected successfully",
+	})
+}
+
+// DisconnectSession handles POST /api/internal/sessions/:id/disconnect
+// Disconnects a session without deleting it (keeps credentials for reconnect)
+func (h *Handler) DisconnectSession(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		respondWithError(c, http.StatusBadRequest, "INVALID_ID", "Session ID is required", nil)
+		return
+	}
+
+	if err := h.sessionUC.DisconnectSession(c.Request.Context(), id); err != nil {
+		handleDomainError(c, err)
+		return
+	}
+
+	respondWithSuccess(c, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Session disconnected successfully",
+	})
+}
+
 // Health handles GET /health (liveness probe)
 func (h *Handler) Health(c *gin.Context) {
 	if h.healthUC != nil {

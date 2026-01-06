@@ -2,42 +2,47 @@
  * WhatsApp Event Schemas
  *
  * Schemas for real-time WhatsApp events (QR auth, messages, connections).
- * Uses branded types for type-safe session IDs.
+ * Uses unbranded types for output validation (data from Go service).
+ * Uses branded types for input validation (session IDs from client).
  */
 
 import { z } from 'zod';
-import { sessionId, whatsappJid } from '../common';
+import { sessionId, unbranded } from '../common';
 
 // ============================================================================
-// QR Authentication Events
+// QR Authentication Events (unbranded - received from Go service)
 // ============================================================================
-
-/** Base64 QR code data branded type */
-export const qrCodeData = z.string().brand<'QRCodeData'>();
 
 /** QR code event - contains base64 PNG */
 export const qrCodeEvent = z.object({
   type: z.literal('qr'),
-  data: qrCodeData,
+  data: z.string(), // base64 PNG
 });
 
 /** Authentication success event */
 export const authenticatedEvent = z.object({
   type: z.literal('authenticated'),
   data: z.object({
-    jid: whatsappJid,
+    jid: z.string(),
   }),
+  message: z.string().optional(),
 });
 
 /** Authentication error event */
 export const authErrorEvent = z.object({
   type: z.literal('error'),
+  data: z
+    .object({
+      code: z.string(),
+    })
+    .optional(),
   message: z.string(),
 });
 
 /** Authentication timeout event */
 export const authTimeoutEvent = z.object({
   type: z.literal('timeout'),
+  message: z.string().optional(),
 });
 
 /** Union of all QR authentication events */
@@ -49,38 +54,38 @@ export const qrEvent = z.union([
 ]);
 
 // ============================================================================
-// Message Events
+// Message Events (unbranded for output)
 // ============================================================================
 
 const messageEventData = z.record(z.string(), z.unknown());
 
 export const messageReceivedEvent = z.object({
   type: z.literal('message.received'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
   data: messageEventData,
 });
 
 export const messageSentEvent = z.object({
   type: z.literal('message.sent'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
   data: messageEventData,
 });
 
 export const messageDeliveredEvent = z.object({
   type: z.literal('message.delivered'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
   data: messageEventData,
 });
 
 export const messageReadEvent = z.object({
   type: z.literal('message.read'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
   data: messageEventData,
 });
 
 export const messageFailedEvent = z.object({
   type: z.literal('message.failed'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
   data: messageEventData,
 });
 
@@ -94,22 +99,22 @@ export const messageEvent = z.union([
 ]);
 
 // ============================================================================
-// Connection Events
+// Connection Events (unbranded for output)
 // ============================================================================
 
 export const connectionConnectedEvent = z.object({
   type: z.literal('connection.connected'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
 });
 
 export const connectionDisconnectedEvent = z.object({
   type: z.literal('connection.disconnected'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
 });
 
 export const connectionLoggedOutEvent = z.object({
   type: z.literal('connection.logged_out'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
 });
 
 /** Union of all connection events */
@@ -120,25 +125,25 @@ export const connectionEvent = z.union([
 ]);
 
 // ============================================================================
-// Session Events
+// Session Events (unbranded for output)
 // ============================================================================
 
 export const sessionQrScannedEvent = z.object({
   type: z.literal('session.qr_scanned'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
 });
 
 export const sessionAuthenticatedEvent = z.object({
   type: z.literal('session.authenticated'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
   data: z.object({
-    jid: whatsappJid,
+    jid: z.string(),
   }),
 });
 
 export const sessionExpiredEvent = z.object({
   type: z.literal('session.expired'),
-  session_id: sessionId,
+  session_id: unbranded.uuid,
 });
 
 /** Union of all session events */
@@ -203,7 +208,6 @@ export const streamQrInput = z.object({
 // Types
 // ============================================================================
 
-export type QRCodeData = z.infer<typeof qrCodeData>;
 export type QRCodeEvent = z.infer<typeof qrCodeEvent>;
 export type AuthenticatedEvent = z.infer<typeof authenticatedEvent>;
 export type AuthErrorEvent = z.infer<typeof authErrorEvent>;

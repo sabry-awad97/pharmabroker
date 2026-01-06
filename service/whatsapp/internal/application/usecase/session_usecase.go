@@ -111,6 +111,64 @@ func (uc *SessionUseCase) UpdateSessionStatus(ctx context.Context, sessionID str
 	return nil
 }
 
+// ReconnectSession attempts to reconnect a session using stored WhatsApp credentials
+func (uc *SessionUseCase) ReconnectSession(ctx context.Context, sessionID string) error {
+	return uc.ReconnectSessionWithJID(ctx, sessionID, "")
+}
+
+// ReconnectSessionWithJID attempts to reconnect a session using stored WhatsApp credentials
+// If jid is provided, it will be used to find the correct device in whatsmeow's store
+func (uc *SessionUseCase) ReconnectSessionWithJID(ctx context.Context, sessionID, jid string) error {
+	// Check if already connected
+	if uc.waClient != nil && uc.waClient.IsConnected(sessionID) {
+		return nil // Already connected
+	}
+
+	// Update status to connecting
+	_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusConnecting)
+
+	// Attempt to connect using stored credentials
+	if uc.waClient == nil {
+		_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusDisconnected)
+		return errors.ErrConnectionFailed.WithMessage("WhatsApp client not available")
+	}
+
+	// Set JID mapping if provided (helps find the correct device after restart)
+	if jid != "" {
+		uc.waClient.SetSessionJIDMapping(sessionID, jid)
+	}
+
+	if err := uc.waClient.Connect(ctx, sessionID); err != nil {
+		_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusDisconnected)
+		return errors.ErrConnectionFailed.WithCause(err)
+	}
+
+	// Update status to connected
+	_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusConnected)
+
+	// Get JID if available
+	if newJID, err := uc.waClient.GetSessionJID(sessionID); err == nil && newJID != "" {
+		_ = uc.UpdateSessionJID(ctx, sessionID, newJID)
+	}
+
+	return nil
+}
+
+// DisconnectSession disconnects a session without deleting it (keeps credentials)
+func (uc *SessionUseCase) DisconnectSession(ctx context.Context, sessionID string) error {
+	// Disconnect the WhatsApp client if connected
+	if uc.waClient != nil && uc.waClient.IsConnected(sessionID) {
+		if err := uc.waClient.Disconnect(ctx, sessionID); err != nil {
+			return errors.ErrConnectionFailed.WithCause(err)
+		}
+	}
+
+	// Update status to disconnected
+	_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusDisconnected)
+
+	return nil
+}
+
 // UpdateSessionJID updates the JID of a session after authentication
 func (uc *SessionUseCase) UpdateSessionJID(ctx context.Context, sessionID, jid string) error {
 	session, err := uc.repo.GetByID(ctx, sessionID)

@@ -109,6 +109,8 @@ func registerRoutes(router *gin.Engine, handler *Handler, routerConfig RouterCon
 	internal.POST("/sessions/register", handler.RegisterSession)
 	internal.POST("/sessions/:id/unregister", handler.UnregisterSession)
 	internal.POST("/sessions/:id/status", handler.UpdateSessionStatus)
+	internal.POST("/sessions/:id/reconnect", handler.ReconnectSession)
+	internal.POST("/sessions/:id/disconnect", handler.DisconnectSession)
 
 	// Message routes
 	messages := api.Group("/messages")

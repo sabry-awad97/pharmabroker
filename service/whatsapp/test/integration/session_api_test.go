@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/pharmabroker/whatsapp/internal/application/dto"
 	"github.com/pharmabroker/whatsapp/internal/application/usecase"
 	"github.com/pharmabroker/whatsapp/internal/domain/entity"
+	"github.com/pharmabroker/whatsapp/internal/domain/errors"
 	httpHandler "github.com/pharmabroker/whatsapp/internal/presentation/http"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -238,4 +240,221 @@ func TestUpdateSessionStatus_CreatesSessionIfNotExists(t *testing.T) {
 	// Verify session was created
 	_, exists := repo.sessions["new-session"]
 	assert.True(t, exists)
+}
+
+// ==================== POST /api/internal/sessions/:id/reconnect Tests ====================
+
+func TestReconnectSession_Success(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	existingSession.SetJID("1234567890@s.whatsapp.net")
+	repo.sessions["test-id"] = existingSession
+
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/reconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response dto.APIResponse[map[string]interface{}]
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.True(t, response.Success)
+	assert.Equal(t, true, response.Data["success"])
+
+	// Verify client was connected
+	assert.True(t, waClient.Connected["test-id"])
+
+	// Verify status was updated to connected
+	assert.Equal(t, entity.StatusConnected, repo.sessions["test-id"].Status)
+}
+
+func TestReconnectSession_AlreadyConnected(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusConnected)
+	repo.sessions["test-id"] = existingSession
+	waClient.Connected["test-id"] = true
+
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/reconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Should succeed even if already connected
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestReconnectSession_ConnectionFailed(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	repo.sessions["test-id"] = existingSession
+
+	// Make connect fail
+	waClient.ConnectFn = func(ctx context.Context, sessionID string) error {
+		return errors.ErrConnectionFailed
+	}
+
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/reconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	// Verify status was reverted to disconnected
+	assert.Equal(t, entity.StatusDisconnected, repo.sessions["test-id"].Status)
+}
+
+func TestReconnectSession_MissingID(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions//reconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Empty ID path returns 400 (INVALID_ID)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// ==================== POST /api/internal/sessions/:id/disconnect Tests ====================
+
+func TestDisconnectSession_Success(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusConnected)
+	existingSession.SetJID("1234567890@s.whatsapp.net")
+	repo.sessions["test-id"] = existingSession
+	waClient.Connected["test-id"] = true
+
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/disconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response dto.APIResponse[map[string]interface{}]
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.True(t, response.Success)
+	assert.Equal(t, true, response.Data["success"])
+
+	// Verify client was disconnected
+	assert.False(t, waClient.Connected["test-id"])
+
+	// Verify status was updated to disconnected
+	assert.Equal(t, entity.StatusDisconnected, repo.sessions["test-id"].Status)
+}
+
+func TestDisconnectSession_AlreadyDisconnected(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	repo.sessions["test-id"] = existingSession
+
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/disconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Should succeed even if already disconnected
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Status should remain disconnected
+	assert.Equal(t, entity.StatusDisconnected, repo.sessions["test-id"].Status)
+}
+
+func TestDisconnectSession_PreservesJID(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusConnected)
+	existingSession.SetJID("1234567890@s.whatsapp.net")
+	repo.sessions["test-id"] = existingSession
+	waClient.Connected["test-id"] = true
+
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/disconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify JID is preserved after disconnect
+	assert.Equal(t, "1234567890@s.whatsapp.net", repo.sessions["test-id"].JID)
+}
+
+func TestDisconnectSession_MissingID(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions//disconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Empty ID path returns 400 (INVALID_ID)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestDisconnectSession_SessionNotFound(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/non-existent/disconnect", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Should succeed - disconnect is idempotent
+	assert.Equal(t, http.StatusOK, w.Code)
 }

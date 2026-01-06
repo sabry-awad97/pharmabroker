@@ -129,6 +129,46 @@ export function useDeleteWhatsappSession() {
   );
 }
 
+/**
+ * Reconnect a WhatsApp session
+ */
+export function useReconnectWhatsappSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    orpc.whatsapp.reconnectSession.mutationOptions({
+      onSuccess: (_, variables) => {
+        queryClient.invalidateQueries({
+          queryKey: whatsappKeys.sessions.detail(variables.id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: whatsappKeys.sessions.all(),
+        });
+      },
+    }),
+  );
+}
+
+/**
+ * Disconnect a WhatsApp session
+ */
+export function useDisconnectWhatsappSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    orpc.whatsapp.disconnectSession.mutationOptions({
+      onSuccess: (_, variables) => {
+        queryClient.invalidateQueries({
+          queryKey: whatsappKeys.sessions.detail(variables.id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: whatsappKeys.sessions.all(),
+        });
+      },
+    }),
+  );
+}
+
 // ============================================================================
 // Messaging Hooks
 // ============================================================================

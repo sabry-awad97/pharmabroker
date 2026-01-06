@@ -48,9 +48,8 @@ func startServer(
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			log.Printf("🚀 WhatsApp service starting on %s", cfg.Server.Address())
-			log.Printf("📁 Sessions database: %s", cfg.SQLite.Path)
-			log.Printf("📁 Whatsmeow database: %s", cfg.SQLite.WhatsmeowPath)
-			log.Printf("🔗 WebSocket API URL: %s", cfg.WebSocket.URL)
+			log.Printf("📁 Whatsmeow database: %s", cfg.WhatsApp.DBPath)
+			log.Printf("� WebSoceket API URL: %s", cfg.WebSocket.URL)
 
 			// Start server in a goroutine
 			go func() {

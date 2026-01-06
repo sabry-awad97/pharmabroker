@@ -13,9 +13,11 @@ import {
   // Session schemas
   session,
   createSessionInput,
+  updateSessionInput,
   sessionIdInput,
   sessionList,
   deleteSessionResponse,
+  reconnectSessionResponse,
   // Message schemas
   sendMessageInput,
   sendMessageResponse,
@@ -120,6 +122,60 @@ export const whatsappRouter = o.router({
       return { success: true as const };
     }),
 
+  updateSession: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'PATCH',
+        path: '/whatsapp/sessions/{id}',
+        tags: ['WhatsApp Sessions'],
+        summary: 'Update a WhatsApp session',
+        description:
+          'Updates session settings like name and auto-connect preference.',
+      },
+    })
+    .input(updateSessionInput)
+    .output(session)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return whatsappService.updateSession(userId, input);
+    }),
+
+  reconnectSession: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/sessions/{id}/reconnect',
+        tags: ['WhatsApp Sessions'],
+        summary: 'Reconnect a WhatsApp session',
+        description:
+          'Attempts to reconnect a previously authenticated session using stored credentials. No QR scan needed if credentials are still valid.',
+      },
+    })
+    .input(sessionIdInput)
+    .output(reconnectSessionResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return whatsappService.reconnectSession(userId, input.id);
+    }),
+
+  disconnectSession: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/sessions/{id}/disconnect',
+        tags: ['WhatsApp Sessions'],
+        summary: 'Disconnect a WhatsApp session',
+        description:
+          'Disconnects a session without deleting it. Credentials are preserved for reconnection.',
+      },
+    })
+    .input(sessionIdInput)
+    .output(reconnectSessionResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return whatsappService.disconnectSession(userId, input.id);
+    }),
+
   // ─────────────────────────────────────────────────────────────────────────
   // Messaging (Go Service)
   // ─────────────────────────────────────────────────────────────────────────
@@ -175,9 +231,9 @@ export const whatsappRouter = o.router({
           const parsed = qrEvent.safeParse(data);
           if (parsed.success) {
             // Update session status on authentication
-            if (parsed.data.type === 'authenticated' && parsed.data.data) {
+            if (parsed.data.type === 'authenticated' && parsed.data.data?.jid) {
               whatsappService
-                .updateSessionJid(input.session_id, String(parsed.data.data))
+                .updateSessionJid(input.session_id, parsed.data.data.jid)
                 .catch(() => {});
             }
 

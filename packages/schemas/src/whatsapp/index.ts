@@ -11,13 +11,17 @@ export {
   sessionStatus,
   session,
   createSessionInput,
+  updateSessionInput,
   sessionIdInput,
   sessionList,
   deleteSessionResponse,
+  reconnectSessionResponse,
   type SessionStatus,
   type Session,
   type CreateSessionInput,
+  type UpdateSessionInput,
   type SessionIdInput,
+  type ReconnectSessionResponse,
 } from './session';
 
 // Message schemas
@@ -53,7 +57,6 @@ export {
 // Event schemas
 export {
   // QR events
-  qrCodeData,
   qrCodeEvent,
   authenticatedEvent,
   authErrorEvent,
@@ -83,7 +86,6 @@ export {
   subscribeEventsInput,
   streamQrInput,
   // Types
-  type QRCodeData,
   type QRCodeEvent,
   type AuthenticatedEvent,
   type AuthErrorEvent,

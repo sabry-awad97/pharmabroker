@@ -60,6 +60,7 @@ func (m *MockWhatsAppClient) GetQRChannel(ctx context.Context, sessionID string)
 func (m *MockWhatsAppClient) RegisterEventHandler(handler repository.EventHandler) {}
 func (m *MockWhatsAppClient) IsConnected(sessionID string) bool                    { return m.connected }
 func (m *MockWhatsAppClient) GetSessionJID(sessionID string) (string, error)       { return "", nil }
+func (m *MockWhatsAppClient) SetSessionJIDMapping(sessionID, jid string)           {}
 
 func TestWhatsAppClientHealthChecker_Healthy(t *testing.T) {
 	client := &MockWhatsAppClient{connected: true}

@@ -129,6 +129,10 @@ func (m *WhatsAppClientMock) GetSessionJID(sessionID string) (string, error) {
 	return "", errors.ErrSessionNotFound
 }
 
+func (m *WhatsAppClientMock) SetSessionJIDMapping(sessionID, jid string) {
+	// No-op for mock
+}
+
 // ==================== Event Publisher Mock ====================
 
 // EventPublisherMock is a mock implementation of EventPublisher with extended functionality

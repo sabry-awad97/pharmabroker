@@ -192,3 +192,221 @@ func TestSessionUseCase_UpdateSessionJID_CreatesSessionIfNotExists(t *testing.T)
 	assert.NotNil(t, session)
 	assert.Equal(t, "1234567890@s.whatsapp.net", session.JID)
 }
+
+// ==================== ReconnectSession Tests ====================
+
+func TestSessionUseCase_ReconnectSession_Success(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	existingSession.SetJID("1234567890@s.whatsapp.net")
+	repo.sessions["test-id"] = existingSession
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.ReconnectSession(context.Background(), "test-id")
+
+	require.NoError(t, err)
+
+	// Verify client was connected
+	assert.True(t, waClient.IsConnected("test-id"))
+
+	// Verify status was updated to connected
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, entity.StatusConnected, session.Status)
+}
+
+func TestSessionUseCase_ReconnectSession_AlreadyConnected(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusConnected)
+	repo.sessions["test-id"] = existingSession
+	waClient.Connected["test-id"] = true
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.ReconnectSession(context.Background(), "test-id")
+
+	// Should succeed without error
+	require.NoError(t, err)
+
+	// Client should still be connected
+	assert.True(t, waClient.IsConnected("test-id"))
+}
+
+func TestSessionUseCase_ReconnectSession_NoClient(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	repo.sessions["test-id"] = existingSession
+
+	uc := usecase.NewSessionUseCase(repo, nil, nil)
+
+	err := uc.ReconnectSession(context.Background(), "test-id")
+
+	assert.ErrorIs(t, err, errors.ErrConnectionFailed)
+
+	// Verify status was reverted to disconnected
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, entity.StatusDisconnected, session.Status)
+}
+
+func TestSessionUseCase_ReconnectSession_ConnectionFailed(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	repo.sessions["test-id"] = existingSession
+
+	// Make connect fail
+	waClient.ConnectFn = func(ctx context.Context, sessionID string) error {
+		return errors.ErrConnectionFailed
+	}
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.ReconnectSession(context.Background(), "test-id")
+
+	assert.ErrorIs(t, err, errors.ErrConnectionFailed)
+
+	// Verify status was reverted to disconnected
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, entity.StatusDisconnected, session.Status)
+}
+
+func TestSessionUseCase_ReconnectSession_UpdatesJID(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	repo.sessions["test-id"] = existingSession
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.ReconnectSession(context.Background(), "test-id")
+
+	require.NoError(t, err)
+
+	// Verify JID was updated (mock returns sessionID@s.whatsapp.net)
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, "test-id@s.whatsapp.net", session.JID)
+}
+
+// ==================== DisconnectSession Tests ====================
+
+func TestSessionUseCase_DisconnectSession_Success(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusConnected)
+	existingSession.SetJID("1234567890@s.whatsapp.net")
+	repo.sessions["test-id"] = existingSession
+	waClient.Connected["test-id"] = true
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.DisconnectSession(context.Background(), "test-id")
+
+	require.NoError(t, err)
+
+	// Verify client was disconnected
+	assert.False(t, waClient.IsConnected("test-id"))
+
+	// Verify status was updated to disconnected
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, entity.StatusDisconnected, session.Status)
+}
+
+func TestSessionUseCase_DisconnectSession_AlreadyDisconnected(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusDisconnected)
+	repo.sessions["test-id"] = existingSession
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.DisconnectSession(context.Background(), "test-id")
+
+	// Should succeed without error
+	require.NoError(t, err)
+
+	// Status should remain disconnected
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, entity.StatusDisconnected, session.Status)
+}
+
+func TestSessionUseCase_DisconnectSession_PreservesJID(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusConnected)
+	existingSession.SetJID("1234567890@s.whatsapp.net")
+	repo.sessions["test-id"] = existingSession
+	waClient.Connected["test-id"] = true
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.DisconnectSession(context.Background(), "test-id")
+
+	require.NoError(t, err)
+
+	// Verify JID is preserved
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, "1234567890@s.whatsapp.net", session.JID)
+}
+
+func TestSessionUseCase_DisconnectSession_NoClient(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+
+	existingSession := entity.NewSession("test-id", "Test Session")
+	existingSession.SetStatus(entity.StatusConnected)
+	repo.sessions["test-id"] = existingSession
+
+	uc := usecase.NewSessionUseCase(repo, nil, nil)
+
+	err := uc.DisconnectSession(context.Background(), "test-id")
+
+	// Should succeed - no client means nothing to disconnect
+	require.NoError(t, err)
+
+	// Status should be updated to disconnected
+	session, _ := repo.GetByID(context.Background(), "test-id")
+	assert.Equal(t, entity.StatusDisconnected, session.Status)
+}
+
+func TestSessionUseCase_DisconnectSession_SessionNotInRepo(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+
+	// Session exists in client but not in repo
+	waClient.Connected["test-id"] = true
+
+	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
+
+	err := uc.DisconnectSession(context.Background(), "test-id")
+
+	// Should succeed - disconnect is idempotent
+	require.NoError(t, err)
+
+	// Client should be disconnected
+	assert.False(t, waClient.IsConnected("test-id"))
+}

@@ -5,6 +5,7 @@ import {
   WhatsappSessionCard,
   WhatsappNewSessionDialog,
   WhatsappServiceStatus,
+  WhatsappSessionDialogs,
 } from '@/components/whatsapp';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -40,6 +41,9 @@ function WhatsappPage() {
 
   return (
     <div className="p-6">
+      {/* Dialogs rendered from store state */}
+      <WhatsappSessionDialogs />
+
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>

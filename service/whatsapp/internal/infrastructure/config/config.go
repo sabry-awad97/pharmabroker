@@ -13,10 +13,7 @@ type Config struct {
 	// Server configuration
 	Server ServerConfig `mapstructure:"server"`
 
-	// SQLite database configuration
-	SQLite SQLiteConfig `mapstructure:"sqlite"`
-
-	// WhatsApp client configuration
+	// WhatsApp client configuration (includes whatsmeow database path)
 	WhatsApp WhatsAppConfig `mapstructure:"whatsapp"`
 
 	// WebSocket configuration for API server connection
@@ -92,15 +89,9 @@ type ServerConfig struct {
 	Port int    `mapstructure:"port"`
 }
 
-// SQLiteConfig holds SQLite database configuration
-type SQLiteConfig struct {
-	Path          string `mapstructure:"path"`           // Session repository database
-	WhatsmeowPath string `mapstructure:"whatsmeow_path"` // Whatsmeow client database (separate to avoid locks)
-	BusyTimeout   int    `mapstructure:"busy_timeout"`   // milliseconds
-}
-
 // WhatsAppConfig holds WhatsApp client configuration
 type WhatsAppConfig struct {
+	DBPath           string        `mapstructure:"db_path"` // Whatsmeow SQLite database path
 	QRTimeout        time.Duration `mapstructure:"qr_timeout"`
 	ReconnectDelay   time.Duration `mapstructure:"reconnect_delay"`
 	MaxReconnects    int           `mapstructure:"max_reconnects"`
@@ -126,16 +117,6 @@ type LogConfig struct {
 // Address returns the server address in host:port format
 func (c *ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
-}
-
-// DSN returns the SQLite connection string with WAL mode enabled
-func (c *SQLiteConfig) DSN() string {
-	return fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=%d", c.Path, c.BusyTimeout)
-}
-
-// WhatsmeowDSN returns the SQLite connection string for whatsmeow
-func (c *SQLiteConfig) WhatsmeowDSN() string {
-	return fmt.Sprintf("%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(%d)", c.WhatsmeowPath, c.BusyTimeout)
 }
 
 // ValidationError represents a configuration validation error
@@ -174,27 +155,13 @@ func (c *Config) Validate() error {
 		})
 	}
 
-	// Validate SQLite config
-	if c.SQLite.Path == "" {
-		errs = append(errs, ValidationError{
-			Field:   "sqlite.path",
-			Message: "is required",
-		})
-	}
-	if c.SQLite.WhatsmeowPath == "" {
-		errs = append(errs, ValidationError{
-			Field:   "sqlite.whatsmeow_path",
-			Message: "is required",
-		})
-	}
-	if c.SQLite.BusyTimeout < 0 {
-		errs = append(errs, ValidationError{
-			Field:   "sqlite.busy_timeout",
-			Message: "must be non-negative",
-		})
-	}
-
 	// Validate WhatsApp config
+	if c.WhatsApp.DBPath == "" {
+		errs = append(errs, ValidationError{
+			Field:   "whatsapp.db_path",
+			Message: "is required",
+		})
+	}
 	if c.WhatsApp.QRTimeout <= 0 {
 		errs = append(errs, ValidationError{
 			Field:   "whatsapp.qr_timeout",
@@ -331,12 +298,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)
 
-	// SQLite defaults
-	v.SetDefault("sqlite.path", "/data/sessions.db")
-	v.SetDefault("sqlite.whatsmeow_path", "/data/whatsmeow.db")
-	v.SetDefault("sqlite.busy_timeout", 5000)
-
 	// WhatsApp defaults
+	v.SetDefault("whatsapp.db_path", "/data/whatsmeow.db")
 	v.SetDefault("whatsapp.qr_timeout", 2*time.Minute)
 	v.SetDefault("whatsapp.reconnect_delay", 5*time.Second)
 	v.SetDefault("whatsapp.max_reconnects", 10)
@@ -395,12 +358,8 @@ func bindEnvVars(v *viper.Viper) {
 	_ = v.BindEnv("server.host", "WHATSAPP_SERVER_HOST")
 	_ = v.BindEnv("server.port", "WHATSAPP_SERVER_PORT")
 
-	// SQLite - also support SQLITE_PATH for backward compatibility
-	_ = v.BindEnv("sqlite.path", "WHATSAPP_SQLITE_PATH", "SQLITE_PATH")
-	_ = v.BindEnv("sqlite.whatsmeow_path", "WHATSAPP_SQLITE_WHATSMEOW_PATH", "WHATSMEOW_DB_PATH")
-	_ = v.BindEnv("sqlite.busy_timeout", "WHATSAPP_SQLITE_BUSY_TIMEOUT")
-
 	// WhatsApp
+	_ = v.BindEnv("whatsapp.db_path", "WHATSAPP_DB_PATH")
 	_ = v.BindEnv("whatsapp.qr_timeout", "WHATSAPP_QR_TIMEOUT")
 	_ = v.BindEnv("whatsapp.reconnect_delay", "WHATSAPP_RECONNECT_DELAY")
 	_ = v.BindEnv("whatsapp.max_reconnects", "WHATSAPP_MAX_RECONNECTS")

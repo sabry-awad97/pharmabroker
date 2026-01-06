@@ -22,12 +22,12 @@ func TestConfigurationValidation_Property13(t *testing.T) {
 
 	// Property 13.1: Valid configuration should pass validation
 	properties.Property("valid configuration passes validation", prop.ForAll(
-		func(port int, sqlitePath, whatsmeowPath, wsURL, logLevel, logFormat string) bool {
+		func(port int, dbPath, wsURL, logLevel, logFormat string) bool {
 			// Ensure we have valid values
 			if port < 1 || port > 65535 {
 				return true // skip invalid test cases
 			}
-			if sqlitePath == "" || whatsmeowPath == "" || wsURL == "" {
+			if dbPath == "" || wsURL == "" {
 				return true // skip empty required fields
 			}
 
@@ -36,12 +36,8 @@ func TestConfigurationValidation_Property13(t *testing.T) {
 					Host: "localhost",
 					Port: port,
 				},
-				SQLite: config.SQLiteConfig{
-					Path:          sqlitePath,
-					WhatsmeowPath: whatsmeowPath,
-					BusyTimeout:   5000,
-				},
 				WhatsApp: config.WhatsAppConfig{
+					DBPath:           dbPath,
 					QRTimeout:        2 * time.Minute,
 					ReconnectDelay:   5 * time.Second,
 					MaxReconnects:    10,
@@ -67,16 +63,15 @@ func TestConfigurationValidation_Property13(t *testing.T) {
 		gen.IntRange(1, 65535),
 		gen.AnyString().SuchThat(func(s string) bool { return s != "" }),
 		gen.AnyString().SuchThat(func(s string) bool { return s != "" }),
-		gen.AnyString().SuchThat(func(s string) bool { return s != "" }),
 		gen.OneConstOf("debug", "info", "warn", "error"),
 		gen.OneConstOf("json", "text"),
 	))
 
-	// Property 13.2: Missing SQLite path should fail validation with descriptive error
-	properties.Property("missing SQLite path fails validation", prop.ForAll(
+	// Property 13.2: Missing DB path should fail validation with descriptive error
+	properties.Property("missing DB path fails validation", prop.ForAll(
 		func(port int) bool {
 			cfg := createValidConfig()
-			cfg.SQLite.Path = ""
+			cfg.WhatsApp.DBPath = ""
 
 			err := cfg.Validate()
 			if err == nil {
@@ -85,25 +80,7 @@ func TestConfigurationValidation_Property13(t *testing.T) {
 
 			// Error should mention the field
 			errStr := err.Error()
-			return containsStr(errStr, "sqlite.path") && containsStr(errStr, "required")
-		},
-		gen.IntRange(1, 65535),
-	))
-
-	// Property 13.2b: Missing Whatsmeow path should fail validation with descriptive error
-	properties.Property("missing Whatsmeow path fails validation", prop.ForAll(
-		func(port int) bool {
-			cfg := createValidConfig()
-			cfg.SQLite.WhatsmeowPath = ""
-
-			err := cfg.Validate()
-			if err == nil {
-				return false
-			}
-
-			// Error should mention the field
-			errStr := err.Error()
-			return containsStr(errStr, "sqlite.whatsmeow_path") && containsStr(errStr, "required")
+			return containsStr(errStr, "whatsapp.db_path") && containsStr(errStr, "required")
 		},
 		gen.IntRange(1, 65535),
 	))
@@ -238,28 +215,7 @@ func TestConfigurationValidation_Property13(t *testing.T) {
 		gen.OneConstOf(time.Duration(0), -time.Second, -time.Minute),
 	))
 
-	// Property 13.9: Negative values for non-negative fields should fail validation
-	properties.Property("negative busy timeout fails validation", prop.ForAll(
-		func(timeout int) bool {
-			if timeout >= 0 {
-				return true // skip valid values
-			}
-
-			cfg := createValidConfig()
-			cfg.SQLite.BusyTimeout = timeout
-
-			err := cfg.Validate()
-			if err == nil {
-				return false
-			}
-
-			errStr := err.Error()
-			return containsStr(errStr, "sqlite.busy_timeout")
-		},
-		gen.IntRange(-1000, -1),
-	))
-
-	// Property 13.10: Multiple validation errors should all be reported
+	// Property 13.9: Multiple validation errors should all be reported
 	properties.Property("multiple validation errors are all reported", prop.ForAll(
 		func(_ int) bool {
 			cfg := &config.Config{
@@ -267,13 +223,9 @@ func TestConfigurationValidation_Property13(t *testing.T) {
 					Host: "localhost",
 					Port: 0, // invalid
 				},
-				SQLite: config.SQLiteConfig{
-					Path:          "", // invalid
-					WhatsmeowPath: "", // invalid
-					BusyTimeout:   -1, // invalid
-				},
 				WhatsApp: config.WhatsAppConfig{
-					QRTimeout:        0, // invalid
+					DBPath:           "", // invalid
+					QRTimeout:        0,  // invalid
 					ReconnectDelay:   5 * time.Second,
 					MaxReconnects:    -1, // invalid
 					MessageRateLimit: -1, // invalid
@@ -300,12 +252,11 @@ func TestConfigurationValidation_Property13(t *testing.T) {
 			errStr := err.Error()
 			// Should contain multiple error fields
 			hasServerPort := containsStr(errStr, "server.port")
-			hasSqlitePath := containsStr(errStr, "sqlite.path")
-			hasWhatsmeowPath := containsStr(errStr, "sqlite.whatsmeow_path")
+			hasDBPath := containsStr(errStr, "whatsapp.db_path")
 			hasWebsocketURL := containsStr(errStr, "websocket.url")
 			hasLogLevel := containsStr(errStr, "log.level")
 
-			return hasServerPort && hasSqlitePath && hasWhatsmeowPath && hasWebsocketURL && hasLogLevel
+			return hasServerPort && hasDBPath && hasWebsocketURL && hasLogLevel
 		},
 		gen.Const(0),
 	))
@@ -320,12 +271,8 @@ func createValidConfig() *config.Config {
 			Host: "localhost",
 			Port: 8080,
 		},
-		SQLite: config.SQLiteConfig{
-			Path:          "/data/sessions.db",
-			WhatsmeowPath: "/data/whatsmeow.db",
-			BusyTimeout:   5000,
-		},
 		WhatsApp: config.WhatsAppConfig{
+			DBPath:           "/data/whatsmeow.db",
 			QRTimeout:        2 * time.Minute,
 			ReconnectDelay:   5 * time.Second,
 			MaxReconnects:    10,

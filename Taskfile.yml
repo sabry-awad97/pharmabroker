@@ -53,16 +53,22 @@ tasks:
       - 'echo ""'
       - 'echo "Now run ''task tauri:dev'' to start the desktop app"'
 
+  dev:docker:watch:
+    desc: '🐳 Start infrastructure + API with hot reload'
+    cmds:
+      - '{{.DOCKER_COMPOSE}} up api whatsapp-dev -d --build'
+      - '{{.DOCKER_COMPOSE}} watch api'
+
   dev:docker:full:
     desc: '🐳 Start infrastructure + API in Docker'
     cmds:
-      - '{{.DOCKER_COMPOSE}} --profile full up -d --build'
+      - '{{.DOCKER_COMPOSE}} up api whatsapp-dev -d --build'
       - 'echo "🚀 Services running:"'
       - 'echo "   API: http://localhost:3000"'
       - 'echo "   Postgres: localhost:5432"'
       - 'echo "   WhatsApp: internal (Docker network)"'
       - 'echo ""'
-      - 'echo "Now run ''task tauri:dev'' to start the desktop app"'
+      - 'echo "Run ''task dev:docker:watch'' for hot reload"'
 
   dev:docker:prod:
     desc: '🐳 Start all services in production mode'
@@ -120,7 +126,7 @@ tasks:
     desc: '🗑️  Reset database (DESTRUCTIVE)'
     prompt: 'This will reset the database. Continue?'
     cmds:
-      - '{{.TURBO}} -F @pharmabroker/db db:push -- --force-reset'
+      - 'cd packages/db && bunx prisma db push --force-reset'
 
   # ═══════════════════════════════════════════════════════════════════════════
   #  🐳 Infrastructure (Docker)

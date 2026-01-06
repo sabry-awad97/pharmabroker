@@ -3,14 +3,15 @@
 // The Go WhatsApp service only handles connection state and message routing
 
 model WhatsAppSession {
-    id        String                @id @default(cuid())
-    name      String
-    jid       String? // WhatsApp JID (set after authentication)
-    status    WhatsAppSessionStatus @default(pending)
-    userId    String
-    user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-    createdAt DateTime              @default(now())
-    updatedAt DateTime              @updatedAt
+    id          String                @id @default(uuid())
+    name        String
+    jid         String? // WhatsApp JID (set after authentication)
+    status      WhatsAppSessionStatus @default(pending)
+    autoConnect Boolean               @default(false) @map("auto_connect") // Auto-reconnect on Go service startup
+    userId      String
+    user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt   DateTime              @default(now())
+    updatedAt   DateTime              @updatedAt
 
     @@index([userId])
     @@index([status])

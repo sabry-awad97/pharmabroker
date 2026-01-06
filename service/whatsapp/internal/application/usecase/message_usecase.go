@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -222,11 +223,14 @@ func (uc *MessageUseCase) QueueSize() int {
 
 // processQueue processes messages from the queue with rate limiting
 func (uc *MessageUseCase) processQueue() {
+	log.Println("[MessageUseCase] processQueue started")
 	for {
 		select {
 		case <-uc.done:
+			log.Println("[MessageUseCase] processQueue stopped")
 			return
 		case msg := <-uc.queue:
+			log.Printf("[MessageUseCase] Processing message from queue: sessionID=%s, to=%s, type=%s", msg.SessionID, msg.To, msg.Type)
 			ctx := context.Background()
 
 			// Apply rate limiting
@@ -234,9 +238,12 @@ func (uc *MessageUseCase) processQueue() {
 
 			// Send with retry
 			if err := uc.sendWithRetry(ctx, msg); err != nil {
+				log.Printf("[MessageUseCase] Message send failed after retries: %v", err)
 				// Message failed after all retries
 				msg.SetStatus(entity.MessageStatusFailed)
 				uc.emitMessageStatusEvent(ctx, msg, entity.MessageStatusFailed)
+			} else {
+				log.Printf("[MessageUseCase] Message sent successfully: messageID=%s", msg.ID)
 			}
 		}
 	}
@@ -247,20 +254,25 @@ func (uc *MessageUseCase) sendWithRetry(ctx context.Context, msg *entity.Message
 	var lastErr error
 
 	for attempt := 0; attempt < uc.config.MaxRetries; attempt++ {
+		log.Printf("[MessageUseCase] sendWithRetry attempt %d/%d for sessionID=%s", attempt+1, uc.config.MaxRetries, msg.SessionID)
+
 		if uc.waClient == nil {
 			lastErr = errors.ErrConnectionFailed.WithMessage("WhatsApp client not available")
+			log.Printf("[MessageUseCase] waClient is nil")
 			continue
 		}
 
 		err := uc.waClient.SendMessage(ctx, msg)
 		if err == nil {
 			// Success
+			log.Printf("[MessageUseCase] waClient.SendMessage succeeded")
 			msg.SetStatus(entity.MessageStatusSent)
 			uc.emitMessageStatusEvent(ctx, msg, entity.MessageStatusSent)
 			return nil
 		}
 
 		lastErr = err
+		log.Printf("[MessageUseCase] waClient.SendMessage failed: %v", err)
 
 		// Exponential backoff: 1s, 2s, 4s
 		backoff := time.Duration(1<<attempt) * time.Second

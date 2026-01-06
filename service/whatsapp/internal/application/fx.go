@@ -63,7 +63,6 @@ func NewMessageUseCase(
 // NewHealthUseCase creates a new health use case with all health checkers
 func NewHealthUseCase(checkers *infrastructure.HealthCheckers) *usecase.HealthUseCase {
 	return usecase.NewHealthUseCase(
-		checkers.SQLite,
 		checkers.WhatsAppClient,
 		checkers.EventPublisher,
 	)
