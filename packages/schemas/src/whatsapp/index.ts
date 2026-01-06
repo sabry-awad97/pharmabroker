@@ -123,6 +123,35 @@ export {
   type ReadyResponse,
 } from './health';
 
+// Groups schemas
+export {
+  participantRole,
+  groupFilterType,
+  whatsAppGroupParticipant,
+  whatsAppGroup,
+  whatsAppGroupWithParticipants,
+  groupList,
+  groupFilterInput,
+  groupIdInput,
+  syncGroupsInput,
+  participantFilterInput,
+  groupsListResponse,
+  participantsListResponse,
+  syncGroupsResponse,
+  type ParticipantRole,
+  type GroupFilterType,
+  type WhatsAppGroup,
+  type WhatsAppGroupParticipant,
+  type WhatsAppGroupWithParticipants,
+  type GroupFilterInput,
+  type GroupIdInput,
+  type SyncGroupsInput,
+  type ParticipantFilterInput,
+  type GroupsListResponse,
+  type ParticipantsListResponse,
+  type SyncGroupsResponse,
+} from './groups';
+
 // Re-export branded types from common for convenience
 export {
   sessionId,
@@ -143,10 +172,12 @@ import * as session from './session';
 import * as message from './message';
 import * as events from './events';
 import * as health from './health';
+import * as groups from './groups';
 
 export const whatsapp = {
   session,
   message,
   events,
   health,
+  groups,
 } as const;

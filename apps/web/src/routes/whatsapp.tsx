@@ -10,6 +10,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { authClient } from '@/lib/auth-client';
 import { useWhatsappSessions, useInvalidateWhatsapp } from '@/hooks/whatsapp';
 import { cn } from '@/lib/utils';
@@ -53,20 +58,25 @@ function WhatsappPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={invalidate}
-            disabled={isFetching}
-          >
-            <RefreshCw
-              className={cn(
-                'mr-2 h-3.5 w-3.5 transition-transform',
-                isFetching && 'animate-spin',
-              )}
-            />
-            Refresh
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={invalidate}
+                disabled={isFetching}
+                aria-label="Refresh sessions"
+              >
+                <RefreshCw
+                  className={cn(
+                    'h-4 w-4 transition-transform duration-500',
+                    isFetching && 'animate-spin',
+                  )}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh sessions</TooltipContent>
+          </Tooltip>
           <WhatsappNewSessionDialog>
             <Plus className="h-3.5 w-3.5" />
             New Session

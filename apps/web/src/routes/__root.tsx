@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-router';
 import { useState } from 'react';
 
+import { NotFound, ErrorBoundary } from '@/components/errors';
 import { Header, Sidebar } from '@/components/layout';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Toaster } from '@/components/ui/sonner';
@@ -24,6 +25,8 @@ export interface RouterAppContext {
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootComponent,
+  notFoundComponent: NotFound,
+  errorComponent: ErrorBoundary,
   head: () => ({
     meta: [
       {

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 
 type DialogType = 'qr' | 'delete' | 'testMessage' | null;
 
@@ -74,18 +75,22 @@ export const useSelectedSession = () =>
   useWhatsappSessionStore(state => state.selectedSession);
 
 export const useDialogActions = () =>
-  useWhatsappSessionStore(state => ({
-    openQRDialog: state.openQRDialog,
-    openDeleteDialog: state.openDeleteDialog,
-    openTestMessageDialog: state.openTestMessageDialog,
-    closeDialog: state.closeDialog,
-  }));
+  useWhatsappSessionStore(
+    useShallow(state => ({
+      openQRDialog: state.openQRDialog,
+      openDeleteDialog: state.openDeleteDialog,
+      openTestMessageDialog: state.openTestMessageDialog,
+      closeDialog: state.closeDialog,
+    })),
+  );
 
 export const useTestMessageForm = () =>
-  useWhatsappSessionStore(state => ({
-    phone: state.testMessagePhone,
-    message: state.testMessageText,
-    setPhone: state.setTestMessagePhone,
-    setMessage: state.setTestMessageText,
-    reset: state.resetTestMessageForm,
-  }));
+  useWhatsappSessionStore(
+    useShallow(state => ({
+      phone: state.testMessagePhone,
+      message: state.testMessageText,
+      setPhone: state.setTestMessagePhone,
+      setMessage: state.setTestMessageText,
+      reset: state.resetTestMessageForm,
+    })),
+  );
