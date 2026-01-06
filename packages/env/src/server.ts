@@ -11,6 +11,7 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(['development', 'production', 'test'])
       .default('development'),
+    WHATSAPP_SERVICE_URL: z.url().default('http://localhost:8080'),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

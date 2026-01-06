@@ -80,30 +80,30 @@ docker run -d \
 
 ### Health Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/ready` | Readiness probe |
+| Method | Endpoint  | Description     |
+| ------ | --------- | --------------- |
+| GET    | `/health` | Health check    |
+| GET    | `/ready`  | Readiness probe |
 
 ### Session Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/sessions` | Create a new session |
-| GET | `/api/sessions` | List all sessions |
-| GET | `/api/sessions/:id` | Get session by ID |
-| DELETE | `/api/sessions/:id` | Delete a session |
+| Method | Endpoint            | Description          |
+| ------ | ------------------- | -------------------- |
+| POST   | `/api/sessions`     | Create a new session |
+| GET    | `/api/sessions`     | List all sessions    |
+| GET    | `/api/sessions/:id` | Get session by ID    |
+| DELETE | `/api/sessions/:id` | Delete a session     |
 
 ### Message Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/messages` | Send a message |
+| Method | Endpoint        | Description    |
+| ------ | --------------- | -------------- |
+| POST   | `/api/messages` | Send a message |
 
 ### WebSocket Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
+| Endpoint             | Description                   |
+| -------------------- | ----------------------------- |
 | `/ws/qr/:session_id` | QR code authentication stream |
 
 ## API Examples
@@ -117,6 +117,7 @@ curl -X POST http://localhost:8080/api/sessions \
 ```
 
 Response:
+
 ```json
 {
   "success": true,
@@ -135,11 +136,13 @@ Response:
 Connect to `/ws/qr/:session_id` to receive QR codes for authentication:
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/ws/qr/550e8400-e29b-41d4-a716-446655440000');
+const ws = new WebSocket(
+  'ws://localhost:8080/ws/qr/550e8400-e29b-41d4-a716-446655440000',
+);
 
-ws.onmessage = (event) => {
+ws.onmessage = event => {
   const data = JSON.parse(event.data);
-  
+
   switch (data.type) {
     case 'qr':
       // data.data contains base64 PNG image
@@ -175,6 +178,7 @@ curl -X POST http://localhost:8080/api/messages \
 ```
 
 Response:
+
 ```json
 {
   "success": true,
@@ -203,50 +207,51 @@ All configuration is done via environment variables with sensible defaults.
 
 ### Server Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
+| Variable               | Default   | Description         |
+| ---------------------- | --------- | ------------------- |
 | `WHATSAPP_SERVER_HOST` | `0.0.0.0` | Server bind address |
-| `WHATSAPP_SERVER_PORT` | `8080` | Server port |
+| `WHATSAPP_SERVER_PORT` | `8080`    | Server port         |
 
 ### Database Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WHATSAPP_SQLITE_PATH` | `/data/whatsapp.db` | SQLite database path |
-| `WHATSAPP_SQLITE_BUSY_TIMEOUT` | `5000` | SQLite busy timeout (ms) |
+| Variable                       | Default             | Description              |
+| ------------------------------ | ------------------- | ------------------------ |
+| `WHATSAPP_SQLITE_PATH`         | `/data/whatsapp.db` | SQLite database path     |
+| `WHATSAPP_SQLITE_BUSY_TIMEOUT` | `5000`              | SQLite busy timeout (ms) |
 
 ### WhatsApp Client Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WHATSAPP_QR_TIMEOUT` | `2m` | QR authentication timeout |
-| `WHATSAPP_RECONNECT_DELAY` | `5s` | Initial reconnect delay |
-| `WHATSAPP_MAX_RECONNECTS` | `10` | Maximum reconnection attempts |
-| `WHATSAPP_MESSAGE_RATE_LIMIT` | `30` | Messages per minute |
+| Variable                      | Default | Description                   |
+| ----------------------------- | ------- | ----------------------------- |
+| `WHATSAPP_QR_TIMEOUT`         | `2m`    | QR authentication timeout     |
+| `WHATSAPP_RECONNECT_DELAY`    | `5s`    | Initial reconnect delay       |
+| `WHATSAPP_MAX_RECONNECTS`     | `10`    | Maximum reconnection attempts |
+| `WHATSAPP_MESSAGE_RATE_LIMIT` | `30`    | Messages per minute           |
 
 ### WebSocket Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WHATSAPP_WEBSOCKET_URL` | `ws://localhost:3000/ws/whatsapp` | API server WebSocket URL |
-| `WHATSAPP_WEBSOCKET_PING_INTERVAL` | `30s` | Ping interval |
-| `WHATSAPP_WEBSOCKET_PONG_TIMEOUT` | `10s` | Pong timeout |
-| `WHATSAPP_WEBSOCKET_RECONNECT_DELAY` | `5s` | Reconnect delay |
-| `WHATSAPP_WEBSOCKET_MAX_RECONNECTS` | `0` | Max reconnects (0 = unlimited) |
-| `WHATSAPP_WEBSOCKET_QUEUE_SIZE` | `1000` | Event queue size |
+| Variable                             | Default                           | Description                    |
+| ------------------------------------ | --------------------------------- | ------------------------------ |
+| `WHATSAPP_WEBSOCKET_URL`             | `ws://localhost:3000/ws/whatsapp` | API server WebSocket URL       |
+| `WHATSAPP_WEBSOCKET_PING_INTERVAL`   | `30s`                             | Ping interval                  |
+| `WHATSAPP_WEBSOCKET_PONG_TIMEOUT`    | `10s`                             | Pong timeout                   |
+| `WHATSAPP_WEBSOCKET_RECONNECT_DELAY` | `5s`                              | Reconnect delay                |
+| `WHATSAPP_WEBSOCKET_MAX_RECONNECTS`  | `0`                               | Max reconnects (0 = unlimited) |
+| `WHATSAPP_WEBSOCKET_QUEUE_SIZE`      | `1000`                            | Event queue size               |
 
 ### Logging Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WHATSAPP_LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
-| `WHATSAPP_LOG_FORMAT` | `json` | Log format (json, text) |
+| Variable              | Default | Description                          |
+| --------------------- | ------- | ------------------------------------ |
+| `WHATSAPP_LOG_LEVEL`  | `info`  | Log level (debug, info, warn, error) |
+| `WHATSAPP_LOG_FORMAT` | `json`  | Log format (json, text)              |
 
 ## Events
 
 The service publishes events to the API server via WebSocket. Event types include:
 
 ### Message Events
+
 - `message.received` - Incoming message received
 - `message.sent` - Message sent successfully
 - `message.delivered` - Message delivered to recipient
@@ -254,27 +259,29 @@ The service publishes events to the API server via WebSocket. Event types includ
 - `message.failed` - Message sending failed
 
 ### Connection Events
+
 - `connection.connected` - Session connected
 - `connection.disconnected` - Session disconnected
 - `connection.logged_out` - Session logged out
 
 ### Session Events
+
 - `session.qr_scanned` - QR code scanned
 - `session.authenticated` - Session authenticated
 - `session.expired` - Session expired
 
 ## Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `SESSION_NOT_FOUND` | 404 | Session does not exist |
-| `SESSION_EXISTS` | 409 | Session already exists |
-| `INVALID_PHONE` | 400 | Invalid E.164 phone number |
-| `VALIDATION_FAILED` | 400 | Request validation failed |
-| `MESSAGE_SEND_FAILED` | 500 | Failed to send message |
-| `QR_TIMEOUT` | 408 | QR authentication timed out |
-| `CONNECTION_FAILED` | 503 | Failed to connect |
-| `DATABASE_ERROR` | 500 | Database operation failed |
+| Code                  | HTTP Status | Description                 |
+| --------------------- | ----------- | --------------------------- |
+| `SESSION_NOT_FOUND`   | 404         | Session does not exist      |
+| `SESSION_EXISTS`      | 409         | Session already exists      |
+| `INVALID_PHONE`       | 400         | Invalid E.164 phone number  |
+| `VALIDATION_FAILED`   | 400         | Request validation failed   |
+| `MESSAGE_SEND_FAILED` | 500         | Failed to send message      |
+| `QR_TIMEOUT`          | 408         | QR authentication timed out |
+| `CONNECTION_FAILED`   | 503         | Failed to connect           |
+| `DATABASE_ERROR`      | 500         | Database operation failed   |
 
 ## Development
 

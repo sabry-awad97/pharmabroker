@@ -18,10 +18,10 @@ Configuration is loaded in the following order:
 
 ### Server Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_SERVER_HOST` | string | `0.0.0.0` | Server bind address |
-| `WHATSAPP_SERVER_PORT` | int | `8080` | Server port (1-65535) |
+| Variable               | Type   | Default   | Description           |
+| ---------------------- | ------ | --------- | --------------------- |
+| `WHATSAPP_SERVER_HOST` | string | `0.0.0.0` | Server bind address   |
+| `WHATSAPP_SERVER_PORT` | int    | `8080`    | Server port (1-65535) |
 
 **Example:**
 
@@ -32,10 +32,10 @@ export WHATSAPP_SERVER_PORT=3000
 
 ### SQLite Database Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_SQLITE_PATH` | string | `/data/whatsapp.db` | Path to SQLite database file |
-| `WHATSAPP_SQLITE_BUSY_TIMEOUT` | int | `5000` | Busy timeout in milliseconds |
+| Variable                       | Type   | Default             | Description                  |
+| ------------------------------ | ------ | ------------------- | ---------------------------- |
+| `WHATSAPP_SQLITE_PATH`         | string | `/data/whatsapp.db` | Path to SQLite database file |
+| `WHATSAPP_SQLITE_BUSY_TIMEOUT` | int    | `5000`              | Busy timeout in milliseconds |
 
 **Notes:**
 
@@ -52,12 +52,12 @@ export WHATSAPP_SQLITE_BUSY_TIMEOUT=10000
 
 ### WhatsApp Client Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_QR_TIMEOUT` | duration | `2m` | QR code authentication timeout |
-| `WHATSAPP_RECONNECT_DELAY` | duration | `5s` | Initial delay before reconnection |
-| `WHATSAPP_MAX_RECONNECTS` | int | `10` | Maximum reconnection attempts |
-| `WHATSAPP_MESSAGE_RATE_LIMIT` | int | `30` | Maximum messages per minute |
+| Variable                      | Type     | Default | Description                       |
+| ----------------------------- | -------- | ------- | --------------------------------- |
+| `WHATSAPP_QR_TIMEOUT`         | duration | `2m`    | QR code authentication timeout    |
+| `WHATSAPP_RECONNECT_DELAY`    | duration | `5s`    | Initial delay before reconnection |
+| `WHATSAPP_MAX_RECONNECTS`     | int      | `10`    | Maximum reconnection attempts     |
+| `WHATSAPP_MESSAGE_RATE_LIMIT` | int      | `30`    | Maximum messages per minute       |
 
 **Duration Format:**
 
@@ -77,14 +77,14 @@ export WHATSAPP_MESSAGE_RATE_LIMIT=60
 
 ### WebSocket Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_WEBSOCKET_URL` | string | `ws://localhost:3000/ws/whatsapp` | API server WebSocket URL |
-| `WHATSAPP_WEBSOCKET_PING_INTERVAL` | duration | `30s` | Interval between ping messages |
-| `WHATSAPP_WEBSOCKET_PONG_TIMEOUT` | duration | `10s` | Timeout waiting for pong response |
-| `WHATSAPP_WEBSOCKET_RECONNECT_DELAY` | duration | `5s` | Initial reconnection delay |
-| `WHATSAPP_WEBSOCKET_MAX_RECONNECTS` | int | `0` | Max reconnection attempts (0 = unlimited) |
-| `WHATSAPP_WEBSOCKET_QUEUE_SIZE` | int | `1000` | Event queue buffer size |
+| Variable                             | Type     | Default                           | Description                               |
+| ------------------------------------ | -------- | --------------------------------- | ----------------------------------------- |
+| `WHATSAPP_WEBSOCKET_URL`             | string   | `ws://localhost:3000/ws/whatsapp` | API server WebSocket URL                  |
+| `WHATSAPP_WEBSOCKET_PING_INTERVAL`   | duration | `30s`                             | Interval between ping messages            |
+| `WHATSAPP_WEBSOCKET_PONG_TIMEOUT`    | duration | `10s`                             | Timeout waiting for pong response         |
+| `WHATSAPP_WEBSOCKET_RECONNECT_DELAY` | duration | `5s`                              | Initial reconnection delay                |
+| `WHATSAPP_WEBSOCKET_MAX_RECONNECTS`  | int      | `0`                               | Max reconnection attempts (0 = unlimited) |
+| `WHATSAPP_WEBSOCKET_QUEUE_SIZE`      | int      | `1000`                            | Event queue buffer size                   |
 
 **Notes:**
 
@@ -104,25 +104,25 @@ export WHATSAPP_WEBSOCKET_QUEUE_SIZE=5000
 
 ### Logging Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_LOG_LEVEL` | string | `info` | Log level |
-| `WHATSAPP_LOG_FORMAT` | string | `json` | Log output format |
+| Variable              | Type   | Default | Description       |
+| --------------------- | ------ | ------- | ----------------- |
+| `WHATSAPP_LOG_LEVEL`  | string | `info`  | Log level         |
+| `WHATSAPP_LOG_FORMAT` | string | `json`  | Log output format |
 
 **Log Levels:**
 
-| Level | Description |
-|-------|-------------|
-| `debug` | Verbose debugging information |
-| `info` | General operational information |
-| `warn` | Warning messages |
-| `error` | Error messages only |
+| Level   | Description                     |
+| ------- | ------------------------------- |
+| `debug` | Verbose debugging information   |
+| `info`  | General operational information |
+| `warn`  | Warning messages                |
+| `error` | Error messages only             |
 
 **Log Formats:**
 
-| Format | Description |
-|--------|-------------|
-| `json` | Structured JSON logs (recommended for production) |
+| Format | Description                                            |
+| ------ | ------------------------------------------------------ |
+| `json` | Structured JSON logs (recommended for production)      |
 | `text` | Human-readable text logs (recommended for development) |
 
 **Example:**
@@ -134,15 +134,15 @@ export WHATSAPP_LOG_FORMAT=text
 
 ### Rate Limiting Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_RATELIMIT_ENABLED` | bool | `true` | Enable/disable rate limiting |
-| `WHATSAPP_RATELIMIT_RPS` | float | `10.0` | Requests per second |
-| `WHATSAPP_RATELIMIT_BURST` | int | `20` | Burst size (max concurrent requests) |
-| `WHATSAPP_RATELIMIT_BY_IP` | bool | `true` | Rate limit by IP address |
-| `WHATSAPP_RATELIMIT_BY_API_KEY` | bool | `false` | Rate limit by API key |
-| `WHATSAPP_RATELIMIT_CLEANUP_INTERVAL` | duration | `5m` | Interval to clean up stale limiters |
-| `WHATSAPP_RATELIMIT_MAX_AGE` | duration | `1h` | Max age for unused limiters |
+| Variable                              | Type     | Default | Description                          |
+| ------------------------------------- | -------- | ------- | ------------------------------------ |
+| `WHATSAPP_RATELIMIT_ENABLED`          | bool     | `true`  | Enable/disable rate limiting         |
+| `WHATSAPP_RATELIMIT_RPS`              | float    | `10.0`  | Requests per second                  |
+| `WHATSAPP_RATELIMIT_BURST`            | int      | `20`    | Burst size (max concurrent requests) |
+| `WHATSAPP_RATELIMIT_BY_IP`            | bool     | `true`  | Rate limit by IP address             |
+| `WHATSAPP_RATELIMIT_BY_API_KEY`       | bool     | `false` | Rate limit by API key                |
+| `WHATSAPP_RATELIMIT_CLEANUP_INTERVAL` | duration | `5m`    | Interval to clean up stale limiters  |
+| `WHATSAPP_RATELIMIT_MAX_AGE`          | duration | `1h`    | Max age for unused limiters          |
 
 **Notes:**
 
@@ -162,14 +162,14 @@ export WHATSAPP_RATELIMIT_BY_IP=true
 
 ### CORS Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_CORS_ORIGINS` | string[] | `*` | Allowed origins (comma-separated) |
-| `WHATSAPP_CORS_METHODS` | string[] | `GET,POST,PUT,DELETE,OPTIONS` | Allowed HTTP methods |
-| `WHATSAPP_CORS_HEADERS` | string[] | `Origin,Content-Type,Accept,Authorization,X-Request-ID,X-API-Key` | Allowed headers |
-| `WHATSAPP_CORS_EXPOSE_HEADERS` | string[] | `X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset` | Exposed headers |
-| `WHATSAPP_CORS_ALLOW_CREDENTIALS` | bool | `false` | Allow credentials |
-| `WHATSAPP_CORS_MAX_AGE` | int | `86400` | Preflight cache duration (seconds) |
+| Variable                          | Type     | Default                                                                  | Description                        |
+| --------------------------------- | -------- | ------------------------------------------------------------------------ | ---------------------------------- |
+| `WHATSAPP_CORS_ORIGINS`           | string[] | `*`                                                                      | Allowed origins (comma-separated)  |
+| `WHATSAPP_CORS_METHODS`           | string[] | `GET,POST,PUT,DELETE,OPTIONS`                                            | Allowed HTTP methods               |
+| `WHATSAPP_CORS_HEADERS`           | string[] | `Origin,Content-Type,Accept,Authorization,X-Request-ID,X-API-Key`        | Allowed headers                    |
+| `WHATSAPP_CORS_EXPOSE_HEADERS`    | string[] | `X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset` | Exposed headers                    |
+| `WHATSAPP_CORS_ALLOW_CREDENTIALS` | bool     | `false`                                                                  | Allow credentials                  |
+| `WHATSAPP_CORS_MAX_AGE`           | int      | `86400`                                                                  | Preflight cache duration (seconds) |
 
 **Notes:**
 
@@ -186,11 +186,11 @@ export WHATSAPP_CORS_ALLOW_CREDENTIALS=true
 
 ### API Key Authentication Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_API_KEY_ENABLED` | bool | `false` | Enable API key authentication |
-| `WHATSAPP_API_KEYS` | string[] | `[]` | Valid API keys (comma-separated) |
-| `WHATSAPP_API_KEY_HEADER` | string | `X-API-Key` | Header name for API key |
+| Variable                   | Type     | Default     | Description                      |
+| -------------------------- | -------- | ----------- | -------------------------------- |
+| `WHATSAPP_API_KEY_ENABLED` | bool     | `false`     | Enable API key authentication    |
+| `WHATSAPP_API_KEYS`        | string[] | `[]`        | Valid API keys (comma-separated) |
+| `WHATSAPP_API_KEY_HEADER`  | string   | `X-API-Key` | Header name for API key          |
 
 **Notes:**
 
@@ -209,22 +209,22 @@ export WHATSAPP_API_KEY_HEADER=X-API-Key
 
 ### Metrics Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_METRICS_ENABLED` | bool | `true` | Enable Prometheus metrics |
-| `WHATSAPP_METRICS_PATH` | string | `/metrics` | Metrics endpoint path |
+| Variable                     | Type   | Default    | Description                 |
+| ---------------------------- | ------ | ---------- | --------------------------- |
+| `WHATSAPP_METRICS_ENABLED`   | bool   | `true`     | Enable Prometheus metrics   |
+| `WHATSAPP_METRICS_PATH`      | string | `/metrics` | Metrics endpoint path       |
 | `WHATSAPP_METRICS_NAMESPACE` | string | `whatsapp` | Prometheus namespace prefix |
 
 **Available Metrics:**
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `whatsapp_http_requests_total` | Counter | Total HTTP requests by method, path, status |
-| `whatsapp_http_request_duration_seconds` | Histogram | HTTP request duration |
-| `whatsapp_messages_total` | Counter | Total messages by type and status |
-| `whatsapp_sessions_total` | Counter | Total sessions by status |
-| `whatsapp_active_connections` | Gauge | Current active WebSocket connections |
-| `whatsapp_circuit_breaker_state` | Gauge | Circuit breaker state |
+| Metric                                   | Type      | Description                                 |
+| ---------------------------------------- | --------- | ------------------------------------------- |
+| `whatsapp_http_requests_total`           | Counter   | Total HTTP requests by method, path, status |
+| `whatsapp_http_request_duration_seconds` | Histogram | HTTP request duration                       |
+| `whatsapp_messages_total`                | Counter   | Total messages by type and status           |
+| `whatsapp_sessions_total`                | Counter   | Total sessions by status                    |
+| `whatsapp_active_connections`            | Gauge     | Current active WebSocket connections        |
+| `whatsapp_circuit_breaker_state`         | Gauge     | Circuit breaker state                       |
 
 **Example:**
 
@@ -236,22 +236,22 @@ export WHATSAPP_METRICS_NAMESPACE=whatsapp_service
 
 ### Circuit Breaker Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `WHATSAPP_CIRCUIT_BREAKER_ENABLED` | bool | `true` | Enable circuit breaker |
-| `WHATSAPP_CIRCUIT_BREAKER_MAX_REQUESTS` | int | `3` | Max requests in half-open state |
-| `WHATSAPP_CIRCUIT_BREAKER_INTERVAL` | duration | `60s` | Interval for clearing counts |
-| `WHATSAPP_CIRCUIT_BREAKER_TIMEOUT` | duration | `30s` | Timeout before half-open |
-| `WHATSAPP_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | int | `5` | Failures to open circuit |
-| `WHATSAPP_CIRCUIT_BREAKER_SUCCESS_THRESHOLD` | int | `2` | Successes to close circuit |
+| Variable                                     | Type     | Default | Description                     |
+| -------------------------------------------- | -------- | ------- | ------------------------------- |
+| `WHATSAPP_CIRCUIT_BREAKER_ENABLED`           | bool     | `true`  | Enable circuit breaker          |
+| `WHATSAPP_CIRCUIT_BREAKER_MAX_REQUESTS`      | int      | `3`     | Max requests in half-open state |
+| `WHATSAPP_CIRCUIT_BREAKER_INTERVAL`          | duration | `60s`   | Interval for clearing counts    |
+| `WHATSAPP_CIRCUIT_BREAKER_TIMEOUT`           | duration | `30s`   | Timeout before half-open        |
+| `WHATSAPP_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | int      | `5`     | Failures to open circuit        |
+| `WHATSAPP_CIRCUIT_BREAKER_SUCCESS_THRESHOLD` | int      | `2`     | Successes to close circuit      |
 
 **Circuit Breaker States:**
 
-| State | Description |
-|-------|-------------|
-| Closed | Normal operation, requests pass through |
-| Open | Circuit tripped, requests fail immediately |
-| Half-Open | Testing if service recovered |
+| State     | Description                                |
+| --------- | ------------------------------------------ |
+| Closed    | Normal operation, requests pass through    |
+| Open      | Circuit tripped, requests fail immediately |
+| Half-Open | Testing if service recovered               |
 
 **Example:**
 
@@ -267,20 +267,20 @@ The service validates all configuration at startup. Invalid configuration causes
 
 ### Validation Rules
 
-| Field | Rule |
-|-------|------|
-| `server.port` | Must be between 1 and 65535 |
-| `sqlite.path` | Must not be empty |
-| `sqlite.busy_timeout` | Must be non-negative |
-| `whatsapp.qr_timeout` | Must be positive |
-| `whatsapp.max_reconnects` | Must be non-negative |
-| `whatsapp.message_rate_limit` | Must be non-negative |
-| `websocket.url` | Must not be empty |
-| `websocket.ping_interval` | Must be positive |
-| `websocket.pong_timeout` | Must be positive |
-| `websocket.queue_size` | Must be non-negative |
-| `log.level` | Must be one of: debug, info, warn, error |
-| `log.format` | Must be one of: json, text |
+| Field                         | Rule                                     |
+| ----------------------------- | ---------------------------------------- |
+| `server.port`                 | Must be between 1 and 65535              |
+| `sqlite.path`                 | Must not be empty                        |
+| `sqlite.busy_timeout`         | Must be non-negative                     |
+| `whatsapp.qr_timeout`         | Must be positive                         |
+| `whatsapp.max_reconnects`     | Must be non-negative                     |
+| `whatsapp.message_rate_limit` | Must be non-negative                     |
+| `websocket.url`               | Must not be empty                        |
+| `websocket.ping_interval`     | Must be positive                         |
+| `websocket.pong_timeout`      | Must be positive                         |
+| `websocket.queue_size`        | Must be non-negative                     |
+| `log.level`                   | Must be one of: debug, info, warn, error |
+| `log.format`                  | Must be one of: json, text               |
 
 ### Validation Error Example
 
@@ -354,26 +354,26 @@ services:
   whatsapp:
     build: ./service/whatsapp
     ports:
-      - "8080:8080"
+      - '8080:8080'
     volumes:
       - whatsapp-data:/data
     environment:
-      WHATSAPP_SERVER_HOST: "0.0.0.0"
-      WHATSAPP_SERVER_PORT: "8080"
-      WHATSAPP_SQLITE_PATH: "/data/whatsapp.db"
-      WHATSAPP_WEBSOCKET_URL: "ws://api-server:3000/ws/whatsapp"
-      WHATSAPP_LOG_LEVEL: "info"
-      WHATSAPP_LOG_FORMAT: "json"
-      WHATSAPP_QR_TIMEOUT: "2m"
-      WHATSAPP_MESSAGE_RATE_LIMIT: "30"
-      WHATSAPP_API_KEY_ENABLED: "true"
-      WHATSAPP_API_KEYS: "${WHATSAPP_API_KEYS}"
-      WHATSAPP_CORS_ORIGINS: "https://app.example.com"
-      WHATSAPP_RATELIMIT_ENABLED: "true"
-      WHATSAPP_RATELIMIT_RPS: "20"
-      WHATSAPP_METRICS_ENABLED: "true"
+      WHATSAPP_SERVER_HOST: '0.0.0.0'
+      WHATSAPP_SERVER_PORT: '8080'
+      WHATSAPP_SQLITE_PATH: '/data/whatsapp.db'
+      WHATSAPP_WEBSOCKET_URL: 'ws://api-server:3000/ws/whatsapp'
+      WHATSAPP_LOG_LEVEL: 'info'
+      WHATSAPP_LOG_FORMAT: 'json'
+      WHATSAPP_QR_TIMEOUT: '2m'
+      WHATSAPP_MESSAGE_RATE_LIMIT: '30'
+      WHATSAPP_API_KEY_ENABLED: 'true'
+      WHATSAPP_API_KEYS: '${WHATSAPP_API_KEYS}'
+      WHATSAPP_CORS_ORIGINS: 'https://app.example.com'
+      WHATSAPP_RATELIMIT_ENABLED: 'true'
+      WHATSAPP_RATELIMIT_RPS: '20'
+      WHATSAPP_METRICS_ENABLED: 'true'
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:8080/health']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -390,19 +390,19 @@ kind: ConfigMap
 metadata:
   name: whatsapp-config
 data:
-  WHATSAPP_SERVER_HOST: "0.0.0.0"
-  WHATSAPP_SERVER_PORT: "8080"
-  WHATSAPP_SQLITE_PATH: "/data/whatsapp.db"
-  WHATSAPP_WEBSOCKET_URL: "ws://api-server:3000/ws/whatsapp"
-  WHATSAPP_LOG_LEVEL: "info"
-  WHATSAPP_LOG_FORMAT: "json"
-  WHATSAPP_QR_TIMEOUT: "2m"
-  WHATSAPP_MESSAGE_RATE_LIMIT: "30"
-  WHATSAPP_API_KEY_ENABLED: "true"
-  WHATSAPP_CORS_ORIGINS: "https://app.example.com"
-  WHATSAPP_RATELIMIT_ENABLED: "true"
-  WHATSAPP_RATELIMIT_RPS: "20"
-  WHATSAPP_METRICS_ENABLED: "true"
+  WHATSAPP_SERVER_HOST: '0.0.0.0'
+  WHATSAPP_SERVER_PORT: '8080'
+  WHATSAPP_SQLITE_PATH: '/data/whatsapp.db'
+  WHATSAPP_WEBSOCKET_URL: 'ws://api-server:3000/ws/whatsapp'
+  WHATSAPP_LOG_LEVEL: 'info'
+  WHATSAPP_LOG_FORMAT: 'json'
+  WHATSAPP_QR_TIMEOUT: '2m'
+  WHATSAPP_MESSAGE_RATE_LIMIT: '30'
+  WHATSAPP_API_KEY_ENABLED: 'true'
+  WHATSAPP_CORS_ORIGINS: 'https://app.example.com'
+  WHATSAPP_RATELIMIT_ENABLED: 'true'
+  WHATSAPP_RATELIMIT_RPS: '20'
+  WHATSAPP_METRICS_ENABLED: 'true'
 ---
 apiVersion: v1
 kind: Secret
@@ -410,7 +410,7 @@ metadata:
   name: whatsapp-secrets
 type: Opaque
 stringData:
-  WHATSAPP_API_KEYS: "sk_live_your_secure_key_here"
+  WHATSAPP_API_KEYS: 'sk_live_your_secure_key_here'
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -426,9 +426,9 @@ spec:
       labels:
         app: whatsapp
       annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/metrics"
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8080'
+        prometheus.io/path: '/metrics'
     spec:
       containers:
         - name: whatsapp
@@ -457,11 +457,11 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: '128Mi'
+              cpu: '100m'
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: '512Mi'
+              cpu: '500m'
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -472,12 +472,12 @@ spec:
 
 Some environment variables have aliases for backward compatibility:
 
-| Primary Variable | Alias |
-|------------------|-------|
-| `WHATSAPP_SQLITE_PATH` | `SQLITE_PATH` |
+| Primary Variable         | Alias             |
+| ------------------------ | ----------------- |
+| `WHATSAPP_SQLITE_PATH`   | `SQLITE_PATH`     |
 | `WHATSAPP_WEBSOCKET_URL` | `API_WEBHOOK_URL` |
-| `WHATSAPP_LOG_LEVEL` | `LOG_LEVEL` |
-| `WHATSAPP_LOG_FORMAT` | `LOG_FORMAT` |
+| `WHATSAPP_LOG_LEVEL`     | `LOG_LEVEL`       |
+| `WHATSAPP_LOG_FORMAT`    | `LOG_FORMAT`      |
 
 The primary variable takes precedence if both are set.
 
@@ -496,6 +496,7 @@ Ensure the directory specified in `WHATSAPP_SQLITE_PATH` exists and is writable 
 **WebSocket connection fails**
 
 Verify that:
+
 1. The `WHATSAPP_WEBSOCKET_URL` is correct
 2. The API server is running and accepting WebSocket connections
 3. Network connectivity between services
@@ -507,6 +508,7 @@ Increase `WHATSAPP_QR_TIMEOUT` if users need more time to scan the QR code.
 **Messages not sending**
 
 Check:
+
 1. Session is connected (status = "connected")
 2. Rate limit not exceeded
 3. Phone number is in E.164 format

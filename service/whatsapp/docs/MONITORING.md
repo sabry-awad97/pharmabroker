@@ -33,48 +33,48 @@ Returns Prometheus-formatted metrics.
 
 #### HTTP Metrics
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `whatsapp_http_requests_total` | Counter | method, path, status | Total HTTP requests |
-| `whatsapp_http_request_duration_seconds` | Histogram | method, path | Request duration |
-| `whatsapp_http_request_size_bytes` | Histogram | method, path | Request body size |
-| `whatsapp_http_response_size_bytes` | Histogram | method, path | Response body size |
+| Metric                                   | Type      | Labels               | Description         |
+| ---------------------------------------- | --------- | -------------------- | ------------------- |
+| `whatsapp_http_requests_total`           | Counter   | method, path, status | Total HTTP requests |
+| `whatsapp_http_request_duration_seconds` | Histogram | method, path         | Request duration    |
+| `whatsapp_http_request_size_bytes`       | Histogram | method, path         | Request body size   |
+| `whatsapp_http_response_size_bytes`      | Histogram | method, path         | Response body size  |
 
 #### Message Metrics
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `whatsapp_messages_total` | Counter | type, status | Total messages processed |
-| `whatsapp_message_send_duration_seconds` | Histogram | type | Message send duration |
+| Metric                                   | Type      | Labels       | Description              |
+| ---------------------------------------- | --------- | ------------ | ------------------------ |
+| `whatsapp_messages_total`                | Counter   | type, status | Total messages processed |
+| `whatsapp_message_send_duration_seconds` | Histogram | type         | Message send duration    |
 
 #### Session Metrics
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `whatsapp_sessions_total` | Counter | status | Total sessions by status |
-| `whatsapp_active_sessions` | Gauge | - | Currently active sessions |
-| `whatsapp_session_connections` | Gauge | - | Active WhatsApp connections |
+| Metric                         | Type    | Labels | Description                 |
+| ------------------------------ | ------- | ------ | --------------------------- |
+| `whatsapp_sessions_total`      | Counter | status | Total sessions by status    |
+| `whatsapp_active_sessions`     | Gauge   | -      | Currently active sessions   |
+| `whatsapp_session_connections` | Gauge   | -      | Active WhatsApp connections |
 
 #### WebSocket Metrics
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `whatsapp_websocket_connections` | Gauge | type | Active WebSocket connections |
-| `whatsapp_websocket_messages_total` | Counter | type, direction | WebSocket messages |
+| Metric                              | Type    | Labels          | Description                  |
+| ----------------------------------- | ------- | --------------- | ---------------------------- |
+| `whatsapp_websocket_connections`    | Gauge   | type            | Active WebSocket connections |
+| `whatsapp_websocket_messages_total` | Counter | type, direction | WebSocket messages           |
 
 #### Circuit Breaker Metrics
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `whatsapp_circuit_breaker_state` | Gauge | name | Circuit breaker state (0=closed, 1=half-open, 2=open) |
-| `whatsapp_circuit_breaker_requests_total` | Counter | name, result | Requests through circuit breaker |
+| Metric                                    | Type    | Labels       | Description                                           |
+| ----------------------------------------- | ------- | ------------ | ----------------------------------------------------- |
+| `whatsapp_circuit_breaker_state`          | Gauge   | name         | Circuit breaker state (0=closed, 1=half-open, 2=open) |
+| `whatsapp_circuit_breaker_requests_total` | Counter | name, result | Requests through circuit breaker                      |
 
 #### Rate Limiter Metrics
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `whatsapp_ratelimit_requests_total` | Counter | allowed | Rate limited requests |
-| `whatsapp_ratelimit_buckets` | Gauge | - | Active rate limit buckets |
+| Metric                              | Type    | Labels  | Description               |
+| ----------------------------------- | ------- | ------- | ------------------------- |
+| `whatsapp_ratelimit_requests_total` | Counter | allowed | Rate limited requests     |
+| `whatsapp_ratelimit_buckets`        | Gauge   | -       | Active rate limit buckets |
 
 ### Prometheus Configuration
 
@@ -173,10 +173,10 @@ Returns `200 OK` if the service is ready to accept traffic.
 
 **Health Checks:**
 
-| Component | Check |
-|-----------|-------|
-| Database | SQLite connection and query |
-| WhatsApp | Client connection status |
+| Component       | Check                              |
+| --------------- | ---------------------------------- |
+| Database        | SQLite connection and query        |
+| WhatsApp        | Client connection status           |
 | Event Publisher | WebSocket connection to API server |
 
 ### Kubernetes Configuration
@@ -212,12 +212,12 @@ WHATSAPP_LOG_FORMAT=json
 
 ### Log Levels
 
-| Level | Description |
-|-------|-------------|
+| Level   | Description                          |
+| ------- | ------------------------------------ |
 | `debug` | Verbose debugging (development only) |
-| `info` | General operational information |
-| `warn` | Warning conditions |
-| `error` | Error conditions |
+| `info`  | General operational information      |
+| `warn`  | Warning conditions                   |
+| `error` | Error conditions                     |
 
 ### Log Format
 
@@ -245,18 +245,18 @@ WHATSAPP_LOG_FORMAT=json
 
 ### Log Fields
 
-| Field | Description |
-|-------|-------------|
-| `level` | Log level |
-| `timestamp` | ISO 8601 timestamp |
-| `message` | Log message |
-| `request_id` | Request correlation ID |
-| `session_id` | WhatsApp session ID (when applicable) |
-| `method` | HTTP method |
-| `path` | Request path |
-| `status` | HTTP status code |
-| `duration_ms` | Request duration in milliseconds |
-| `error` | Error message (when applicable) |
+| Field         | Description                           |
+| ------------- | ------------------------------------- |
+| `level`       | Log level                             |
+| `timestamp`   | ISO 8601 timestamp                    |
+| `message`     | Log message                           |
+| `request_id`  | Request correlation ID                |
+| `session_id`  | WhatsApp session ID (when applicable) |
+| `method`      | HTTP method                           |
+| `path`        | Request path                          |
+| `status`      | HTTP status code                      |
+| `duration_ms` | Request duration in milliseconds      |
+| `error`       | Error message (when applicable)       |
 
 ### Request Tracing
 
@@ -401,9 +401,9 @@ Key panels to include:
           "unit": "percent",
           "thresholds": {
             "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 1},
-              {"color": "red", "value": 5}
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
             ]
           }
         }
@@ -428,30 +428,30 @@ Key panels to include:
 
 ```yaml
 <source>
-  @type tail
-  path /var/log/containers/whatsapp-*.log
-  pos_file /var/log/fluentd-whatsapp.pos
-  tag whatsapp
-  <parse>
-    @type json
-    time_key timestamp
-    time_format %Y-%m-%dT%H:%M:%SZ
-  </parse>
+@type tail
+path /var/log/containers/whatsapp-*.log
+pos_file /var/log/fluentd-whatsapp.pos
+tag whatsapp
+<parse>
+@type json
+time_key timestamp
+time_format %Y-%m-%dT%H:%M:%SZ
+</parse>
 </source>
 
 <filter whatsapp>
-  @type record_transformer
-  <record>
-    service whatsapp
-    environment ${ENV}
-  </record>
+@type record_transformer
+<record>
+service whatsapp
+environment ${ENV}
+</record>
 </filter>
 
 <match whatsapp>
-  @type elasticsearch
-  host elasticsearch
-  port 9200
-  index_name whatsapp-logs
+@type elasticsearch
+host elasticsearch
+port 9200
+index_name whatsapp-logs
 </match>
 ```
 

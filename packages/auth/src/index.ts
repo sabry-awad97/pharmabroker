@@ -10,7 +10,11 @@ export const auth = betterAuth({
     provider: 'postgresql',
   }),
 
-  trustedOrigins: [env.CORS_ORIGIN, 'tauri://localhost', 'http://tauri.localhost'],
+  trustedOrigins: [
+    env.CORS_ORIGIN,
+    'tauri://localhost',
+    'http://tauri.localhost',
+  ],
   emailAndPassword: {
     enabled: true,
   },

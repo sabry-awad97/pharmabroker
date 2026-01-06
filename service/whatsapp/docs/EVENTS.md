@@ -20,13 +20,13 @@ All events follow this JSON structure:
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique event identifier |
-| `type` | string | Event type (see below) |
+| Field        | Type   | Description             |
+| ------------ | ------ | ----------------------- |
+| `id`         | string | Unique event identifier |
+| `type`       | string | Event type (see below)  |
 | `session_id` | string | Associated session UUID |
-| `payload` | object | Event-specific data |
-| `timestamp` | string | ISO 8601 timestamp |
+| `payload`    | object | Event-specific data     |
+| `timestamp`  | string | ISO 8601 timestamp      |
 
 ## Event Types
 
@@ -55,16 +55,16 @@ Triggered when an incoming message is received.
 
 **Payload Fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `message_id` | string | WhatsApp message ID |
-| `from` | string | Sender's WhatsApp JID |
-| `timestamp` | string | Message timestamp |
-| `push_name` | string | Sender's display name |
-| `type` | string | Message type (text, image, document) |
-| `text` | string | Text content (for text messages) |
-| `caption` | string | Caption (for media messages) |
-| `filename` | string | Filename (for document messages) |
+| Field        | Type   | Description                          |
+| ------------ | ------ | ------------------------------------ |
+| `message_id` | string | WhatsApp message ID                  |
+| `from`       | string | Sender's WhatsApp JID                |
+| `timestamp`  | string | Message timestamp                    |
+| `push_name`  | string | Sender's display name                |
+| `type`       | string | Message type (text, image, document) |
+| `text`       | string | Text content (for text messages)     |
+| `caption`    | string | Caption (for media messages)         |
+| `filename`   | string | Filename (for document messages)     |
 
 #### message.sent
 
@@ -310,14 +310,14 @@ Default: `ws://localhost:3000/ws/whatsapp`
 
 ### Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WHATSAPP_WEBSOCKET_URL` | `ws://localhost:3000/ws/whatsapp` | API server URL |
-| `WHATSAPP_WEBSOCKET_PING_INTERVAL` | `30s` | Ping interval |
-| `WHATSAPP_WEBSOCKET_PONG_TIMEOUT` | `10s` | Pong timeout |
-| `WHATSAPP_WEBSOCKET_RECONNECT_DELAY` | `5s` | Initial reconnect delay |
-| `WHATSAPP_WEBSOCKET_MAX_RECONNECTS` | `0` | Max reconnects (0 = unlimited) |
-| `WHATSAPP_WEBSOCKET_QUEUE_SIZE` | `1000` | Event queue size |
+| Variable                             | Default                           | Description                    |
+| ------------------------------------ | --------------------------------- | ------------------------------ |
+| `WHATSAPP_WEBSOCKET_URL`             | `ws://localhost:3000/ws/whatsapp` | API server URL                 |
+| `WHATSAPP_WEBSOCKET_PING_INTERVAL`   | `30s`                             | Ping interval                  |
+| `WHATSAPP_WEBSOCKET_PONG_TIMEOUT`    | `10s`                             | Pong timeout                   |
+| `WHATSAPP_WEBSOCKET_RECONNECT_DELAY` | `5s`                              | Initial reconnect delay        |
+| `WHATSAPP_WEBSOCKET_MAX_RECONNECTS`  | `0`                               | Max reconnects (0 = unlimited) |
+| `WHATSAPP_WEBSOCKET_QUEUE_SIZE`      | `1000`                            | Event queue size               |
 
 ## Handling Events (API Server)
 
@@ -328,12 +328,12 @@ const WebSocket = require('ws');
 
 const wss = new WebSocket.Server({ port: 3000, path: '/ws/whatsapp' });
 
-wss.on('connection', (ws) => {
+wss.on('connection', ws => {
   console.log('WhatsApp service connected');
 
-  ws.on('message', (data) => {
+  ws.on('message', data => {
     const event = JSON.parse(data);
-    
+
     switch (event.type) {
       case 'message.received':
         handleIncomingMessage(event);
@@ -434,9 +434,9 @@ function handleEvent(event) {
     return; // Skip duplicate
   }
   processedEvents.add(event.id);
-  
+
   // Process event...
-  
+
   // Clean up old IDs periodically
   if (processedEvents.size > 10000) {
     // Remove oldest entries

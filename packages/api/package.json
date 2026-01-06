@@ -18,12 +18,14 @@
     "@pharmabroker/auth": "workspace:*",
     "@pharmabroker/db": "workspace:*",
     "@pharmabroker/env": "workspace:*",
+    "@pharmabroker/schemas": "workspace:*",
     "dotenv": "catalog:",
     "hono": "^4.11.3",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@pharmabroker/config": "workspace:*",
+    "fast-check": "^4.5.3",
     "typescript": "catalog:"
   }
 }

@@ -162,6 +162,7 @@ type SessionRepository interface {
 ```
 
 Benefits:
+
 - Decouples business logic from data access
 - Enables easy testing with mocks
 - Allows swapping storage implementations
@@ -181,6 +182,7 @@ var ErrSessionNotFound = NewDomainError("SESSION_NOT_FOUND", "session not found"
 ```
 
 Benefits:
+
 - Consistent error handling across layers
 - Easy mapping to HTTP status codes
 - Error chaining with causes
@@ -194,6 +196,7 @@ WhatsApp → WhatsmeowClient → Event → EventPublisher → API Server
 ```
 
 Event types:
+
 - Message events (received, sent, delivered, read, failed)
 - Connection events (connected, disconnected, logged_out)
 - Session events (authenticated, expired)
@@ -211,6 +214,7 @@ type MessageUseCase struct {
 ```
 
 Features:
+
 - Configurable rate limit (messages per minute)
 - Message queue for overflow
 - Exponential backoff retry
@@ -373,10 +377,12 @@ Located in `test/integration/`:
 ### Scaling
 
 Current limitations:
+
 - Single instance (SQLite)
 - Session affinity required
 
 Future improvements:
+
 - PostgreSQL for multi-instance
 - Redis for session state
 - Message queue (RabbitMQ/Kafka)

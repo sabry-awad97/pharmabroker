@@ -39,11 +39,11 @@ openssl rand -base64 32
 
 The following endpoints bypass API key authentication:
 
-| Endpoint | Reason |
-|----------|--------|
-| `/health` | Kubernetes liveness probe |
-| `/ready` | Kubernetes readiness probe |
-| `/metrics` | Prometheus scraping |
+| Endpoint   | Reason                     |
+| ---------- | -------------------------- |
+| `/health`  | Kubernetes liveness probe  |
+| `/ready`   | Kubernetes readiness probe |
+| `/metrics` | Prometheus scraping        |
 
 ## Rate Limiting
 
@@ -67,12 +67,12 @@ WHATSAPP_RATELIMIT_BY_IP=true
 
 **Response Headers:**
 
-| Header | Description |
-|--------|-------------|
-| `X-RateLimit-Limit` | Maximum requests per window |
-| `X-RateLimit-Remaining` | Remaining requests |
-| `X-RateLimit-Reset` | Unix timestamp when limit resets |
-| `Retry-After` | Seconds to wait (when rate limited) |
+| Header                  | Description                         |
+| ----------------------- | ----------------------------------- |
+| `X-RateLimit-Limit`     | Maximum requests per window         |
+| `X-RateLimit-Remaining` | Remaining requests                  |
+| `X-RateLimit-Reset`     | Unix timestamp when limit resets    |
+| `Retry-After`           | Seconds to wait (when rate limited) |
 
 ## CORS (Cross-Origin Resource Sharing)
 
@@ -108,9 +108,9 @@ All API inputs are validated before processing.
 
 ### Message Content Validation
 
-| Type | Max Length |
-|------|------------|
-| Text | 4096 characters |
+| Type    | Max Length      |
+| ------- | --------------- |
+| Text    | 4096 characters |
 | Caption | 1024 characters |
 
 ### Session Name Validation
@@ -132,10 +132,10 @@ WHATSAPP_CIRCUIT_BREAKER_TIMEOUT=30s
 
 **States:**
 
-| State | Behavior |
-|-------|----------|
-| Closed | Normal operation |
-| Open | Requests fail immediately |
+| State     | Behavior                          |
+| --------- | --------------------------------- |
+| Closed    | Normal operation                  |
+| Open      | Requests fail immediately         |
 | Half-Open | Limited requests to test recovery |
 
 ## Network Security
@@ -212,12 +212,12 @@ The service avoids logging sensitive data:
 
 ### Log Levels
 
-| Level | Use Case |
-|-------|----------|
+| Level   | Use Case                     |
+| ------- | ---------------------------- |
 | `error` | Production (minimal logging) |
-| `warn` | Production (with warnings) |
-| `info` | Standard production |
-| `debug` | Development only |
+| `warn`  | Production (with warnings)   |
+| `info`  | Standard production          |
+| `debug` | Development only             |
 
 **Warning:** Never use `debug` level in production as it may expose sensitive information.
 
@@ -250,11 +250,11 @@ Set appropriate resource limits:
 ```yaml
 resources:
   limits:
-    memory: "512Mi"
-    cpu: "500m"
+    memory: '512Mi'
+    cpu: '500m'
   requests:
-    memory: "128Mi"
-    cpu: "100m"
+    memory: '128Mi'
+    cpu: '100m'
 ```
 
 ## Kubernetes Security
@@ -296,7 +296,7 @@ spec:
             cidr: 0.0.0.0/0
       ports:
         - protocol: TCP
-          port: 443  # WhatsApp servers
+          port: 443 # WhatsApp servers
 ```
 
 ### Pod Security Standards

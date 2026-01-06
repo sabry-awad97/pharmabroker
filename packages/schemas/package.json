@@ -1,0 +1,18 @@
+{
+  "name": "@pharmabroker/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./whatsapp": "./src/whatsapp/index.ts",
+    "./common": "./src/common/index.ts"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@pharmabroker/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

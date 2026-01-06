@@ -21,6 +21,7 @@ curl -H "X-API-Key: your-api-key" http://localhost:8080/api/sessions
 ```
 
 Configure API key authentication via environment variables:
+
 - `WHATSAPP_API_KEY_ENABLED=true` - Enable API key authentication
 - `WHATSAPP_API_KEYS=key1,key2,key3` - Comma-separated list of valid API keys
 - `WHATSAPP_API_KEY_HEADER=X-API-Key` - Custom header name (default: X-API-Key)
@@ -57,22 +58,22 @@ All responses follow a consistent JSON structure:
 
 ### Request Headers
 
-| Header | Required | Description |
-|--------|----------|-------------|
-| `Content-Type` | Yes (POST/PUT) | Must be `application/json` |
-| `X-Request-ID` | No | Request tracking ID (auto-generated if not provided) |
-| `X-API-Key` | Conditional | Required when API key authentication is enabled |
+| Header         | Required       | Description                                          |
+| -------------- | -------------- | ---------------------------------------------------- |
+| `Content-Type` | Yes (POST/PUT) | Must be `application/json`                           |
+| `X-Request-ID` | No             | Request tracking ID (auto-generated if not provided) |
+| `X-API-Key`    | Conditional    | Required when API key authentication is enabled      |
 
 ### Response Headers
 
-| Header | Description |
-|--------|-------------|
-| `X-Request-ID` | Request tracking ID |
-| `Access-Control-Allow-Origin` | CORS header |
-| `X-RateLimit-Limit` | Maximum requests allowed per window |
-| `X-RateLimit-Remaining` | Remaining requests in current window |
-| `X-RateLimit-Reset` | Unix timestamp when the rate limit resets |
-| `Retry-After` | Seconds to wait before retrying (when rate limited) |
+| Header                        | Description                                         |
+| ----------------------------- | --------------------------------------------------- |
+| `X-Request-ID`                | Request tracking ID                                 |
+| `Access-Control-Allow-Origin` | CORS header                                         |
+| `X-RateLimit-Limit`           | Maximum requests allowed per window                 |
+| `X-RateLimit-Remaining`       | Remaining requests in current window                |
+| `X-RateLimit-Reset`           | Unix timestamp when the rate limit resets           |
+| `Retry-After`                 | Seconds to wait before retrying (when rate limited) |
 
 ---
 
@@ -141,13 +142,15 @@ Prometheus metrics endpoint for monitoring and observability.
 **Response** `200 OK`
 
 Returns Prometheus-formatted metrics including:
+
 - `whatsapp_http_requests_total` - Total HTTP requests by method, path, and status
 - `whatsapp_http_request_duration_seconds` - HTTP request duration histogram
 - `whatsapp_messages_total` - Total messages by type and status
 - `whatsapp_sessions_total` - Total sessions by status
 - `whatsapp_active_connections` - Current active WebSocket connections
 - `whatsapp_circuit_breaker_state` - Circuit breaker state (0=closed, 1=half-open, 2=open)
-```
+
+````
 
 ---
 
@@ -163,7 +166,7 @@ Create a new WhatsApp session.
 {
   "name": "string (required, 1-100 characters)"
 }
-```
+````
 
 **Response** `201 Created`
 
@@ -182,10 +185,10 @@ Create a new WhatsApp session.
 
 **Errors**
 
-| Code | Status | Description |
-|------|--------|-------------|
-| `VALIDATION_FAILED` | 400 | Invalid request body |
-| `SESSION_EXISTS` | 409 | Session with this name already exists |
+| Code                | Status | Description                           |
+| ------------------- | ------ | ------------------------------------- |
+| `VALIDATION_FAILED` | 400    | Invalid request body                  |
+| `SESSION_EXISTS`    | 409    | Session with this name already exists |
 
 ---
 
@@ -220,8 +223,8 @@ Get a specific session by ID.
 **Path Parameters**
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | UUID | Session ID |
+| --------- | ---- | ----------- |
+| `id`      | UUID | Session ID  |
 
 **Response** `200 OK`
 
@@ -241,9 +244,9 @@ Get a specific session by ID.
 
 **Errors**
 
-| Code | Status | Description |
-|------|--------|-------------|
-| `SESSION_NOT_FOUND` | 404 | Session does not exist |
+| Code                | Status | Description            |
+| ------------------- | ------ | ---------------------- |
+| `SESSION_NOT_FOUND` | 404    | Session does not exist |
 
 ---
 
@@ -254,8 +257,8 @@ Delete a session and disconnect from WhatsApp.
 **Path Parameters**
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | UUID | Session ID |
+| --------- | ---- | ----------- |
+| `id`      | UUID | Session ID  |
 
 **Response** `200 OK`
 
@@ -270,9 +273,9 @@ Delete a session and disconnect from WhatsApp.
 
 **Errors**
 
-| Code | Status | Description |
-|------|--------|-------------|
-| `SESSION_NOT_FOUND` | 404 | Session does not exist |
+| Code                | Status | Description            |
+| ------------------- | ------ | ---------------------- |
+| `SESSION_NOT_FOUND` | 404    | Session does not exist |
 
 ---
 
@@ -297,13 +300,13 @@ Send a WhatsApp message.
 
 **Content Types**
 
-| Type | Required Fields | Description |
-|------|-----------------|-------------|
-| `text` | `content.text` | Plain text message |
-| `image` | `content.image_url` | Image message with optional caption |
-| `document` | `content.doc_url` | Document message with optional caption |
-| `audio` | `content.audio_url` | Audio message |
-| `video` | `content.video_url` | Video message with optional caption |
+| Type       | Required Fields     | Description                            |
+| ---------- | ------------------- | -------------------------------------- |
+| `text`     | `content.text`      | Plain text message                     |
+| `image`    | `content.image_url` | Image message with optional caption    |
+| `document` | `content.doc_url`   | Document message with optional caption |
+| `audio`    | `content.audio_url` | Audio message                          |
+| `video`    | `content.video_url` | Video message with optional caption    |
 
 **Request Schema**
 
@@ -338,13 +341,13 @@ Send a WhatsApp message.
 
 **Errors**
 
-| Code | Status | Description |
-|------|--------|-------------|
-| `VALIDATION_FAILED` | 400 | Invalid request body |
-| `INVALID_PHONE` | 400 | Invalid E.164 phone number |
-| `SESSION_NOT_FOUND` | 404 | Session does not exist |
-| `DISCONNECTED` | 503 | Session is not connected |
-| `MESSAGE_SEND_FAILED` | 500 | Failed to send message |
+| Code                  | Status | Description                |
+| --------------------- | ------ | -------------------------- |
+| `VALIDATION_FAILED`   | 400    | Invalid request body       |
+| `INVALID_PHONE`       | 400    | Invalid E.164 phone number |
+| `SESSION_NOT_FOUND`   | 404    | Session does not exist     |
+| `DISCONNECTED`        | 503    | Session is not connected   |
+| `MESSAGE_SEND_FAILED` | 500    | Failed to send message     |
 
 ---
 
@@ -356,14 +359,16 @@ WebSocket endpoint for QR code authentication.
 
 **Path Parameters**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter    | Type | Description                |
+| ------------ | ---- | -------------------------- |
 | `session_id` | UUID | Session ID to authenticate |
 
 **Connection**
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/ws/qr/550e8400-e29b-41d4-a716-446655440000');
+const ws = new WebSocket(
+  'ws://localhost:8080/ws/qr/550e8400-e29b-41d4-a716-446655440000',
+);
 ```
 
 **Message Types**
@@ -422,42 +427,44 @@ Sent when QR authentication times out.
 
 **Error Codes**
 
-| Code | Description |
-|------|-------------|
-| `SESSION_NOT_FOUND` | Session does not exist |
-| `SESSION_BUSY` | Another authentication is in progress |
-| `AUTH_FAILED` | Authentication failed |
-| `INTERNAL_ERROR` | Internal server error |
+| Code                | Description                           |
+| ------------------- | ------------------------------------- |
+| `SESSION_NOT_FOUND` | Session does not exist                |
+| `SESSION_BUSY`      | Another authentication is in progress |
+| `AUTH_FAILED`       | Authentication failed                 |
+| `INTERNAL_ERROR`    | Internal server error                 |
 
 **Example Client**
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/ws/qr/550e8400-e29b-41d4-a716-446655440000');
+const ws = new WebSocket(
+  'ws://localhost:8080/ws/qr/550e8400-e29b-41d4-a716-446655440000',
+);
 
 ws.onopen = () => {
   console.log('Connected to QR authentication');
 };
 
-ws.onmessage = (event) => {
+ws.onmessage = event => {
   const data = JSON.parse(event.data);
-  
+
   switch (data.type) {
     case 'qr':
       // Display QR code
       const img = document.getElementById('qr-code');
       img.src = 'data:image/png;base64,' + data.data;
       break;
-      
+
     case 'authenticated':
       console.log('Authenticated as:', data.data.jid);
       ws.close();
       break;
-      
+
     case 'error':
       console.error('Error:', data.message);
       ws.close();
       break;
-      
+
     case 'timeout':
       console.log('Timeout:', data.message);
       ws.close();
@@ -465,7 +472,7 @@ ws.onmessage = (event) => {
   }
 };
 
-ws.onerror = (error) => {
+ws.onerror = error => {
   console.error('WebSocket error:', error);
 };
 
@@ -478,25 +485,25 @@ ws.onclose = () => {
 
 ## Session Status Values
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Session created, awaiting authentication |
-| `connecting` | Session is connecting to WhatsApp |
-| `connected` | Session is connected and ready |
-| `disconnected` | Session is disconnected |
-| `logged_out` | Session was logged out |
+| Status         | Description                              |
+| -------------- | ---------------------------------------- |
+| `pending`      | Session created, awaiting authentication |
+| `connecting`   | Session is connecting to WhatsApp        |
+| `connected`    | Session is connected and ready           |
+| `disconnected` | Session is disconnected                  |
+| `logged_out`   | Session was logged out                   |
 
 ---
 
 ## Message Status Values
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Message queued for sending |
-| `sent` | Message sent to WhatsApp servers |
-| `delivered` | Message delivered to recipient |
-| `read` | Message read by recipient |
-| `failed` | Message sending failed |
+| Status      | Description                      |
+| ----------- | -------------------------------- |
+| `pending`   | Message queued for sending       |
+| `sent`      | Message sent to WhatsApp servers |
+| `delivered` | Message delivered to recipient   |
+| `read`      | Message read by recipient        |
+| `failed`    | Message sending failed           |
 
 ---
 
@@ -504,44 +511,44 @@ ws.onclose = () => {
 
 ### HTTP Status Codes
 
-| Status | Description |
-|--------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 202 | Accepted (async operation) |
-| 400 | Bad Request |
-| 404 | Not Found |
-| 408 | Request Timeout |
-| 409 | Conflict |
-| 415 | Unsupported Media Type |
-| 500 | Internal Server Error |
-| 503 | Service Unavailable |
+| Status | Description                |
+| ------ | -------------------------- |
+| 200    | Success                    |
+| 201    | Created                    |
+| 202    | Accepted (async operation) |
+| 400    | Bad Request                |
+| 404    | Not Found                  |
+| 408    | Request Timeout            |
+| 409    | Conflict                   |
+| 415    | Unsupported Media Type     |
+| 500    | Internal Server Error      |
+| 503    | Service Unavailable        |
 
 ### Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `INVALID_JSON` | 400 | Request body is not valid JSON |
-| `VALIDATION_FAILED` | 400 | Request validation failed |
-| `INVALID_INPUT` | 400 | Invalid input data |
-| `INVALID_PHONE` | 400 | Invalid E.164 phone number |
-| `EMPTY_CONTENT` | 400 | Message content is empty |
-| `INVALID_MESSAGE_TYPE` | 400 | Invalid message type |
-| `SESSION_NOT_FOUND` | 404 | Session does not exist |
-| `MESSAGE_NOT_FOUND` | 404 | Message does not exist |
-| `NOT_FOUND` | 404 | Resource not found |
-| `QR_TIMEOUT` | 408 | QR authentication timed out |
-| `SESSION_EXISTS` | 409 | Session already exists |
-| `DUPLICATE` | 409 | Resource already exists |
-| `UNSUPPORTED_MEDIA_TYPE` | 415 | Content-Type must be application/json |
-| `MESSAGE_SEND_FAILED` | 500 | Failed to send message |
-| `QR_GENERATION_FAILED` | 500 | Failed to generate QR code |
-| `AUTH_FAILED` | 500 | Authentication failed |
-| `DATABASE_ERROR` | 500 | Database operation failed |
-| `INTERNAL_ERROR` | 500 | Internal server error |
-| `CONNECTION_FAILED` | 503 | Failed to connect |
-| `DISCONNECTED` | 503 | Connection disconnected |
-| `RECONNECT_FAILED` | 503 | Failed to reconnect |
+| Code                     | HTTP Status | Description                           |
+| ------------------------ | ----------- | ------------------------------------- |
+| `INVALID_JSON`           | 400         | Request body is not valid JSON        |
+| `VALIDATION_FAILED`      | 400         | Request validation failed             |
+| `INVALID_INPUT`          | 400         | Invalid input data                    |
+| `INVALID_PHONE`          | 400         | Invalid E.164 phone number            |
+| `EMPTY_CONTENT`          | 400         | Message content is empty              |
+| `INVALID_MESSAGE_TYPE`   | 400         | Invalid message type                  |
+| `SESSION_NOT_FOUND`      | 404         | Session does not exist                |
+| `MESSAGE_NOT_FOUND`      | 404         | Message does not exist                |
+| `NOT_FOUND`              | 404         | Resource not found                    |
+| `QR_TIMEOUT`             | 408         | QR authentication timed out           |
+| `SESSION_EXISTS`         | 409         | Session already exists                |
+| `DUPLICATE`              | 409         | Resource already exists               |
+| `UNSUPPORTED_MEDIA_TYPE` | 415         | Content-Type must be application/json |
+| `MESSAGE_SEND_FAILED`    | 500         | Failed to send message                |
+| `QR_GENERATION_FAILED`   | 500         | Failed to generate QR code            |
+| `AUTH_FAILED`            | 500         | Authentication failed                 |
+| `DATABASE_ERROR`         | 500         | Database operation failed             |
+| `INTERNAL_ERROR`         | 500         | Internal server error                 |
+| `CONNECTION_FAILED`      | 503         | Failed to connect                     |
+| `DISCONNECTED`           | 503         | Connection disconnected               |
+| `RECONNECT_FAILED`       | 503         | Failed to reconnect                   |
 
 ---
 
@@ -558,11 +565,11 @@ The service implements configurable rate limiting for all API endpoints:
 
 All API responses include rate limit headers:
 
-| Header | Description |
-|--------|-------------|
-| `X-RateLimit-Limit` | Maximum requests allowed per window |
-| `X-RateLimit-Remaining` | Remaining requests in current window |
-| `X-RateLimit-Reset` | Unix timestamp when the rate limit resets |
+| Header                  | Description                               |
+| ----------------------- | ----------------------------------------- |
+| `X-RateLimit-Limit`     | Maximum requests allowed per window       |
+| `X-RateLimit-Remaining` | Remaining requests in current window      |
+| `X-RateLimit-Reset`     | Unix timestamp when the rate limit resets |
 
 ### Rate Limited Response
 
@@ -582,12 +589,12 @@ The `Retry-After` header indicates how many seconds to wait before retrying.
 
 ### Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WHATSAPP_RATELIMIT_ENABLED` | `true` | Enable/disable rate limiting |
-| `WHATSAPP_RATELIMIT_RPS` | `10` | Requests per second |
-| `WHATSAPP_RATELIMIT_BURST` | `20` | Burst size |
-| `WHATSAPP_RATELIMIT_BY_IP` | `true` | Rate limit by IP address |
+| Variable                     | Default | Description                  |
+| ---------------------------- | ------- | ---------------------------- |
+| `WHATSAPP_RATELIMIT_ENABLED` | `true`  | Enable/disable rate limiting |
+| `WHATSAPP_RATELIMIT_RPS`     | `10`    | Requests per second          |
+| `WHATSAPP_RATELIMIT_BURST`   | `20`    | Burst size                   |
+| `WHATSAPP_RATELIMIT_BY_IP`   | `true`  | Rate limit by IP address     |
 
 ---
 
@@ -602,8 +609,8 @@ Phone numbers must be in E.164 format:
 
 **Examples**
 
-| Valid | Invalid |
-|-------|---------|
-| `+1234567890` | `1234567890` (missing +) |
-| `+14155551234` | `+1-415-555-1234` (contains dashes) |
-| `+551199999999` | `(11) 99999-9999` (local format) |
+| Valid           | Invalid                             |
+| --------------- | ----------------------------------- |
+| `+1234567890`   | `1234567890` (missing +)            |
+| `+14155551234`  | `+1-415-555-1234` (contains dashes) |
+| `+551199999999` | `(11) 99999-9999` (local format)    |
