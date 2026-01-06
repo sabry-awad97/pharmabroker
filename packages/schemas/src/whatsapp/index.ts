@@ -111,8 +111,12 @@ export {
 
 // Health schemas
 export {
+  healthStatus,
+  readyStatus,
   healthResponse,
   readyResponse,
+  type HealthStatus,
+  type ReadyStatus,
   type HealthResponse,
   type ReadyResponse,
 } from './health';

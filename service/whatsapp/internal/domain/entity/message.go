@@ -2,6 +2,7 @@ package entity
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 )
 
@@ -117,6 +118,8 @@ type Message struct {
 	Type      MessageType    `json:"type"`
 	Status    MessageStatus  `json:"status"`
 	Timestamp time.Time      `json:"timestamp"`
+
+	mu sync.RWMutex `json:"-"` // Protects Status field for concurrent access
 }
 
 // NewMessage creates a new Message
@@ -133,24 +136,50 @@ func NewMessage(id, sessionID, from, to string, content MessageContent, msgType 
 	}
 }
 
-// SetStatus updates the message status
+// SetStatus updates the message status (thread-safe)
 func (m *Message) SetStatus(status MessageStatus) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Status = status
 }
 
-// IsSent returns true if the message has been sent
+// GetStatus returns the message status (thread-safe)
+func (m *Message) GetStatus() MessageStatus {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.Status
+}
+
+// IsSent returns true if the message has been sent (thread-safe)
 func (m *Message) IsSent() bool {
-	return m.Status == MessageStatusSent || m.Status == MessageStatusDelivered || m.Status == MessageStatusRead
+	status := m.GetStatus()
+	return status == MessageStatusSent || status == MessageStatusDelivered || status == MessageStatusRead
 }
 
 // MarshalJSON implements json.Marshaler
 func (m *Message) MarshalJSON() ([]byte, error) {
+	m.mu.RLock()
+	status := m.Status
+	m.mu.RUnlock()
+
 	type Alias Message
 	return json.Marshal(&struct {
-		*Alias
-		Timestamp string `json:"timestamp"`
+		ID        string         `json:"id"`
+		SessionID string         `json:"session_id"`
+		From      string         `json:"from"`
+		To        string         `json:"to"`
+		Content   MessageContent `json:"content"`
+		Type      MessageType    `json:"type"`
+		Status    MessageStatus  `json:"status"`
+		Timestamp string         `json:"timestamp"`
 	}{
-		Alias:     (*Alias)(m),
+		ID:        m.ID,
+		SessionID: m.SessionID,
+		From:      m.From,
+		To:        m.To,
+		Content:   m.Content,
+		Type:      m.Type,
+		Status:    status,
 		Timestamp: m.Timestamp.Format(time.RFC3339),
 	})
 }

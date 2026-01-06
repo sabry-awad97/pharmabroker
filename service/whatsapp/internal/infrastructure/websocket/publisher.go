@@ -56,11 +56,11 @@ func NewGorillaEventPublisher(config PublisherConfig) *GorillaEventPublisher {
 // Connect establishes the WebSocket connection to the API server
 func (p *GorillaEventPublisher) Connect(ctx context.Context) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if p.connected {
+		p.mu.Unlock()
 		return nil
 	}
+	p.mu.Unlock()
 
 	err := p.connectWithRetry(ctx)
 	if err != nil {
@@ -90,8 +90,10 @@ func (p *GorillaEventPublisher) connectWithRetry(ctx context.Context) error {
 
 		conn, _, err := websocket.DefaultDialer.DialContext(ctx, p.config.URL, nil)
 		if err == nil {
+			p.mu.Lock()
 			p.conn = conn
 			p.connected = true
+			p.mu.Unlock()
 
 			// Set up pong handler
 			conn.SetPongHandler(func(string) error {

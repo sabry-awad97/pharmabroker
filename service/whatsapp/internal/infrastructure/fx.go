@@ -50,7 +50,7 @@ func NewSQLiteSessionRepository(lc fx.Lifecycle, cfg *config.Config) (repository
 // NewWhatsmeowClient creates a new WhatsApp client
 func NewWhatsmeowClient(lc fx.Lifecycle, cfg *config.Config) (repository.WhatsAppClient, error) {
 	clientConfig := whatsapp.ClientConfig{
-		DBPath:           cfg.SQLite.Path,
+		DBPath:           cfg.SQLite.WhatsmeowPath,
 		QRTimeout:        cfg.WhatsApp.QRTimeout,
 		ReconnectDelay:   cfg.WhatsApp.ReconnectDelay,
 		MaxReconnects:    cfg.WhatsApp.MaxReconnects,

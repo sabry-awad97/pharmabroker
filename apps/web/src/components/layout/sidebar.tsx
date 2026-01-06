@@ -5,6 +5,7 @@ import {
   Home,
   LayoutDashboard,
   MessageCircle,
+  MessageSquare,
   Pill,
   Search,
   Settings,
@@ -18,6 +19,7 @@ import { Button } from '../ui/button';
 const navItems = [
   { to: '/', icon: Home, label: 'Home' },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/whatsapp', icon: MessageSquare, label: 'WhatsApp' },
   { to: '/search', icon: Search, label: 'Search' },
   { to: '/medications', icon: Pill, label: 'Medications' },
   { to: '/messages', icon: MessageCircle, label: 'Messages' },

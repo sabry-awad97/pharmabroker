@@ -11,7 +11,10 @@ import type {
   CreateSessionInput,
   SendMessageInput,
   SendMessageResponse,
+  HealthResponse,
+  ReadyResponse,
 } from '@pharmabroker/schemas/whatsapp';
+import { healthStatus, readyStatus } from '@pharmabroker/schemas/whatsapp';
 
 class WhatsAppServiceClient {
   private baseUrl: string;
@@ -73,18 +76,29 @@ class WhatsAppServiceClient {
     return this.request<SendMessageResponse>('POST', '/api/messages', input);
   }
 
-  async health(): Promise<{ status: string }> {
-    return this.request<{ status: string }>('GET', '/health');
+  async health(): Promise<HealthResponse> {
+    const data = await this.request<{ status: string }>('GET', '/health');
+    // Normalize response - Go service returns "healthy", we return "ok"
+    return {
+      status:
+        data.status === 'healthy'
+          ? healthStatus.enum.ok
+          : healthStatus.enum.unhealthy,
+    };
   }
 
-  async ready(): Promise<{
-    status: string;
-    components?: Record<string, unknown>;
-  }> {
-    return this.request<{
+  async ready(): Promise<ReadyResponse> {
+    const data = await this.request<{
       status: string;
       components?: Record<string, unknown>;
     }>('GET', '/ready');
+    return {
+      status:
+        data.status === 'ready'
+          ? readyStatus.enum.ready
+          : readyStatus.enum.not_ready,
+      components: data.components,
+    };
   }
 
   getQRWebSocketUrl(sessionId: string): string {

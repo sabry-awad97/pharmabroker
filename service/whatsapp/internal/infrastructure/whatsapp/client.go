@@ -10,12 +10,14 @@ import (
 	"github.com/pharmabroker/whatsapp/internal/domain/errors"
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // ClientConfig holds configuration for the WhatsApp client
@@ -59,6 +61,11 @@ type WhatsmeowClient struct {
 func NewWhatsmeowClient(ctx context.Context, config ClientConfig) (*WhatsmeowClient, error) {
 	// Create a logger
 	logger := waLog.Stdout("WhatsApp", "INFO", true)
+
+	// Set device properties for the linked device name shown in WhatsApp
+	store.DeviceProps.Os = proto.String("PharmaBroker")
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+	store.DeviceProps.RequireFullSync = proto.Bool(true) // Sync group chats and history
 
 	// Create the SQL store container with foreign keys enabled (required by whatsmeow)
 	// Using modernc.org/sqlite pragma syntax: _pragma=foreign_keys(1)

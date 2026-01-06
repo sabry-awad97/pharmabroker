@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
 import { orpc } from '@/utils/orpc';
+import { useWhatsappHealth, healthStatus } from '@/hooks/whatsapp';
 
 export const Route = createFileRoute('/dashboard')({
   component: RouteComponent,
@@ -37,8 +38,21 @@ export const Route = createFileRoute('/dashboard')({
 function RouteComponent() {
   const { session } = Route.useRouteContext();
   const privateData = useQuery(orpc.privateData.queryOptions());
+  const whatsappHealth = useWhatsappHealth();
 
   const firstName = session.data?.user.name?.split(' ')[0] || 'User';
+
+  const getWhatsappStatus = (): 'online' | 'offline' | 'checking' => {
+    if (whatsappHealth.isLoading && !whatsappHealth.data) return 'checking';
+    if (whatsappHealth.data?.status === healthStatus.enum.ok) return 'online';
+    return 'offline';
+  };
+
+  const getApiStatus = (): 'online' | 'offline' | 'checking' => {
+    if (privateData.isLoading && !privateData.data) return 'checking';
+    if (privateData.data) return 'online';
+    return 'offline';
+  };
 
   return (
     <div className="p-6">
@@ -146,12 +160,9 @@ function RouteComponent() {
           <div className="border-border bg-card rounded-md border p-3">
             <h2 className="mb-3 text-sm font-medium">System Status</h2>
             <div className="space-y-2">
-              <StatusRow
-                label="API"
-                status={privateData.data ? 'online' : 'checking'}
-              />
+              <StatusRow label="API" status={getApiStatus()} />
               <StatusRow label="Database" status="online" />
-              <StatusRow label="WhatsApp" status="online" />
+              <StatusRow label="WhatsApp" status={getWhatsappStatus()} />
               <StatusRow label="AI Engine" status="online" />
             </div>
           </div>

@@ -94,8 +94,9 @@ type ServerConfig struct {
 
 // SQLiteConfig holds SQLite database configuration
 type SQLiteConfig struct {
-	Path        string `mapstructure:"path"`
-	BusyTimeout int    `mapstructure:"busy_timeout"` // milliseconds
+	Path          string `mapstructure:"path"`           // Session repository database
+	WhatsmeowPath string `mapstructure:"whatsmeow_path"` // Whatsmeow client database (separate to avoid locks)
+	BusyTimeout   int    `mapstructure:"busy_timeout"`   // milliseconds
 }
 
 // WhatsAppConfig holds WhatsApp client configuration
@@ -130,6 +131,11 @@ func (c *ServerConfig) Address() string {
 // DSN returns the SQLite connection string with WAL mode enabled
 func (c *SQLiteConfig) DSN() string {
 	return fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=%d", c.Path, c.BusyTimeout)
+}
+
+// WhatsmeowDSN returns the SQLite connection string for whatsmeow
+func (c *SQLiteConfig) WhatsmeowDSN() string {
+	return fmt.Sprintf("%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(%d)", c.WhatsmeowPath, c.BusyTimeout)
 }
 
 // ValidationError represents a configuration validation error
@@ -172,6 +178,12 @@ func (c *Config) Validate() error {
 	if c.SQLite.Path == "" {
 		errs = append(errs, ValidationError{
 			Field:   "sqlite.path",
+			Message: "is required",
+		})
+	}
+	if c.SQLite.WhatsmeowPath == "" {
+		errs = append(errs, ValidationError{
+			Field:   "sqlite.whatsmeow_path",
 			Message: "is required",
 		})
 	}
@@ -320,7 +332,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.port", 8080)
 
 	// SQLite defaults
-	v.SetDefault("sqlite.path", "/data/whatsapp.db")
+	v.SetDefault("sqlite.path", "/data/sessions.db")
+	v.SetDefault("sqlite.whatsmeow_path", "/data/whatsmeow.db")
 	v.SetDefault("sqlite.busy_timeout", 5000)
 
 	// WhatsApp defaults
@@ -384,6 +397,7 @@ func bindEnvVars(v *viper.Viper) {
 
 	// SQLite - also support SQLITE_PATH for backward compatibility
 	_ = v.BindEnv("sqlite.path", "WHATSAPP_SQLITE_PATH", "SQLITE_PATH")
+	_ = v.BindEnv("sqlite.whatsmeow_path", "WHATSAPP_SQLITE_WHATSMEOW_PATH", "WHATSMEOW_DB_PATH")
 	_ = v.BindEnv("sqlite.busy_timeout", "WHATSAPP_SQLITE_BUSY_TIMEOUT")
 
 	// WhatsApp

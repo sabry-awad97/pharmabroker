@@ -135,7 +135,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 
 	respondWithSuccess(c, http.StatusAccepted, map[string]interface{}{
 		"message_id": msg.ID,
-		"status":     msg.Status.String(),
+		"status":     msg.GetStatus().String(),
 	})
 }
 

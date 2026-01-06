@@ -16,6 +16,7 @@ import {
 import { FeatureCard, StatCard } from '@/components/home';
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { cn } from '@/lib/utils';
 import { orpc } from '@/utils/orpc';
 
 export const Route = createFileRoute('/')({
@@ -91,22 +92,23 @@ function HomeComponent() {
           {/* Status */}
           <div className="border-border bg-card flex items-center gap-2 rounded-md border px-3 py-2">
             <div
-              className={`h-2 w-2 rounded-full ${
+              className={cn(
+                'h-2 w-2 rounded-full transition-colors duration-300',
                 healthCheck.data
-                  ? 'animate-pulse bg-emerald-500'
-                  : healthCheck.isLoading
-                    ? 'animate-pulse bg-yellow-500'
-                    : 'bg-red-500'
-              }`}
+                  ? 'bg-emerald-500'
+                  : healthCheck.isLoading && !healthCheck.data
+                    ? 'animate-pulse bg-amber-500'
+                    : 'bg-red-500',
+              )}
             />
             <span className="text-muted-foreground text-xs">
-              {healthCheck.isLoading
+              {healthCheck.isLoading && !healthCheck.data
                 ? 'Connecting...'
                 : healthCheck.data
                   ? 'Online'
                   : 'Offline'}
             </span>
-            {healthCheck.error && (
+            {healthCheck.error && !healthCheck.data && (
               <Button
                 variant="ghost"
                 size="xs"

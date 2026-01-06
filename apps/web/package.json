@@ -22,6 +22,7 @@
     "@pharmabroker/api": "workspace:*",
     "@pharmabroker/auth": "workspace:*",
     "@pharmabroker/env": "workspace:*",
+    "@pharmabroker/schemas": "workspace:*",
     "@prisma/client": "catalog:",
     "@tailwindcss/vite": "^4.0.15",
     "@tanstack/devtools-vite": "^0.4.0",

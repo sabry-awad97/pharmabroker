@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { sessionId, whatsappJid, nonEmptyString, datetime } from '../common';
+import { sessionId, whatsappJid, datetime } from '../common';
 
 // ============================================================================
 // Enums
@@ -27,7 +27,7 @@ export const sessionStatus = z.enum([
 export const session = z.object({
   id: sessionId,
   jid: whatsappJid.optional(),
-  name: nonEmptyString.pipe(z.string().max(100)).brand<'SessionName'>(),
+  name: z.string().min(1).max(100).brand<'SessionName'>(),
   status: sessionStatus,
   created_at: datetime,
   updated_at: datetime,
