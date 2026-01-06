@@ -40,19 +40,15 @@ func TestAPIKey_ValidKey(t *testing.T) {
 
 	router := setupAPIKeyTestRouter(sessionUC, apiKeyConfig)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	req.Header.Set("X-API-Key", "valid-api-key-1")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response dto.APIResponse[[]dto.SessionResponse]
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.True(t, response.Success)
+	// 400 is expected because we're not sending a valid message body,
+	// but it proves the API key was accepted (not 401)
+	assert.NotEqual(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestAPIKey_InvalidKey(t *testing.T) {
@@ -67,7 +63,7 @@ func TestAPIKey_InvalidKey(t *testing.T) {
 
 	router := setupAPIKeyTestRouter(sessionUC, apiKeyConfig)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	req.Header.Set("X-API-Key", "invalid-api-key")
 	w := httptest.NewRecorder()
 
@@ -75,7 +71,7 @@ func TestAPIKey_InvalidKey(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	var response dto.APIResponse[interface{}]
+	var response dto.APIResponse[any]
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
@@ -95,7 +91,7 @@ func TestAPIKey_MissingKey(t *testing.T) {
 
 	router := setupAPIKeyTestRouter(sessionUC, apiKeyConfig)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	// No API key header
 	w := httptest.NewRecorder()
 
@@ -103,7 +99,7 @@ func TestAPIKey_MissingKey(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	var response dto.APIResponse[interface{}]
+	var response dto.APIResponse[any]
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
@@ -123,13 +119,13 @@ func TestAPIKey_Disabled(t *testing.T) {
 
 	router := setupAPIKeyTestRouter(sessionUC, apiKeyConfig)
 
-	// Request without API key should succeed when auth is disabled
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	// Request without API key should not get 401 when auth is disabled
+	req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NotEqual(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestAPIKey_NoConfig(t *testing.T) {
@@ -139,13 +135,13 @@ func TestAPIKey_NoConfig(t *testing.T) {
 	// No API key config
 	router := setupAPIKeyTestRouter(sessionUC, nil)
 
-	// Request without API key should succeed when no config
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	// Request without API key should not get 401 when no config
+	req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NotEqual(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestAPIKey_CustomHeader(t *testing.T) {
@@ -161,13 +157,14 @@ func TestAPIKey_CustomHeader(t *testing.T) {
 	router := setupAPIKeyTestRouter(sessionUC, apiKeyConfig)
 
 	// Request with custom header
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	req.Header.Set("Authorization", "valid-api-key-1")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	// Not 401 means API key was accepted
+	assert.NotEqual(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestAPIKey_MultipleValidKeys(t *testing.T) {
@@ -184,13 +181,13 @@ func TestAPIKey_MultipleValidKeys(t *testing.T) {
 
 	// Test each valid key
 	for _, key := range []string{"key-1", "key-2", "key-3"} {
-		req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+		req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 		req.Header.Set("X-API-Key", key)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code, "Key %s should be valid", key)
+		assert.NotEqual(t, http.StatusUnauthorized, w.Code, "Key %s should be valid", key)
 	}
 }
 
@@ -233,7 +230,7 @@ func TestAPIKey_EmptyKey(t *testing.T) {
 	router := setupAPIKeyTestRouter(sessionUC, apiKeyConfig)
 
 	// Request with empty API key
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	req.Header.Set("X-API-Key", "")
 	w := httptest.NewRecorder()
 
@@ -241,7 +238,7 @@ func TestAPIKey_EmptyKey(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	var response dto.APIResponse[interface{}]
+	var response dto.APIResponse[any]
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
@@ -262,14 +259,14 @@ func TestAPIKey_CaseSensitive(t *testing.T) {
 	router := setupAPIKeyTestRouter(sessionUC, apiKeyConfig)
 
 	// Exact case should work
-	req1 := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	req1 := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	req1.Header.Set("X-API-Key", "ValidApiKey")
 	w1 := httptest.NewRecorder()
 	router.ServeHTTP(w1, req1)
-	assert.Equal(t, http.StatusOK, w1.Code)
+	assert.NotEqual(t, http.StatusUnauthorized, w1.Code)
 
 	// Different case should fail
-	req2 := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	req2 := httptest.NewRequest(http.MethodPost, "/api/messages", nil)
 	req2.Header.Set("X-API-Key", "validapikey")
 	w2 := httptest.NewRecorder()
 	router.ServeHTTP(w2, req2)

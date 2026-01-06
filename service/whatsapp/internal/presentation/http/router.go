@@ -104,16 +104,7 @@ func registerRoutes(router *gin.Engine, handler *Handler, routerConfig RouterCon
 		api.Use(APIKeyMiddleware(*routerConfig.APIKeyConfig))
 	}
 
-	// Session routes - DEPRECATED: Sessions are now managed by Node.js API
-	// These endpoints are kept for backward compatibility but will be removed
-	// TODO: Remove in next major version
-	sessions := api.Group("/sessions")
-	sessions.POST("", handler.CreateSession)       // DEPRECATED
-	sessions.GET("", handler.ListSessions)         // DEPRECATED
-	sessions.GET("/:id", handler.GetSession)       // DEPRECATED
-	sessions.DELETE("/:id", handler.DeleteSession) // DEPRECATED
-
-	// Internal routes (called by Node.js API)
+	// Internal routes (called by Node.js API for session lifecycle)
 	internal := api.Group("/internal")
 	internal.POST("/sessions/register", handler.RegisterSession)
 	internal.POST("/sessions/:id/unregister", handler.UnregisterSession)

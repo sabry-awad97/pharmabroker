@@ -23,19 +23,19 @@ func setupTestRouter(sessionUC *usecase.SessionUseCase) *gin.Engine {
 	return httpHandler.NewRouter(sessionUC, nil, httpHandler.DefaultRouterConfig())
 }
 
-// ==================== POST /api/sessions Tests ====================
+// ==================== POST /api/internal/sessions/register Tests ====================
 
-func TestCreateSession_Success(t *testing.T) {
+func TestRegisterSession_Success(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	waClient := NewWhatsAppClientMock()
 	publisher := NewEventPublisherMock()
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 	router := setupTestRouter(sessionUC)
 
-	reqBody := dto.CreateSessionRequest{Name: "Test Session"}
+	reqBody := map[string]string{"id": "test-session-id", "name": "Test Session"}
 	body, _ := json.Marshal(reqBody)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/sessions", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -48,17 +48,17 @@ func TestCreateSession_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, response.Success)
-	assert.NotEmpty(t, response.Data.ID)
+	assert.Equal(t, "test-session-id", response.Data.ID)
 	assert.Equal(t, "Test Session", response.Data.Name)
 	assert.Equal(t, "pending", response.Data.Status)
 }
 
-func TestCreateSession_InvalidJSON(t *testing.T) {
+func TestRegisterSession_InvalidJSON(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
 	router := setupTestRouter(sessionUC)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/sessions", bytes.NewReader([]byte("invalid json")))
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/register", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -66,7 +66,7 @@ func TestCreateSession_InvalidJSON(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	var response dto.APIResponse[interface{}]
+	var response dto.APIResponse[any]
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
@@ -74,122 +74,26 @@ func TestCreateSession_InvalidJSON(t *testing.T) {
 	assert.Equal(t, "INVALID_JSON", response.Error.Code)
 }
 
-func TestCreateSession_ValidationFailed_EmptyName(t *testing.T) {
+func TestRegisterSession_MissingID(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
 	router := setupTestRouter(sessionUC)
 
-	reqBody := dto.CreateSessionRequest{Name: ""}
+	reqBody := map[string]string{"name": "Test Session"}
 	body, _ := json.Marshal(reqBody)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/sessions", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	var response dto.APIResponse[interface{}]
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.False(t, response.Success)
-	assert.Equal(t, "VALIDATION_FAILED", response.Error.Code)
 }
 
-// ==================== GET /api/sessions Tests ====================
+// ==================== POST /api/internal/sessions/:id/unregister Tests ====================
 
-func TestListSessions_Success(t *testing.T) {
-	repo := NewSessionRepositoryMock()
-	repo.sessions["id1"] = entity.NewSession("id1", "Session 1")
-	repo.sessions["id2"] = entity.NewSession("id2", "Session 2")
-	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
-	router := setupTestRouter(sessionUC)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response dto.APIResponse[[]dto.SessionResponse]
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.True(t, response.Success)
-	assert.Len(t, response.Data, 2)
-}
-
-func TestListSessions_Empty(t *testing.T) {
-	repo := NewSessionRepositoryMock()
-	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
-	router := setupTestRouter(sessionUC)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response dto.APIResponse[[]dto.SessionResponse]
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.True(t, response.Success)
-	assert.Empty(t, response.Data)
-}
-
-// ==================== GET /api/sessions/:id Tests ====================
-
-func TestGetSession_Success(t *testing.T) {
-	repo := NewSessionRepositoryMock()
-	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
-	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
-	router := setupTestRouter(sessionUC)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions/test-id", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response dto.APIResponse[dto.SessionResponse]
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.True(t, response.Success)
-	assert.Equal(t, "test-id", response.Data.ID)
-	assert.Equal(t, "Test Session", response.Data.Name)
-}
-
-func TestGetSession_NotFound(t *testing.T) {
-	repo := NewSessionRepositoryMock()
-	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
-	router := setupTestRouter(sessionUC)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/sessions/non-existent", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-
-	var response dto.APIResponse[interface{}]
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.False(t, response.Success)
-	assert.Equal(t, "SESSION_NOT_FOUND", response.Error.Code)
-}
-
-// ==================== DELETE /api/sessions/:id Tests ====================
-
-func TestDeleteSession_Success(t *testing.T) {
+func TestUnregisterSession_Success(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	waClient := NewWhatsAppClientMock()
 	publisher := NewEventPublisherMock()
@@ -201,7 +105,7 @@ func TestDeleteSession_Success(t *testing.T) {
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 	router := setupTestRouter(sessionUC)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/sessions/test-id", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/unregister", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -213,29 +117,125 @@ func TestDeleteSession_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, response.Success)
-	assert.Equal(t, "Session deleted successfully", response.Data["message"])
+	assert.Equal(t, "Session unregistered successfully", response.Data["message"])
 
 	// Verify session was deleted
 	_, exists := repo.sessions["test-id"]
 	assert.False(t, exists)
 }
 
-func TestDeleteSession_NotFound(t *testing.T) {
+func TestUnregisterSession_NotFound_NoError(t *testing.T) {
+	// Unregistering a non-existent session should succeed (idempotent)
 	repo := NewSessionRepositoryMock()
 	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
 	router := setupTestRouter(sessionUC)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/sessions/non-existent", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/non-existent/unregister", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	// Should succeed even if session doesn't exist
+	assert.Equal(t, http.StatusOK, w.Code)
+}
 
-	var response dto.APIResponse[interface{}]
+// ==================== POST /api/internal/sessions/:id/status Tests ====================
+
+func TestUpdateSessionStatus_Success(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	existingSession := entity.NewSession("test-id", "Test Session")
+	repo.sessions["test-id"] = existingSession
+	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
+	router := setupTestRouter(sessionUC)
+
+	reqBody := map[string]string{"status": "connected"}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/status", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response dto.APIResponse[map[string]string]
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.True(t, response.Success)
+
+	// Verify status was updated
+	assert.Equal(t, entity.StatusConnected, repo.sessions["test-id"].Status)
+}
+
+func TestUpdateSessionStatus_WithJID(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	waClient := NewWhatsAppClientMock()
+	publisher := NewEventPublisherMock()
+	existingSession := entity.NewSession("test-id", "Test Session")
+	repo.sessions["test-id"] = existingSession
+	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	router := setupTestRouter(sessionUC)
+
+	reqBody := map[string]string{"status": "connected", "jid": "1234567890@s.whatsapp.net"}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/status", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify JID was updated
+	assert.Equal(t, "1234567890@s.whatsapp.net", repo.sessions["test-id"].JID)
+}
+
+func TestUpdateSessionStatus_InvalidStatus(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	existingSession := entity.NewSession("test-id", "Test Session")
+	repo.sessions["test-id"] = existingSession
+	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
+	router := setupTestRouter(sessionUC)
+
+	reqBody := map[string]string{"status": "invalid_status"}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/test-id/status", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response dto.APIResponse[any]
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
 	assert.False(t, response.Success)
-	assert.Equal(t, "SESSION_NOT_FOUND", response.Error.Code)
+	assert.Equal(t, "INVALID_STATUS", response.Error.Code)
+}
+
+func TestUpdateSessionStatus_CreatesSessionIfNotExists(t *testing.T) {
+	repo := NewSessionRepositoryMock()
+	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
+	router := setupTestRouter(sessionUC)
+
+	reqBody := map[string]string{"status": "connected"}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/internal/sessions/new-session/status", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify session was created
+	_, exists := repo.sessions["new-session"]
+	assert.True(t, exists)
 }

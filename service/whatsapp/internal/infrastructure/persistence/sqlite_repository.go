@@ -13,9 +13,7 @@ import (
 )
 
 // SQLiteSessionRepository implements SessionRepository with SQLite
-// DEPRECATED: Session management is now handled by Node.js API with PostgreSQL.
-// This repository is kept for backward compatibility and WhatsApp client state tracking.
-// TODO: Remove in next major version - migrate to using Node.js API as source of truth.
+// Used for local WhatsApp client state tracking (not the source of truth for sessions)
 type SQLiteSessionRepository struct {
 	db *sql.DB
 	mu sync.RWMutex // Mutex for write operations to handle SQLite's single-writer limitation
@@ -111,22 +109,7 @@ func (r *SQLiteSessionRepository) GetByID(ctx context.Context, id string) (*enti
 	return r.scanSession(row)
 }
 
-// GetByJID retrieves a session by its WhatsApp JID
-func (r *SQLiteSessionRepository) GetByJID(ctx context.Context, jid string) (*entity.Session, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	query := `
-		SELECT id, jid, name, status, created_at, updated_at
-		FROM sessions
-		WHERE jid = ?
-	`
-
-	row := r.db.QueryRowContext(ctx, query, jid)
-	return r.scanSession(row)
-}
-
-// GetAll retrieves all sessions
+// GetAll retrieves all sessions (used for testing only, not part of SessionRepository interface)
 func (r *SQLiteSessionRepository) GetAll(ctx context.Context) ([]*entity.Session, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -145,11 +128,31 @@ func (r *SQLiteSessionRepository) GetAll(ctx context.Context) ([]*entity.Session
 
 	var sessions []*entity.Session
 	for rows.Next() {
-		session, err := r.scanSessionFromRows(rows)
+		var session entity.Session
+		var status string
+		var createdAt, updatedAt string
+
+		err := rows.Scan(
+			&session.ID,
+			&session.JID,
+			&session.Name,
+			&status,
+			&createdAt,
+			&updatedAt,
+		)
 		if err != nil {
-			return nil, err
+			return nil, errors.ErrDatabaseError.WithCause(err).WithMessage("failed to scan session")
 		}
-		sessions = append(sessions, session)
+
+		session.Status = entity.Status(status)
+		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+			session.CreatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
+			session.UpdatedAt = t
+		}
+
+		sessions = append(sessions, &session)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -275,38 +278,6 @@ func (r *SQLiteSessionRepository) scanSession(row *sql.Row) (*entity.Session, er
 		if err == sql.ErrNoRows {
 			return nil, errors.ErrSessionNotFound
 		}
-		return nil, errors.ErrDatabaseError.WithCause(err).WithMessage("failed to scan session")
-	}
-
-	session.Status = entity.Status(status)
-
-	// Parse timestamps
-	if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-		session.CreatedAt = t
-	}
-	if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
-		session.UpdatedAt = t
-	}
-
-	return &session, nil
-}
-
-// scanSessionFromRows scans a row from rows into a Session
-func (r *SQLiteSessionRepository) scanSessionFromRows(rows *sql.Rows) (*entity.Session, error) {
-	var session entity.Session
-	var status string
-	var createdAt, updatedAt string
-
-	err := rows.Scan(
-		&session.ID,
-		&session.JID,
-		&session.Name,
-		&status,
-		&createdAt,
-		&updatedAt,
-	)
-
-	if err != nil {
 		return nil, errors.ErrDatabaseError.WithCause(err).WithMessage("failed to scan session")
 	}
 

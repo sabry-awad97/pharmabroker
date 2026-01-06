@@ -16,7 +16,6 @@ type SessionRepositoryMock struct {
 	sessions map[string]*entity.Session
 	createFn func(ctx context.Context, session *entity.Session) error
 	getFn    func(ctx context.Context, id string) (*entity.Session, error)
-	getAllFn func(ctx context.Context) ([]*entity.Session, error)
 	updateFn func(ctx context.Context, session *entity.Session) error
 	deleteFn func(ctx context.Context, id string) error
 }
@@ -42,17 +41,6 @@ func (m *SessionRepositoryMock) GetByID(ctx context.Context, id string) (*entity
 	return m.sessions[id], nil
 }
 
-func (m *SessionRepositoryMock) GetAll(ctx context.Context) ([]*entity.Session, error) {
-	if m.getAllFn != nil {
-		return m.getAllFn(ctx)
-	}
-	var sessions []*entity.Session
-	for _, s := range m.sessions {
-		sessions = append(sessions, s)
-	}
-	return sessions, nil
-}
-
 func (m *SessionRepositoryMock) Update(ctx context.Context, session *entity.Session) error {
 	if m.updateFn != nil {
 		return m.updateFn(ctx, session)
@@ -67,15 +55,6 @@ func (m *SessionRepositoryMock) Delete(ctx context.Context, id string) error {
 	}
 	delete(m.sessions, id)
 	return nil
-}
-
-func (m *SessionRepositoryMock) GetByJID(ctx context.Context, jid string) (*entity.Session, error) {
-	for _, s := range m.sessions {
-		if s.JID == jid {
-			return s, nil
-		}
-	}
-	return nil, nil
 }
 
 func (m *SessionRepositoryMock) UpdateStatus(ctx context.Context, id string, status entity.Status) error {

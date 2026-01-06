@@ -14,17 +14,11 @@ type SessionRepository interface {
 	// GetByID retrieves a session by its ID
 	GetByID(ctx context.Context, id string) (*entity.Session, error)
 
-	// GetAll retrieves all sessions
-	GetAll(ctx context.Context) ([]*entity.Session, error)
-
 	// Update updates an existing session
 	Update(ctx context.Context, session *entity.Session) error
 
 	// Delete removes a session by its ID
 	Delete(ctx context.Context, id string) error
-
-	// GetByJID retrieves a session by its WhatsApp JID
-	GetByJID(ctx context.Context, jid string) (*entity.Session, error)
 
 	// UpdateStatus updates only the status of a session
 	UpdateStatus(ctx context.Context, id string, status entity.Status) error

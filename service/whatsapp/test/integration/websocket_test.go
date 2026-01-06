@@ -125,13 +125,12 @@ func TestWebSocket_QRFlow_Authentication(t *testing.T) {
 	assert.Equal(t, "Successfully authenticated", authMsg.Message)
 }
 
-func TestWebSocket_QRFlow_SessionNotFound(t *testing.T) {
+func TestWebSocket_QRFlow_NoWhatsAppClient(t *testing.T) {
 	repo := NewSessionRepositoryMock()
-	waClient := NewWhatsAppClientMock()
 	publisher := NewEventPublisherMock()
 
-	// No session created
-	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
+	// No WhatsApp client - simulates client not available
+	sessionUC := usecase.NewSessionUseCase(repo, nil, publisher)
 
 	config := ws.DefaultQRHandlerConfig()
 	config.AuthTimeout = 5 * time.Second
@@ -140,10 +139,10 @@ func TestWebSocket_QRFlow_SessionNotFound(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	conn := createWebSocketConnection(t, server, "non-existent-session")
+	conn := createWebSocketConnection(t, server, "test-session")
 	defer conn.Close()
 
-	// Read error message
+	// Read error message - should get error because WhatsApp client is not available
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, message, err := conn.ReadMessage()
 	require.NoError(t, err)
