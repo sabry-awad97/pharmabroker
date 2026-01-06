@@ -753,3 +753,111 @@ func (c *WhatsmeowClient) handleReceiptEvent(sessionID string, receipt *events.R
 		payload,
 	)
 }
+
+// GetJoinedGroups fetches all groups the session is a member of from WhatsApp
+func (c *WhatsmeowClient) GetJoinedGroups(ctx context.Context, sessionID string) ([]*entity.Group, error) {
+	c.mu.RLock()
+	client, exists := c.clients[sessionID]
+	c.mu.RUnlock()
+
+	if !exists {
+		return nil, errors.ErrSessionNotFound
+	}
+
+	if !client.IsConnected() {
+		return nil, errors.ErrDisconnected
+	}
+
+	// Fetch joined groups from WhatsApp
+	waGroups, err := client.GetJoinedGroups(ctx)
+	if err != nil {
+		return nil, errors.ErrInternal.WithCause(err).WithMessage("failed to fetch groups from WhatsApp")
+	}
+
+	groups := make([]*entity.Group, 0, len(waGroups))
+	now := time.Now()
+
+	for _, waGroup := range waGroups {
+		group := &entity.Group{
+			JID:         waGroup.JID.String(),
+			Name:        waGroup.Name,
+			SessionID:   sessionID,
+			MemberCount: len(waGroup.Participants),
+			IsAnnounce:  waGroup.IsAnnounce,
+			IsLocked:    waGroup.IsLocked,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+
+		// Set optional fields
+		if waGroup.Topic != "" {
+			group.Description = &waGroup.Topic
+		}
+
+		// Resolve owner JID from LID if needed
+		if !waGroup.OwnerJID.IsEmpty() {
+			ownerJID := c.resolveJID(ctx, client, waGroup.OwnerJID)
+			group.OwnerJID = &ownerJID
+		}
+
+		if !waGroup.GroupCreated.IsZero() {
+			group.GroupCreatedAt = &waGroup.GroupCreated
+		}
+
+		// Convert participants
+		participants := make([]entity.Participant, 0, len(waGroup.Participants))
+		for _, waParticipant := range waGroup.Participants {
+			role := convertParticipantRole(waParticipant)
+
+			// Resolve participant JID from LID if needed
+			resolvedJID := c.resolveJID(ctx, client, waParticipant.JID)
+
+			participant := entity.Participant{
+				JID:       resolvedJID,
+				Role:      role,
+				JoinedAt:  now,
+				UpdatedAt: now,
+			}
+
+			// Set display name if available
+			if waParticipant.DisplayName != "" {
+				participant.DisplayName = &waParticipant.DisplayName
+			}
+
+			participants = append(participants, participant)
+		}
+		group.Participants = participants
+
+		groups = append(groups, group)
+	}
+
+	return groups, nil
+}
+
+// resolveJID resolves a JID, converting LID to phone number if needed
+func (c *WhatsmeowClient) resolveJID(ctx context.Context, client *whatsmeow.Client, jid types.JID) string {
+	// If it's a LID (Linked ID), resolve it to a phone number
+	if jid.Server == types.DefaultUserServer || jid.Server == "lid" {
+		// Try to resolve LID to phone number
+		if client.Store != nil && client.Store.LIDs != nil {
+			pn, err := client.Store.LIDs.GetPNForLID(ctx, jid)
+			if err == nil && !pn.IsEmpty() {
+				return pn.String()
+			}
+		}
+	}
+
+	// Return the original JID string if resolution fails or not needed
+	return jid.String()
+}
+
+// convertParticipantRole converts whatsmeow participant to domain role
+func convertParticipantRole(p types.GroupParticipant) entity.ParticipantRole {
+	if p.IsSuperAdmin {
+		return entity.ParticipantRoleSuperAdmin
+	}
+	if p.IsAdmin {
+		return entity.ParticipantRoleAdmin
+	}
+	return entity.ParticipantRoleMember
+}

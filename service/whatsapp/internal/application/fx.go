@@ -16,6 +16,7 @@ var Module = fx.Module("application",
 		NewSessionUseCase,
 		NewMessageUseCase,
 		NewHealthUseCase,
+		NewGroupsUseCase,
 	),
 )
 
@@ -66,4 +67,14 @@ func NewHealthUseCase(checkers *infrastructure.HealthCheckers) *usecase.HealthUs
 		checkers.WhatsAppClient,
 		checkers.EventPublisher,
 	)
+}
+
+// NewGroupsUseCase creates a new groups use case
+func NewGroupsUseCase(waClient repository.WhatsAppClient) *usecase.GroupsUseCase {
+	// Cast to GroupFetcher interface
+	groupFetcher, ok := waClient.(repository.GroupFetcher)
+	if !ok {
+		return usecase.NewGroupsUseCase(nil)
+	}
+	return usecase.NewGroupsUseCase(groupFetcher)
 }

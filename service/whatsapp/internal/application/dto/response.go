@@ -78,3 +78,80 @@ func NewSessionListResponse(sessions []*entity.Session) []SessionResponse {
 	}
 	return result
 }
+
+// GroupResponse represents a WhatsApp group in API responses
+type GroupResponse struct {
+	JID            string                `json:"jid"`
+	Name           string                `json:"name"`
+	Description    *string               `json:"description,omitempty"`
+	AvatarURL      *string               `json:"avatar_url,omitempty"`
+	IsAnnounce     bool                  `json:"is_announce"`
+	IsLocked       bool                  `json:"is_locked"`
+	IsEphemeral    bool                  `json:"is_ephemeral"`
+	EphemeralTime  *int                  `json:"ephemeral_time,omitempty"`
+	OwnerJID       *string               `json:"owner_jid,omitempty"`
+	MemberCount    int                   `json:"member_count"`
+	GroupCreatedAt *string               `json:"group_created_at,omitempty"`
+	Participants   []ParticipantResponse `json:"participants,omitempty"`
+}
+
+// ParticipantResponse represents a WhatsApp group participant in API responses
+type ParticipantResponse struct {
+	JID         string  `json:"jid"`
+	Role        string  `json:"role"`
+	DisplayName *string `json:"display_name,omitempty"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
+}
+
+// NewGroupResponse creates a GroupResponse from a domain Group entity
+func NewGroupResponse(group *entity.Group) GroupResponse {
+	response := GroupResponse{
+		JID:         group.JID,
+		Name:        group.Name,
+		Description: group.Description,
+		AvatarURL:   group.AvatarURL,
+		IsAnnounce:  group.IsAnnounce,
+		IsLocked:    group.IsLocked,
+		IsEphemeral: group.IsEphemeral,
+		OwnerJID:    group.OwnerJID,
+		MemberCount: group.MemberCount,
+	}
+
+	if group.EphemeralTime != nil {
+		response.EphemeralTime = group.EphemeralTime
+	}
+
+	if group.GroupCreatedAt != nil {
+		t := group.GroupCreatedAt.Format(time.RFC3339)
+		response.GroupCreatedAt = &t
+	}
+
+	// Convert participants
+	if len(group.Participants) > 0 {
+		response.Participants = make([]ParticipantResponse, len(group.Participants))
+		for i, p := range group.Participants {
+			response.Participants[i] = NewParticipantResponse(&p)
+		}
+	}
+
+	return response
+}
+
+// NewParticipantResponse creates a ParticipantResponse from a domain Participant entity
+func NewParticipantResponse(participant *entity.Participant) ParticipantResponse {
+	return ParticipantResponse{
+		JID:         participant.JID,
+		Role:        participant.Role.String(),
+		DisplayName: participant.DisplayName,
+		AvatarURL:   participant.AvatarURL,
+	}
+}
+
+// NewGroupListResponse creates a list of GroupResponse from domain Group entities
+func NewGroupListResponse(groups []*entity.Group) []GroupResponse {
+	result := make([]GroupResponse, len(groups))
+	for i, group := range groups {
+		result[i] = NewGroupResponse(group)
+	}
+	return result
+}

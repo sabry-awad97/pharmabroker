@@ -125,3 +125,9 @@ type MessageQueue interface {
 	// Clear removes all messages from the queue
 	Clear()
 }
+
+// GroupFetcher defines operations for fetching groups from WhatsApp
+type GroupFetcher interface {
+	// GetJoinedGroups fetches all groups the session is a member of from WhatsApp
+	GetJoinedGroups(ctx context.Context, sessionID string) ([]*entity.Group, error)
+}

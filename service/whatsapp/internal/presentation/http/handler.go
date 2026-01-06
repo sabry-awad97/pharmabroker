@@ -16,6 +16,7 @@ type Handler struct {
 	sessionUC *usecase.SessionUseCase
 	messageUC *usecase.MessageUseCase
 	healthUC  *usecase.HealthUseCase
+	groupsUC  *usecase.GroupsUseCase
 }
 
 // NewHandler creates a new Handler
@@ -24,6 +25,7 @@ func NewHandler(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUse
 		sessionUC: sessionUC,
 		messageUC: messageUC,
 		healthUC:  nil,
+		groupsUC:  nil,
 	}
 }
 
@@ -33,12 +35,50 @@ func NewHandlerWithHealth(sessionUC *usecase.SessionUseCase, messageUC *usecase.
 		sessionUC: sessionUC,
 		messageUC: messageUC,
 		healthUC:  healthUC,
+		groupsUC:  nil,
+	}
+}
+
+// NewHandlerFull creates a new Handler with all use cases
+func NewHandlerFull(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUseCase, healthUC *usecase.HealthUseCase, groupsUC *usecase.GroupsUseCase) *Handler {
+	return &Handler{
+		sessionUC: sessionUC,
+		messageUC: messageUC,
+		healthUC:  healthUC,
+		groupsUC:  groupsUC,
 	}
 }
 
 // SetHealthUseCase sets the health use case (for dependency injection)
 func (h *Handler) SetHealthUseCase(healthUC *usecase.HealthUseCase) {
 	h.healthUC = healthUC
+}
+
+// SetGroupsUseCase sets the groups use case (for dependency injection)
+func (h *Handler) SetGroupsUseCase(groupsUC *usecase.GroupsUseCase) {
+	h.groupsUC = groupsUC
+}
+
+// SyncGroups handles POST /api/sessions/:id/groups/sync
+func (h *Handler) SyncGroups(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		respondWithError(c, http.StatusBadRequest, "INVALID_ID", "Session ID is required", nil)
+		return
+	}
+
+	if h.groupsUC == nil {
+		respondWithError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Groups use case not configured", nil)
+		return
+	}
+
+	result, err := h.groupsUC.SyncGroups(c.Request.Context(), sessionID)
+	if err != nil {
+		handleDomainError(c, err)
+		return
+	}
+
+	respondWithSuccess(c, http.StatusOK, result)
 }
 
 // SendMessage handles POST /api/messages

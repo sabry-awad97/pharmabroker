@@ -16,6 +16,7 @@ describe('WhatsApp Router Schemas', () => {
         id: '550e8400-e29b-41d4-a716-446655440000',
         name: 'Test Session',
         status: 'connected',
+        auto_connect: false,
         created_at: '2026-01-05T10:00:00Z',
         updated_at: '2026-01-05T10:00:00Z',
       };
@@ -30,6 +31,7 @@ describe('WhatsApp Router Schemas', () => {
         jid: '1234567890@s.whatsapp.net',
         name: 'Test Session',
         status: 'connected',
+        auto_connect: true,
         created_at: '2026-01-05T10:00:00Z',
         updated_at: '2026-01-05T10:00:00Z',
       };
@@ -363,6 +365,7 @@ describe('WhatsApp Service Client Integration', () => {
       id: '550e8400-e29b-41d4-a716-446655440000',
       name: 'Test Session',
       status: 'pending',
+      auto_connect: false,
       created_at: '2026-01-05T10:00:00Z',
       updated_at: '2026-01-05T10:00:00Z',
     };
@@ -757,10 +760,13 @@ describe('Property-Based Tests', () => {
       name: fc.string({ minLength: 1, maxLength: 100 }),
       status: fc.constantFrom(
         'pending',
+        'connecting',
         'connected',
         'disconnected',
+        'logged_out',
         'expired',
       ),
+      auto_connect: fc.boolean(),
       created_at: validDatetimeArb,
       updated_at: validDatetimeArb,
     });
