@@ -16,7 +16,7 @@
     "db:push": "prisma db push --schema=prisma/schema",
     "db:generate": "prisma generate --schema=prisma/schema",
     "db:migrate": "prisma migrate dev --schema=prisma/schema",
-    "db:studio": "prisma studio --schema=prisma/schema",
+    "db:studio": "prisma studio",
     "db:start": "docker compose up -d",
     "db:watch": "docker compose up",
     "db:stop": "docker compose stop",

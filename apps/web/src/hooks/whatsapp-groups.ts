@@ -43,6 +43,8 @@ export const whatsappGroupsKeys = {
     groupId: string,
     filters?: Partial<ParticipantFilterInput>,
   ) => [...whatsappGroupsKeys.participants(), groupId, filters] as const,
+  counts: (sessionId?: string) =>
+    [...whatsappGroupsKeys.all(), 'counts', sessionId] as const,
 } as const;
 
 // ============================================================================
@@ -172,6 +174,34 @@ export function useWhatsappGroupSuspense(groupId: string) {
 }
 
 // ============================================================================
+// Filter Counts Hook
+// ============================================================================
+
+export interface UseGroupFilterCountsOptions {
+  sessionId?: string;
+  enabled?: boolean;
+}
+
+/**
+ * Fetch filter counts for WhatsApp groups (all, admin, archived, muted)
+ */
+export function useGroupFilterCounts(
+  options: UseGroupFilterCountsOptions = {},
+) {
+  const { sessionId, enabled = true } = options;
+
+  return useQuery({
+    queryKey: whatsappGroupsKeys.counts(sessionId),
+    queryFn: async () => {
+      return orpc.whatsapp.groups.counts.call({ sessionId });
+    },
+    enabled,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+  });
+}
+
+// ============================================================================
 // Participant Hooks
 // ============================================================================
 
@@ -256,6 +286,13 @@ export function useSyncGroups() {
       queryClient.invalidateQueries({
         queryKey: whatsappGroupsKeys.details(),
       });
+      // Invalidate filter counts (both session-specific and global)
+      queryClient.invalidateQueries({
+        queryKey: whatsappGroupsKeys.counts(sessionId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: whatsappGroupsKeys.counts(undefined),
+      });
     },
   });
 }
@@ -330,4 +367,5 @@ export type {
   GroupFilterType,
   ParticipantFilterInput,
   ParticipantRole,
+  FilterCountsResponse,
 } from '@pharmabroker/schemas/whatsapp';

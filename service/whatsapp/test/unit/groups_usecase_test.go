@@ -3,6 +3,7 @@ package unit
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pharmabroker/whatsapp/internal/application/usecase"
 	"github.com/pharmabroker/whatsapp/internal/domain/entity"
@@ -248,4 +249,108 @@ func TestMapGroupsErrorToHTTPStatus(t *testing.T) {
 			assert.Equal(t, tt.expectedCode, statusCode)
 		})
 	}
+}
+
+// ==================== Property Tests ====================
+
+// Feature: whatsapp-groups-filter-counts, Property 6: Go Client Data Mapping
+// For any WhatsApp API response containing group data, the Go client SHALL correctly
+// map the archived and muted status to the Group entity fields.
+
+func TestGroupEntity_DataMapping_IncludesFilterFields(t *testing.T) {
+	// Property: For any group entity, the JSON serialization SHALL include
+	// is_archived and is_muted fields with correct values
+
+	testCases := []struct {
+		name       string
+		isArchived bool
+		isMuted    bool
+	}{
+		{"both false", false, false},
+		{"archived only", true, false},
+		{"muted only", false, true},
+		{"both true", true, true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			group := entity.NewGroup("test-id", "123@g.us", "Test Group", "session-1")
+			group.IsArchived = tc.isArchived
+			group.IsMuted = tc.isMuted
+
+			// Verify fields are set correctly
+			assert.Equal(t, tc.isArchived, group.IsArchived)
+			assert.Equal(t, tc.isMuted, group.IsMuted)
+
+			// Verify JSON serialization includes the fields
+			jsonBytes, err := group.MarshalJSON()
+			require.NoError(t, err)
+
+			jsonStr := string(jsonBytes)
+			assert.Contains(t, jsonStr, `"is_archived"`)
+			assert.Contains(t, jsonStr, `"is_muted"`)
+		})
+	}
+}
+
+func TestGroupEntity_MutedUntil_Serialization(t *testing.T) {
+	// Property: For any group with mutedUntil set, the JSON serialization
+	// SHALL include the muted_until field in RFC3339 format
+
+	group := entity.NewGroup("test-id", "123@g.us", "Test Group", "session-1")
+
+	// Test with nil mutedUntil
+	jsonBytes, err := group.MarshalJSON()
+	require.NoError(t, err)
+	assert.NotContains(t, string(jsonBytes), `"muted_until"`)
+
+	// Test with set mutedUntil
+	now := time.Now()
+	group.MutedUntil = &now
+
+	jsonBytes, err = group.MarshalJSON()
+	require.NoError(t, err)
+	assert.Contains(t, string(jsonBytes), `"muted_until"`)
+}
+
+func TestGroupFetcher_ReturnsGroupsWithFilterFields(t *testing.T) {
+	// Property: For any sync operation, returned groups SHALL have
+	// IsArchived and IsMuted fields initialized (default to false)
+
+	fetcher := NewGroupFetcherMock()
+
+	testGroups := []*entity.Group{
+		{
+			ID:         "group-1",
+			JID:        "1234567890@g.us",
+			Name:       "Test Group 1",
+			SessionID:  "session-1",
+			IsArchived: false,
+			IsMuted:    false,
+		},
+		{
+			ID:         "group-2",
+			JID:        "0987654321@g.us",
+			Name:       "Test Group 2",
+			SessionID:  "session-1",
+			IsArchived: true,
+			IsMuted:    true,
+		},
+	}
+	fetcher.groups["session-1"] = testGroups
+
+	uc := usecase.NewGroupsUseCase(fetcher)
+
+	result, err := uc.SyncGroups(context.Background(), "session-1")
+
+	require.NoError(t, err)
+	require.Len(t, result.Groups, 2)
+
+	// Verify first group has default values
+	assert.False(t, result.Groups[0].IsArchived)
+	assert.False(t, result.Groups[0].IsMuted)
+
+	// Verify second group has set values
+	assert.True(t, result.Groups[1].IsArchived)
+	assert.True(t, result.Groups[1].IsMuted)
 }

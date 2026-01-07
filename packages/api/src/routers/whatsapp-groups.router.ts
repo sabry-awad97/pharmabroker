@@ -16,6 +16,8 @@ import {
   syncGroupsInput,
   syncGroupsResponse,
   whatsAppGroupWithParticipants,
+  filterCountsInput,
+  filterCountsResponse,
 } from '@pharmabroker/schemas/whatsapp';
 
 import { o, protectedProcedure } from '..';
@@ -82,6 +84,24 @@ export const whatsappGroupsRouter = o.router({
     .handler(async ({ input, context }) => {
       const userId = context.session!.user.id;
       return whatsappGroupsService.listParticipants(userId, input);
+    }),
+
+  counts: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'GET',
+        path: '/whatsapp/groups/counts',
+        tags: ['WhatsApp Groups'],
+        summary: 'Get filter counts',
+        description:
+          'Returns counts for each filter type (all, admin, archived, muted).',
+      },
+    })
+    .input(filterCountsInput)
+    .output(filterCountsResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return whatsappGroupsService.getFilterCounts(userId, input.sessionId);
     }),
 
   // ─────────────────────────────────────────────────────────────────────────

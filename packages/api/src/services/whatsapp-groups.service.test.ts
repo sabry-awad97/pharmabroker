@@ -65,6 +65,7 @@ async function createTestUser(suffix: string): Promise<TestUser> {
 async function createTestSession(
   userId: string,
   suffix: string,
+  jid?: string,
 ): Promise<TestSession> {
   const session = await prisma.whatsAppSession.create({
     data: {
@@ -72,6 +73,7 @@ async function createTestSession(
       name: `Test Session ${suffix}`,
       userId,
       status: 'connected',
+      jid: jid ?? null,
     },
   });
   testSessions.push(session);
@@ -566,14 +568,21 @@ describe('WhatsApp Groups Service - Property Tests', () => {
    * Feature: whatsapp-groups-api, Property 4: Admin Filter Correctness
    *
    * *For any* groups list query with the 'admin' filter, all returned groups
-   * SHALL have at least one participant with role 'admin' or 'superadmin'.
+   * SHALL have at least one participant with role 'admin' or 'superadmin'
+   * where the participant JID matches the session's JID.
    *
    * **Validates: Requirements 1.4**
    */
   describe('Property 4: Admin Filter Correctness', () => {
     it('listGroups with admin filter returns only groups where user is admin', async () => {
       const user = await createTestUser('admin-filter-1');
-      const session = await createTestSession(user.id, 'admin-filter-1');
+      // Session JID is the user's WhatsApp number - must match participant JID
+      const sessionJid = '5551234567890@s.whatsapp.net';
+      const session = await createTestSession(
+        user.id,
+        'admin-filter-1',
+        sessionJid,
+      );
 
       // Create groups with different participant roles
       const adminGroup = await createTestGroup(
@@ -592,20 +601,21 @@ describe('WhatsApp Groups Service - Property Tests', () => {
         'Superadmin Group',
       );
 
-      // Add participants with different roles
+      // Add the session owner as participant with different roles in each group
+      // The session JID (5551234567890) must match the participant JID
       await createTestParticipant(
         adminGroup.id,
-        '1111111111@s.whatsapp.net',
+        '5551234567890@s.whatsapp.net', // Matches session JID - admin
         'admin',
       );
       await createTestParticipant(
         memberGroup.id,
-        '2222222222@s.whatsapp.net',
+        '5551234567890@s.whatsapp.net', // Matches session JID - but only member
         'member',
       );
       await createTestParticipant(
         superadminGroup.id,
-        '3333333333@s.whatsapp.net',
+        '5551234567890@s.whatsapp.net', // Matches session JID - superadmin
         'superadmin',
       );
 
@@ -615,7 +625,7 @@ describe('WhatsApp Groups Service - Property Tests', () => {
         filter: 'admin',
       });
 
-      // Should return only groups with admin or superadmin participants
+      // Should return only groups where the session owner is admin or superadmin
       expect(result.groups.length).toBe(2);
       const groupIds = result.groups.map(g => g.id);
       expect(groupIds).toContain(adminGroup.id);
@@ -623,15 +633,18 @@ describe('WhatsApp Groups Service - Property Tests', () => {
       expect(groupIds).not.toContain(memberGroup.id);
     });
 
-    it('property: for admin filter, all returned groups have admin/superadmin participant', async () => {
+    it('property: for admin filter, all returned groups have admin/superadmin participant matching session JID', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.integer({ min: 2, max: 5 }), // Number of groups
           async numGroups => {
             const user = await createTestUser(`admin-prop-${Date.now()}`);
+            // Session needs a JID to match against participants
+            const sessionJid = `${Date.now()}@s.whatsapp.net`;
             const session = await createTestSession(
               user.id,
               `admin-prop-${Date.now()}`,
+              sessionJid,
             );
 
             const roles: Array<'member' | 'admin' | 'superadmin'> = [
@@ -640,18 +653,18 @@ describe('WhatsApp Groups Service - Property Tests', () => {
               'superadmin',
             ];
 
-            // Create groups with random participant roles
+            // Create groups with the session owner as participant with different roles
             for (let i = 0; i < numGroups; i++) {
               const group = await createTestGroup(
                 session.id,
                 `${Date.now()}${i}@g.us`,
                 `Group ${i}`,
               );
-              // Assign a random role
+              // Assign a random role to the session owner
               const role = roles[i % roles.length]!;
               await createTestParticipant(
                 group.id,
-                `${Date.now()}${i}@s.whatsapp.net`,
+                sessionJid, // Use session JID so it matches
                 role,
               );
             }
@@ -662,16 +675,22 @@ describe('WhatsApp Groups Service - Property Tests', () => {
               filter: 'admin',
             });
 
-            // Verify all returned groups have admin or superadmin participant
+            // Verify all returned groups have the session owner as admin or superadmin
             for (const group of result.groups) {
               const participants =
                 await prisma.whatsAppGroupParticipant.findMany({
                   where: { groupId: group.id },
                 });
-              const hasAdminRole = participants.some(
-                p => p.role === 'admin' || p.role === 'superadmin',
+              // Find participant matching session JID
+              const sessionJidBase = sessionJid.split(':')[0] ?? sessionJid;
+              const sessionParticipant = participants.find(p =>
+                p.jid.startsWith(sessionJidBase),
               );
-              expect(hasAdminRole).toBe(true);
+              expect(sessionParticipant).toBeDefined();
+              expect(
+                sessionParticipant?.role === 'admin' ||
+                  sessionParticipant?.role === 'superadmin',
+              ).toBe(true);
             }
 
             return true;
@@ -1431,7 +1450,13 @@ describe('WhatsApp Groups Service - Unit Tests', () => {
 
     it('returns groups filtered by admin filter and search term combined', async () => {
       const user = await createTestUser('combo-filter-2');
-      const session = await createTestSession(user.id, 'combo-filter-2');
+      // Session needs a JID to match against participants for admin filter
+      const sessionJid = '5559876543210@s.whatsapp.net';
+      const session = await createTestSession(
+        user.id,
+        'combo-filter-2',
+        sessionJid,
+      );
 
       // Create groups with different names and roles
       const adminGroup = await createTestGroup(
@@ -1450,19 +1475,20 @@ describe('WhatsApp Groups Service - Unit Tests', () => {
         'Beta Admins',
       );
 
+      // Add session owner as participant with different roles
       await createTestParticipant(
         adminGroup.id,
-        '1111@s.whatsapp.net',
+        sessionJid, // Session owner is admin here
         'admin',
       );
       await createTestParticipant(
         memberGroup.id,
-        '2222@s.whatsapp.net',
+        sessionJid, // Session owner is only member here
         'member',
       );
       await createTestParticipant(
         otherAdminGroup.id,
-        '3333@s.whatsapp.net',
+        sessionJid, // Session owner is admin here
         'admin',
       );
 
@@ -1790,6 +1816,455 @@ describe('WhatsApp Groups Service - Unit Tests', () => {
       } catch (error: unknown) {
         expect((error as { code: string }).code).toBe('SESSION_NOT_CONNECTED');
       }
+    });
+  });
+
+  /**
+   * Feature: whatsapp-groups-filter-counts, Property 1: Filter Counts Accuracy
+   *
+   * *For any* set of groups belonging to a user, the filter counts returned by the API
+   * SHALL equal the actual count of groups matching each filter criteria:
+   * - `all` equals total number of groups
+   * - `admin` equals count of groups where user has admin/superadmin role
+   * - `archived` equals count of groups where `isArchived` is true
+   * - `muted` equals count of groups where `isMuted` is true
+   *
+   * **Validates: Requirements 3.2, 3.5, 3.6, 3.7, 4.2**
+   */
+  describe('Property: Filter Counts Accuracy', () => {
+    it('getFilterCounts returns accurate counts for all filter types', async () => {
+      const user = await createTestUser('filter-counts-1');
+      const session = await createTestSession(user.id, 'filter-counts-1');
+
+      // Update session with JID for admin matching
+      await prisma.whatsAppSession.update({
+        where: { id: session.id },
+        data: { jid: '1234567890@s.whatsapp.net' },
+      });
+
+      // Create groups with various states
+      const normalGroup = await createTestGroup(
+        session.id,
+        '1111111111@g.us',
+        'Normal Group',
+      );
+      const archivedGroup = await createTestGroup(
+        session.id,
+        '2222222222@g.us',
+        'Archived Group',
+      );
+      const mutedGroup = await createTestGroup(
+        session.id,
+        '3333333333@g.us',
+        'Muted Group',
+      );
+      const adminGroup = await createTestGroup(
+        session.id,
+        '4444444444@g.us',
+        'Admin Group',
+      );
+
+      // Set archived and muted states
+      await prisma.whatsAppGroup.update({
+        where: { id: archivedGroup.id },
+        data: { isArchived: true },
+      });
+      await prisma.whatsAppGroup.update({
+        where: { id: mutedGroup.id },
+        data: { isMuted: true },
+      });
+
+      // Add admin participant to adminGroup (matching session JID)
+      await createTestParticipant(
+        adminGroup.id,
+        '1234567890@s.whatsapp.net',
+        'admin',
+      );
+      // Add member participant to other groups
+      await createTestParticipant(
+        normalGroup.id,
+        '9999999999@s.whatsapp.net',
+        'member',
+      );
+
+      // Get filter counts
+      const counts = await whatsappGroupsService.getFilterCounts(user.id);
+
+      expect(counts.all).toBe(4);
+      expect(counts.archived).toBe(1);
+      expect(counts.muted).toBe(1);
+      expect(counts.admin).toBe(1);
+    });
+
+    it('property: filter counts match actual filtered group counts', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 5 }), // Number of groups
+          fc.array(fc.boolean(), { minLength: 1, maxLength: 5 }), // isArchived flags
+          fc.array(fc.boolean(), { minLength: 1, maxLength: 5 }), // isMuted flags
+          async (numGroups, archivedFlags, mutedFlags) => {
+            const user = await createTestUser(`fc-prop-${Date.now()}`);
+            const session = await createTestSession(
+              user.id,
+              `fc-prop-${Date.now()}`,
+            );
+
+            // Create groups with various states
+            let expectedArchived = 0;
+            let expectedMuted = 0;
+
+            for (let i = 0; i < numGroups; i++) {
+              const isArchived =
+                archivedFlags[i % archivedFlags.length] ?? false;
+              const isMuted = mutedFlags[i % mutedFlags.length] ?? false;
+
+              const group = await prisma.whatsAppGroup.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  jid: `${Date.now()}${i}@g.us`,
+                  name: `Group ${i}`,
+                  sessionId: session.id,
+                  memberCount: 0,
+                  isArchived,
+                  isMuted,
+                },
+              });
+              testGroups.push(group);
+
+              if (isArchived) expectedArchived++;
+              if (isMuted) expectedMuted++;
+            }
+
+            // Get filter counts
+            const counts = await whatsappGroupsService.getFilterCounts(user.id);
+
+            // Verify counts match expected values
+            expect(counts.all).toBe(numGroups);
+            expect(counts.archived).toBe(expectedArchived);
+            expect(counts.muted).toBe(expectedMuted);
+
+            return true;
+          },
+        ),
+        { numRuns: 10 },
+      );
+    });
+  });
+
+  /**
+   * Feature: whatsapp-groups-filter-counts, Property 2: Session Filter Isolation
+   *
+   * *For any* sessionId filter parameter, the returned counts SHALL only include
+   * groups belonging to that specific session.
+   *
+   * **Validates: Requirements 3.3**
+   */
+  describe('Property: Session Filter Isolation for Counts', () => {
+    it('getFilterCounts with sessionId only counts groups from that session', async () => {
+      const user = await createTestUser('session-counts-1');
+      const session1 = await createTestSession(user.id, 'session-counts-1a');
+      const session2 = await createTestSession(user.id, 'session-counts-1b');
+
+      // Create groups in session1
+      await createTestGroup(
+        session1.id,
+        '1111111111@g.us',
+        'Session 1 Group 1',
+      );
+      await createTestGroup(
+        session1.id,
+        '2222222222@g.us',
+        'Session 1 Group 2',
+      );
+
+      // Create groups in session2
+      await createTestGroup(
+        session2.id,
+        '3333333333@g.us',
+        'Session 2 Group 1',
+      );
+
+      // Get counts for session1 only
+      const counts1 = await whatsappGroupsService.getFilterCounts(
+        user.id,
+        session1.id,
+      );
+      expect(counts1.all).toBe(2);
+
+      // Get counts for session2 only
+      const counts2 = await whatsappGroupsService.getFilterCounts(
+        user.id,
+        session2.id,
+      );
+      expect(counts2.all).toBe(1);
+
+      // Get counts for all sessions
+      const countsAll = await whatsappGroupsService.getFilterCounts(user.id);
+      expect(countsAll.all).toBe(3);
+    });
+  });
+
+  /**
+   * Feature: whatsapp-groups-filter-counts, Property 3: User Authorization Boundary
+   *
+   * *For any* authenticated user, the filter counts SHALL only include groups
+   * from sessions owned by that user.
+   *
+   * **Validates: Requirements 3.4**
+   */
+  describe('Property: User Authorization Boundary for Counts', () => {
+    it('getFilterCounts only counts groups from user-owned sessions', async () => {
+      const user1 = await createTestUser('auth-counts-1');
+      const user2 = await createTestUser('auth-counts-2');
+
+      const session1 = await createTestSession(user1.id, 'auth-counts-1');
+      const session2 = await createTestSession(user2.id, 'auth-counts-2');
+
+      // Create groups for each user
+      await createTestGroup(session1.id, '1111111111@g.us', 'User 1 Group 1');
+      await createTestGroup(session1.id, '2222222222@g.us', 'User 1 Group 2');
+      await createTestGroup(session2.id, '3333333333@g.us', 'User 2 Group 1');
+
+      // User 1 should only see their 2 groups
+      const counts1 = await whatsappGroupsService.getFilterCounts(user1.id);
+      expect(counts1.all).toBe(2);
+
+      // User 2 should only see their 1 group
+      const counts2 = await whatsappGroupsService.getFilterCounts(user2.id);
+      expect(counts2.all).toBe(1);
+    });
+  });
+
+  /**
+   * Feature: whatsapp-groups-filter-counts, Property 5: Sync Persistence Round-Trip
+   *
+   * *For any* group data synced from the Go service, the isArchived, isMuted,
+   * and mutedUntil fields SHALL be correctly persisted and retrievable.
+   *
+   * **Validates: Requirements 6.1, 6.2, 6.3, 6.4**
+   */
+  describe('Property: Sync Persistence Round-Trip', () => {
+    it('persisted group fields match original sync data', async () => {
+      const user = await createTestUser('sync-roundtrip-1');
+      const session = await createTestSession(user.id, 'sync-roundtrip-1');
+
+      // Create a group with specific filter field values
+      const mutedUntilDate = new Date('2026-06-01T00:00:00Z');
+      const group = await prisma.whatsAppGroup.create({
+        data: {
+          id: crypto.randomUUID(),
+          jid: '1234567890@g.us',
+          name: 'Round Trip Test Group',
+          sessionId: session.id,
+          memberCount: 5,
+          isArchived: true,
+          isMuted: true,
+          mutedUntil: mutedUntilDate,
+        },
+      });
+      testGroups.push(group);
+
+      // Retrieve the group and verify fields
+      const retrieved = await whatsappGroupsService.getGroup(user.id, group.id);
+
+      expect(retrieved.isArchived).toBe(true);
+      expect(retrieved.isMuted).toBe(true);
+      expect(retrieved.mutedUntil).toEqual(mutedUntilDate);
+    });
+
+    it('property: for any filter field combination, persistence is accurate', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.boolean(),
+          fc.boolean(),
+          fc.option(
+            fc.date({
+              min: new Date('2026-01-01'),
+              max: new Date('2030-01-01'),
+            }),
+            { nil: null },
+          ),
+          async (isArchived, isMuted, mutedUntil) => {
+            const user = await createTestUser(`sync-prop-${Date.now()}`);
+            const session = await createTestSession(
+              user.id,
+              `sync-prop-${Date.now()}`,
+            );
+
+            // Create group with generated values
+            const group = await prisma.whatsAppGroup.create({
+              data: {
+                id: crypto.randomUUID(),
+                jid: `${Date.now()}@g.us`,
+                name: 'Property Test Group',
+                sessionId: session.id,
+                memberCount: 0,
+                isArchived,
+                isMuted,
+                mutedUntil,
+              },
+            });
+            testGroups.push(group);
+
+            // Retrieve and verify
+            const retrieved = await whatsappGroupsService.getGroup(
+              user.id,
+              group.id,
+            );
+
+            expect(retrieved.isArchived).toBe(isArchived);
+            expect(retrieved.isMuted).toBe(isMuted);
+            if (mutedUntil === null) {
+              expect(retrieved.mutedUntil).toBeNull();
+            } else {
+              expect(retrieved.mutedUntil?.getTime()).toBe(
+                mutedUntil.getTime(),
+              );
+            }
+
+            return true;
+          },
+        ),
+        { numRuns: 10 },
+      );
+    });
+  });
+
+  /**
+   * Feature: whatsapp-groups-filter-counts, Property 4: Admin Role JID Matching
+   *
+   * *For any* session with a JID, the admin count SHALL correctly match groups
+   * where the session's JID corresponds to a participant with admin/superadmin role.
+   *
+   * **Validates: Requirements 4.1**
+   */
+  describe('Property: Admin Role JID Matching', () => {
+    it('admin count matches groups where session JID is admin participant', async () => {
+      const user = await createTestUser('admin-jid-1');
+
+      // Create session with a JID
+      const session = await prisma.whatsAppSession.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: 'Admin JID Test Session',
+          userId: user.id,
+          status: 'connected',
+          jid: '1234567890@s.whatsapp.net',
+        },
+      });
+      testSessions.push(session);
+
+      // Create groups
+      const group1 = await createTestGroup(
+        session.id,
+        '1111111111@g.us',
+        'Admin Group',
+      );
+      const group2 = await createTestGroup(
+        session.id,
+        '2222222222@g.us',
+        'Member Group',
+      );
+      const group3 = await createTestGroup(
+        session.id,
+        '3333333333@g.us',
+        'Superadmin Group',
+      );
+
+      // Add participants - user is admin in group1, member in group2, superadmin in group3
+      await createTestParticipant(
+        group1.id,
+        '1234567890@s.whatsapp.net',
+        'admin',
+      );
+      await createTestParticipant(
+        group2.id,
+        '1234567890@s.whatsapp.net',
+        'member',
+      );
+      await createTestParticipant(
+        group3.id,
+        '1234567890@s.whatsapp.net',
+        'superadmin',
+      );
+
+      // Get filter counts
+      const counts = await whatsappGroupsService.getFilterCounts(user.id);
+
+      // Should count 2 admin groups (admin + superadmin roles)
+      expect(counts.all).toBe(3);
+      expect(counts.admin).toBe(2);
+    });
+
+    it('admin count is 0 when session has no JID', async () => {
+      const user = await createTestUser('admin-no-jid-1');
+
+      // Create session without a JID
+      const session = await prisma.whatsAppSession.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: 'No JID Session',
+          userId: user.id,
+          status: 'connected',
+          jid: null,
+        },
+      });
+      testSessions.push(session);
+
+      // Create group with admin participant
+      const group = await createTestGroup(
+        session.id,
+        '1111111111@g.us',
+        'Test Group',
+      );
+      await createTestParticipant(
+        group.id,
+        '9999999999@s.whatsapp.net',
+        'admin',
+      );
+
+      // Get filter counts
+      const counts = await whatsappGroupsService.getFilterCounts(user.id);
+
+      // Admin count should be 0 since session has no JID to match
+      expect(counts.all).toBe(1);
+      expect(counts.admin).toBe(0);
+    });
+
+    it('admin count handles JID with device suffix', async () => {
+      const user = await createTestUser('admin-device-1');
+
+      // Create session with JID that has device suffix
+      const session = await prisma.whatsAppSession.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: 'Device Suffix Session',
+          userId: user.id,
+          status: 'connected',
+          jid: '1234567890:123@s.whatsapp.net', // Has device suffix :123
+        },
+      });
+      testSessions.push(session);
+
+      // Create group
+      const group = await createTestGroup(
+        session.id,
+        '1111111111@g.us',
+        'Test Group',
+      );
+
+      // Add participant with base JID (no device suffix)
+      await createTestParticipant(
+        group.id,
+        '1234567890@s.whatsapp.net',
+        'admin',
+      );
+
+      // Get filter counts
+      const counts = await whatsappGroupsService.getFilterCounts(user.id);
+
+      // Should match despite device suffix difference
+      expect(counts.admin).toBe(1);
     });
   });
 });

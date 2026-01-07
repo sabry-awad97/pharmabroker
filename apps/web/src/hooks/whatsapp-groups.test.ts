@@ -152,6 +152,15 @@ describe('Response Shape Validation', () => {
             { nil: null },
           ),
           sessionId: fc.uuid(),
+          isArchived: fc.boolean(),
+          isMuted: fc.boolean(),
+          mutedUntil: fc.option(
+            fc.date({
+              min: new Date('2020-01-01'),
+              max: new Date('2030-01-01'),
+            }),
+            { nil: null },
+          ),
           memberCount: fc.integer({ min: 0, max: 1000 }),
           createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
           updatedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
@@ -342,6 +351,12 @@ describe('Response Shape Validation', () => {
           { nil: null },
         ),
         sessionId: fc.uuid(),
+        isArchived: fc.boolean(),
+        isMuted: fc.boolean(),
+        mutedUntil: fc.option(
+          fc.date({ min: new Date('2020-01-01'), max: new Date('2030-01-01') }),
+          { nil: null },
+        ),
         memberCount: fc.integer({ min: 0, max: 1000 }),
         createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
         updatedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
@@ -633,6 +648,9 @@ describe('Type Compatibility', () => {
       ephemeralTime: null,
       ownerJid: null,
       sessionId: '123e4567-e89b-12d3-a456-426614174001',
+      isArchived: false,
+      isMuted: false,
+      mutedUntil: null,
       memberCount: 10,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -643,6 +661,8 @@ describe('Type Compatibility', () => {
     expect(group.id).toBeDefined();
     expect(group.name).toBeDefined();
     expect(group.memberCount).toBeDefined();
+    expect(group.isArchived).toBeDefined();
+    expect(group.isMuted).toBeDefined();
   });
 
   it('WhatsAppGroupParticipant type has all required fields', () => {

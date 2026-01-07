@@ -785,8 +785,12 @@ func (c *WhatsmeowClient) GetJoinedGroups(ctx context.Context, sessionID string)
 			MemberCount: len(waGroup.Participants),
 			IsAnnounce:  waGroup.IsAnnounce,
 			IsLocked:    waGroup.IsLocked,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			// Archived and muted are user-specific settings managed at the application level
+			// WhatsApp API doesn't expose these as they're stored in the local client database
+			IsArchived: false,
+			IsMuted:    false,
+			CreatedAt:  now,
+			UpdatedAt:  now,
 		}
 
 		// Set optional fields

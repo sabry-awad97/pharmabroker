@@ -12,9 +12,11 @@ import {
   groupIdInput,
   participantFilterInput,
   syncGroupsInput,
+  filterCountsInput,
   groupsListResponse,
   participantsListResponse,
   syncGroupsResponse,
+  filterCountsResponse,
   whatsAppGroupWithParticipants,
 } from '@pharmabroker/schemas/whatsapp';
 
@@ -267,6 +269,9 @@ describe('WhatsApp Groups Router - Response Shape Consistency', () => {
             ephemeralTime: null,
             ownerJid: '1111111111@s.whatsapp.net',
             sessionId: '660e8400-e29b-41d4-a716-446655440000',
+            isArchived: false,
+            isMuted: false,
+            mutedUntil: null,
             memberCount: 10,
             createdAt: '2026-01-05T10:00:00Z',
             updatedAt: '2026-01-05T10:00:00Z',
@@ -431,6 +436,9 @@ describe('WhatsApp Groups Router - Response Shape Consistency', () => {
         ephemeralTime: null,
         ownerJid: '1111111111@s.whatsapp.net',
         sessionId: '660e8400-e29b-41d4-a716-446655440000',
+        isArchived: false,
+        isMuted: false,
+        mutedUntil: null,
         memberCount: 2,
         createdAt: '2026-01-05T10:00:00Z',
         updatedAt: '2026-01-05T10:00:00Z',
@@ -479,6 +487,9 @@ describe('WhatsApp Groups Router - Response Shape Consistency', () => {
         ephemeralTime: null,
         ownerJid: null,
         sessionId: '660e8400-e29b-41d4-a716-446655440000',
+        isArchived: false,
+        isMuted: false,
+        mutedUntil: null,
         memberCount: 0,
         createdAt: '2026-01-05T10:00:00Z',
         updatedAt: '2026-01-05T10:00:00Z',
@@ -506,6 +517,9 @@ describe('WhatsApp Groups Router - Response Shape Consistency', () => {
         ephemeralTime: null,
         ownerJid: null,
         sessionId: '660e8400-e29b-41d4-a716-446655440000',
+        isArchived: false,
+        isMuted: false,
+        mutedUntil: null,
         memberCount: 0,
         createdAt: '2026-01-05T10:00:00Z',
         updatedAt: '2026-01-05T10:00:00Z',
@@ -544,6 +558,9 @@ describe('WhatsApp Groups Router - Date Serialization', () => {
         ephemeralTime: null,
         ownerJid: null,
         sessionId: '660e8400-e29b-41d4-a716-446655440000',
+        isArchived: false,
+        isMuted: false,
+        mutedUntil: null,
         memberCount: 0,
         createdAt: '2026-01-05T10:00:00.000Z',
         updatedAt: '2026-01-05T10:00:00.000Z',
@@ -573,6 +590,9 @@ describe('WhatsApp Groups Router - Date Serialization', () => {
         ephemeralTime: null,
         ownerJid: null,
         sessionId: '660e8400-e29b-41d4-a716-446655440000',
+        isArchived: false,
+        isMuted: false,
+        mutedUntil: null,
         memberCount: 0,
         createdAt: new Date('2026-01-05T10:00:00Z'),
         updatedAt: new Date('2026-01-05T10:00:00Z'),
@@ -599,6 +619,9 @@ describe('WhatsApp Groups Router - Date Serialization', () => {
         ephemeralTime: null,
         ownerJid: null,
         sessionId: '660e8400-e29b-41d4-a716-446655440000',
+        isArchived: false,
+        isMuted: false,
+        mutedUntil: null,
         memberCount: 0,
         createdAt: 'not-a-date',
         updatedAt: '2026-01-05T10:00:00Z',
@@ -610,6 +633,268 @@ describe('WhatsApp Groups Router - Date Serialization', () => {
       const result =
         whatsAppGroupWithParticipants.safeParse(groupWithInvalidDate);
       expect(result.success).toBe(false);
+    });
+  });
+});
+
+// ============================================================================
+// Filter Counts Endpoint Tests
+// ============================================================================
+
+describe('WhatsApp Groups Router - Filter Counts', () => {
+  /**
+   * Tests for filterCountsInput schema validation
+   * **Validates: Requirements 3.1, 3.3**
+   */
+  describe('filterCountsInput validation', () => {
+    it('accepts empty input (all sessions)', () => {
+      const emptyInput = {};
+
+      const result = filterCountsInput.safeParse(emptyInput);
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts valid sessionId', () => {
+      const validInput = {
+        sessionId: '550e8400-e29b-41d4-a716-446655440000',
+      };
+
+      const result = filterCountsInput.safeParse(validInput);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid sessionId format', () => {
+      const invalidInput = {
+        sessionId: 'not-a-uuid',
+      };
+
+      const result = filterCountsInput.safeParse(invalidInput);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects empty string sessionId', () => {
+      const invalidInput = {
+        sessionId: '',
+      };
+
+      const result = filterCountsInput.safeParse(invalidInput);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  /**
+   * Tests for filterCountsResponse schema validation
+   * **Validates: Requirements 3.2, 3.5, 3.6, 3.7**
+   */
+  describe('filterCountsResponse validation', () => {
+    it('validates response with all counts', () => {
+      const validResponse = {
+        all: 100,
+        admin: 25,
+        archived: 10,
+        muted: 15,
+      };
+
+      const result = filterCountsResponse.safeParse(validResponse);
+      expect(result.success).toBe(true);
+    });
+
+    it('validates response with zero counts', () => {
+      const zeroResponse = {
+        all: 0,
+        admin: 0,
+        archived: 0,
+        muted: 0,
+      };
+
+      const result = filterCountsResponse.safeParse(zeroResponse);
+      expect(result.success).toBe(true);
+    });
+
+    it('validates response with large counts', () => {
+      const largeResponse = {
+        all: 10000,
+        admin: 5000,
+        archived: 2500,
+        muted: 1000,
+      };
+
+      const result = filterCountsResponse.safeParse(largeResponse);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects negative all count', () => {
+      const invalidResponse = {
+        all: -1,
+        admin: 0,
+        archived: 0,
+        muted: 0,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects negative admin count', () => {
+      const invalidResponse = {
+        all: 10,
+        admin: -5,
+        archived: 0,
+        muted: 0,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects negative archived count', () => {
+      const invalidResponse = {
+        all: 10,
+        admin: 5,
+        archived: -2,
+        muted: 0,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects negative muted count', () => {
+      const invalidResponse = {
+        all: 10,
+        admin: 5,
+        archived: 2,
+        muted: -1,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects missing all field', () => {
+      const invalidResponse = {
+        admin: 5,
+        archived: 2,
+        muted: 1,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects missing admin field', () => {
+      const invalidResponse = {
+        all: 10,
+        archived: 2,
+        muted: 1,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects missing archived field', () => {
+      const invalidResponse = {
+        all: 10,
+        admin: 5,
+        muted: 1,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects missing muted field', () => {
+      const invalidResponse = {
+        all: 10,
+        admin: 5,
+        archived: 2,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-integer counts', () => {
+      const invalidResponse = {
+        all: 10.5,
+        admin: 5,
+        archived: 2,
+        muted: 1,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects string counts', () => {
+      const invalidResponse = {
+        all: '10',
+        admin: 5,
+        archived: 2,
+        muted: 1,
+      };
+
+      const result = filterCountsResponse.safeParse(invalidResponse);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  /**
+   * Tests for filter counts consistency
+   * **Validates: Requirements 4.2**
+   */
+  describe('filter counts consistency', () => {
+    it('admin count can be less than or equal to all count', () => {
+      // This is a logical constraint - admin groups are a subset of all groups
+      const validResponse = {
+        all: 100,
+        admin: 25, // 25 <= 100 ✓
+        archived: 10,
+        muted: 15,
+      };
+
+      const result = filterCountsResponse.safeParse(validResponse);
+      expect(result.success).toBe(true);
+      expect(validResponse.admin).toBeLessThanOrEqual(validResponse.all);
+    });
+
+    it('archived count can be less than or equal to all count', () => {
+      const validResponse = {
+        all: 100,
+        admin: 25,
+        archived: 10, // 10 <= 100 ✓
+        muted: 15,
+      };
+
+      const result = filterCountsResponse.safeParse(validResponse);
+      expect(result.success).toBe(true);
+      expect(validResponse.archived).toBeLessThanOrEqual(validResponse.all);
+    });
+
+    it('muted count can be less than or equal to all count', () => {
+      const validResponse = {
+        all: 100,
+        admin: 25,
+        archived: 10,
+        muted: 15, // 15 <= 100 ✓
+      };
+
+      const result = filterCountsResponse.safeParse(validResponse);
+      expect(result.success).toBe(true);
+      expect(validResponse.muted).toBeLessThanOrEqual(validResponse.all);
+    });
+
+    it('all counts can be zero when no groups exist', () => {
+      const emptyResponse = {
+        all: 0,
+        admin: 0,
+        archived: 0,
+        muted: 0,
+      };
+
+      const result = filterCountsResponse.safeParse(emptyResponse);
+      expect(result.success).toBe(true);
     });
   });
 });

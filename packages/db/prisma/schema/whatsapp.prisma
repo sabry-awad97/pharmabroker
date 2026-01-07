@@ -34,11 +34,11 @@ enum WhatsAppSessionStatus {
 
 // WhatsApp Group Management
 model WhatsAppGroup {
-    id          String   @id @default(uuid())
+    id          String  @id @default(uuid())
     jid         String // Group JID (e.g., "123456789@g.us")
     name        String
     description String?
-    avatarUrl   String?  @map("avatar_url")
+    avatarUrl   String? @map("avatar_url")
 
     // Group settings
     isAnnounce    Boolean @default(false) @map("is_announce") // Only admins can send messages
@@ -47,16 +47,21 @@ model WhatsAppGroup {
     ephemeralTime Int?    @map("ephemeral_time") // Disappearing messages duration in seconds
 
     // Ownership
-    ownerJid  String? @map("owner_jid") // Group creator JID
-    sessionId String  @map("session_id")
+    ownerJid  String?         @map("owner_jid") // Group creator JID
+    sessionId String          @map("session_id")
     session   WhatsAppSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+    // Filter support
+    isArchived Boolean   @default(false) @map("is_archived") // Group is archived by user
+    isMuted    Boolean   @default(false) @map("is_muted") // Group notifications are muted
+    mutedUntil DateTime? @map("muted_until") // When mute expires (null = indefinite or not muted)
+
     // Metadata
-    memberCount   Int      @default(0) @map("member_count")
-    createdAt     DateTime @default(now()) @map("created_at")
-    updatedAt     DateTime @updatedAt @map("updated_at")
+    memberCount    Int       @default(0) @map("member_count")
+    createdAt      DateTime  @default(now()) @map("created_at")
+    updatedAt      DateTime  @updatedAt @map("updated_at")
     groupCreatedAt DateTime? @map("group_created_at") // When the group was created on WhatsApp
-    lastSyncAt    DateTime? @map("last_sync_at") // Last time group data was synced
+    lastSyncAt     DateTime? @map("last_sync_at") // Last time group data was synced
 
     // Relations
     participants WhatsAppGroupParticipant[]
@@ -69,10 +74,10 @@ model WhatsAppGroup {
 
 // WhatsApp Group Participants
 model WhatsAppGroupParticipant {
-    id       String                        @id @default(uuid())
-    jid      String // Participant JID (e.g., "1234567890@s.whatsapp.net")
-    role     WhatsAppGroupParticipantRole  @default(member)
-    
+    id   String                       @id @default(uuid())
+    jid  String // Participant JID (e.g., "1234567890@s.whatsapp.net")
+    role WhatsAppGroupParticipantRole @default(member)
+
     // Participant info (cached from WhatsApp)
     displayName String? @map("display_name")
     avatarUrl   String? @map("avatar_url")
@@ -82,9 +87,9 @@ model WhatsAppGroupParticipant {
     group   WhatsAppGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
     // Metadata
-    joinedAt  DateTime  @default(now()) @map("joined_at")
-    addedBy   String?   @map("added_by") // JID of who added this participant
-    updatedAt DateTime  @updatedAt @map("updated_at")
+    joinedAt  DateTime @default(now()) @map("joined_at")
+    addedBy   String?  @map("added_by") // JID of who added this participant
+    updatedAt DateTime @updatedAt @map("updated_at")
 
     @@unique([groupId, jid])
     @@index([groupId])

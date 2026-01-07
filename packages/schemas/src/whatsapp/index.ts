@@ -141,9 +141,11 @@ export {
   groupIdInput,
   syncGroupsInput,
   participantFilterInput,
+  filterCountsInput,
   groupsListResponse,
   participantsListResponse,
   syncGroupsResponse,
+  filterCountsResponse,
   type ParticipantRole,
   type GroupFilterType,
   type WhatsAppGroup,
@@ -153,9 +155,11 @@ export {
   type GroupIdInput,
   type SyncGroupsInput,
   type ParticipantFilterInput,
+  type FilterCountsInput,
   type GroupsListResponse,
   type ParticipantsListResponse,
   type SyncGroupsResponse,
+  type FilterCountsResponse,
 } from './groups';
 
 // Re-export branded types from common for convenience

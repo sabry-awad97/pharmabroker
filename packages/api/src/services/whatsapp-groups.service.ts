@@ -21,6 +21,7 @@ import type {
   ParticipantFilterInput,
   ParticipantsListResponse,
   SyncGroupsResponse,
+  FilterCountsResponse,
 } from '@pharmabroker/schemas/whatsapp';
 
 // ============================================================================
@@ -114,16 +115,57 @@ class WhatsAppGroupsService {
     // Apply filter type
     switch (filter) {
       case 'admin':
-        // Groups where user is admin or superadmin
-        where.participants = {
-          some: {
-            role: { in: ['admin', 'superadmin'] },
-          },
-        };
+        // Groups where the current user (session owner) is admin or superadmin
+        // Need to match session JID against participant JIDs
+        const sessionsQuery: { userId: string; id?: string } = { userId };
+        if (sessionId) {
+          sessionsQuery.id = sessionId;
+        }
+        const sessions = await prisma.whatsAppSession.findMany({
+          where: sessionsQuery,
+          select: { id: true, jid: true },
+        });
+
+        // Build OR conditions for each session's JID
+        const adminConditions: Array<{
+          sessionId: string;
+          participants: {
+            some: { jid: { startsWith: string }; role: { in: string[] } };
+          };
+        }> = [];
+
+        for (const session of sessions) {
+          if (!session.jid) continue;
+          // Normalize JID (remove device suffix)
+          const jidParts = session.jid.split(':');
+          const baseJid = jidParts[0] ?? session.jid;
+
+          adminConditions.push({
+            sessionId: session.id,
+            participants: {
+              some: {
+                jid: { startsWith: baseJid },
+                role: { in: ['admin', 'superadmin'] },
+              },
+            },
+          });
+        }
+
+        // If no sessions have JIDs, return empty result
+        if (adminConditions.length === 0) {
+          return { groups: [], nextCursor: undefined };
+        }
+
+        // Add OR conditions to where clause
+        (where as any).OR = adminConditions;
         break;
       case 'archived':
+        // Groups that are archived
+        (where as any).isArchived = true;
+        break;
       case 'muted':
-        // Placeholder for future implementation
+        // Groups that are muted
+        (where as any).isMuted = true;
         break;
       // 'all' - no additional filter
     }
@@ -260,6 +302,97 @@ class WhatsAppGroupsService {
     return {
       participants: resultParticipants,
       nextCursor,
+    };
+  }
+
+  /**
+   * Get filter counts for groups
+   * Returns counts for all, admin, archived, and muted filters
+   * Only counts groups belonging to sessions owned by the user
+   */
+  async getFilterCounts(
+    userId: string,
+    sessionId?: string,
+  ): Promise<FilterCountsResponse> {
+    // Build base where clause for user's sessions
+    const baseWhere: { session: { userId: string }; sessionId?: string } = {
+      session: { userId },
+    };
+
+    // Filter by specific session if provided
+    if (sessionId) {
+      baseWhere.sessionId = sessionId;
+    }
+
+    // Get all groups count
+    const allCount = await prisma.whatsAppGroup.count({
+      where: baseWhere,
+    });
+
+    // Get archived groups count
+    const archivedCount = await prisma.whatsAppGroup.count({
+      where: {
+        ...baseWhere,
+        isArchived: true,
+      },
+    });
+
+    // Get muted groups count
+    const mutedCount = await prisma.whatsAppGroup.count({
+      where: {
+        ...baseWhere,
+        isMuted: true,
+      },
+    });
+
+    // Get admin groups count
+    // Need to find groups where the session's JID matches a participant with admin/superadmin role
+    let adminCount = 0;
+
+    // Get sessions with their JIDs
+    const sessionsQuery: { userId: string; id?: string } = { userId };
+    if (sessionId) {
+      sessionsQuery.id = sessionId;
+    }
+
+    const sessions = await prisma.whatsAppSession.findMany({
+      where: sessionsQuery,
+      select: { id: true, jid: true },
+    });
+
+    // For each session with a JID, count groups where user is admin
+    for (const session of sessions) {
+      if (!session.jid) continue;
+
+      // Normalize JID for matching (remove device suffix if present)
+      // JID format: "1234567890:123@s.whatsapp.net" or "1234567890@s.whatsapp.net"
+      const jidParts = session.jid.split(':');
+      const baseJid = jidParts[0] ?? session.jid; // Get the phone number part
+
+      const sessionAdminCount = await prisma.whatsAppGroup.count({
+        where: {
+          sessionId: session.id,
+          participants: {
+            some: {
+              jid: {
+                startsWith: baseJid,
+              },
+              role: {
+                in: ['admin', 'superadmin'],
+              },
+            },
+          },
+        },
+      });
+
+      adminCount += sessionAdminCount;
+    }
+
+    return {
+      all: allCount,
+      admin: adminCount,
+      archived: archivedCount,
+      muted: mutedCount,
     };
   }
 
@@ -424,6 +557,11 @@ class WhatsAppGroupsService {
         isEphemeral: group.is_ephemeral ?? false,
         ephemeralTime: group.ephemeral_time ?? null,
         ownerJid: group.owner_jid ?? null,
+        // Filter support fields
+        isArchived: group.is_archived ?? false,
+        isMuted: group.is_muted ?? false,
+        mutedUntil: group.muted_until ? new Date(group.muted_until) : null,
+        // Metadata
         memberCount: group.member_count ?? 0,
         groupCreatedAt: group.group_created_at
           ? new Date(group.group_created_at)
@@ -440,6 +578,16 @@ class WhatsAppGroupsService {
         isEphemeral: group.is_ephemeral ?? false,
         ephemeralTime: group.ephemeral_time ?? null,
         ownerJid: group.owner_jid ?? null,
+        // Filter support fields - preserve existing values if not provided
+        // This allows the API to manage these fields independently
+        ...(group.is_archived !== undefined && {
+          isArchived: group.is_archived,
+        }),
+        ...(group.is_muted !== undefined && { isMuted: group.is_muted }),
+        ...(group.muted_until !== undefined && {
+          mutedUntil: group.muted_until ? new Date(group.muted_until) : null,
+        }),
+        // Metadata
         memberCount: group.member_count ?? 0,
         groupCreatedAt: group.group_created_at
           ? new Date(group.group_created_at)
@@ -538,6 +686,11 @@ interface GoGroupData {
   ephemeral_time?: number | null;
   owner_jid?: string | null;
   session_id?: string;
+  // Filter support fields
+  is_archived?: boolean;
+  is_muted?: boolean;
+  muted_until?: string | null;
+  // Metadata
   member_count?: number;
   created_at?: string;
   updated_at?: string;

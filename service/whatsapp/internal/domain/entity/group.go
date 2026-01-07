@@ -30,17 +30,22 @@ func (r ParticipantRole) String() string {
 
 // Group represents a WhatsApp group
 type Group struct {
-	ID             string        `json:"id"`
-	JID            string        `json:"jid"`
-	Name           string        `json:"name"`
-	Description    *string       `json:"description,omitempty"`
-	AvatarURL      *string       `json:"avatar_url,omitempty"`
-	IsAnnounce     bool          `json:"is_announce"`
-	IsLocked       bool          `json:"is_locked"`
-	IsEphemeral    bool          `json:"is_ephemeral"`
-	EphemeralTime  *int          `json:"ephemeral_time,omitempty"`
-	OwnerJID       *string       `json:"owner_jid,omitempty"`
-	SessionID      string        `json:"session_id"`
+	ID            string  `json:"id"`
+	JID           string  `json:"jid"`
+	Name          string  `json:"name"`
+	Description   *string `json:"description,omitempty"`
+	AvatarURL     *string `json:"avatar_url,omitempty"`
+	IsAnnounce    bool    `json:"is_announce"`
+	IsLocked      bool    `json:"is_locked"`
+	IsEphemeral   bool    `json:"is_ephemeral"`
+	EphemeralTime *int    `json:"ephemeral_time,omitempty"`
+	OwnerJID      *string `json:"owner_jid,omitempty"`
+	SessionID     string  `json:"session_id"`
+	// Filter support fields
+	IsArchived bool       `json:"is_archived"`
+	IsMuted    bool       `json:"is_muted"`
+	MutedUntil *time.Time `json:"muted_until,omitempty"`
+	// Metadata
 	MemberCount    int           `json:"member_count"`
 	CreatedAt      time.Time     `json:"created_at"`
 	UpdatedAt      time.Time     `json:"updated_at"`
@@ -109,18 +114,26 @@ func (g *Group) MarshalJSON() ([]byte, error) {
 		lastSyncAt = &t
 	}
 
+	var mutedUntil *string
+	if g.MutedUntil != nil {
+		t := g.MutedUntil.Format(time.RFC3339)
+		mutedUntil = &t
+	}
+
 	return json.Marshal(&struct {
 		*Alias
 		CreatedAt      string  `json:"created_at"`
 		UpdatedAt      string  `json:"updated_at"`
 		GroupCreatedAt *string `json:"group_created_at,omitempty"`
 		LastSyncAt     *string `json:"last_sync_at,omitempty"`
+		MutedUntil     *string `json:"muted_until,omitempty"`
 	}{
 		Alias:          (*Alias)(g),
 		CreatedAt:      g.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      g.UpdatedAt.Format(time.RFC3339),
 		GroupCreatedAt: groupCreatedAt,
 		LastSyncAt:     lastSyncAt,
+		MutedUntil:     mutedUntil,
 	})
 }
 

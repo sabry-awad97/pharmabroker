@@ -38,6 +38,7 @@ import {
   useWhatsappGroupsFlat,
   useSyncGroups,
   useInvalidateGroups,
+  useGroupFilterCounts,
 } from '@/hooks/whatsapp-groups';
 import { useWhatsappSessions } from '@/hooks/whatsapp';
 import {
@@ -116,10 +117,16 @@ function WhatsappGroupsPage() {
     ? sessions?.find(s => s.id === sessionId)?.name
     : undefined;
 
-  // Calculate filter counts
-  const filterCounts = {
-    all: groups?.length ?? 0,
-    admin: 0, // Would need server-side calculation
+  // Fetch filter counts from API
+  const { data: filterCountsData, isLoading: isLoadingCounts } =
+    useGroupFilterCounts({
+      sessionId: sessionId ?? undefined,
+    });
+
+  // Use API counts with fallback to zeros while loading
+  const filterCounts = filterCountsData ?? {
+    all: 0,
+    admin: 0,
     archived: 0,
     muted: 0,
   };

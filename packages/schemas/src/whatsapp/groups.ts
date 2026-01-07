@@ -48,6 +48,11 @@ export const whatsAppGroup = z.object({
   ephemeralTime: z.number().nullable(),
   ownerJid: z.string().nullable(),
   sessionId: unbranded.uuid,
+  // Filter support fields
+  isArchived: z.boolean(),
+  isMuted: z.boolean(),
+  mutedUntil: z.coerce.date().nullable(),
+  // Metadata
   memberCount: z.number().int().min(0),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -95,6 +100,11 @@ export const participantFilterInput = z.object({
   cursor: z.string().optional(),
 });
 
+/** Filter counts input */
+export const filterCountsInput = z.object({
+  sessionId: z.string().uuid().optional(),
+});
+
 // ============================================================================
 // Response Schemas
 // ============================================================================
@@ -117,6 +127,14 @@ export const syncGroupsResponse = z.object({
   errors: z.array(z.string()),
 });
 
+/** Filter counts response */
+export const filterCountsResponse = z.object({
+  all: z.number().int().min(0),
+  admin: z.number().int().min(0),
+  archived: z.number().int().min(0),
+  muted: z.number().int().min(0),
+});
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -135,3 +153,5 @@ export type ParticipantFilterInput = z.infer<typeof participantFilterInput>;
 export type GroupsListResponse = z.infer<typeof groupsListResponse>;
 export type ParticipantsListResponse = z.infer<typeof participantsListResponse>;
 export type SyncGroupsResponse = z.infer<typeof syncGroupsResponse>;
+export type FilterCountsInput = z.infer<typeof filterCountsInput>;
+export type FilterCountsResponse = z.infer<typeof filterCountsResponse>;
