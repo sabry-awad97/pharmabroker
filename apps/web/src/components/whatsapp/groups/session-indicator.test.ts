@@ -9,10 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import {
-  shouldShowSessionIndicator,
-  isGroupStale,
-} from '../components/whatsapp/groups/group-card';
+import { shouldShowSessionIndicator, isGroupStale } from './group-card';
 import type { SessionStatus } from '@pharmabroker/schemas/whatsapp';
 
 describe('Session Indicator Utility', () => {

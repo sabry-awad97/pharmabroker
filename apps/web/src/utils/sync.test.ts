@@ -15,6 +15,7 @@ import {
   validateSyncTimestampResult,
   type SyncTimestampResult,
 } from './sync';
+import { formatRelativeTime } from '@/lib/utils';
 
 describe('Sync Utility', () => {
   describe('isSyncTimestampValid', () => {
@@ -82,9 +83,9 @@ describe('Sync Utility', () => {
       expect(formatLastSyncTime(undefined)).toBe('Never');
     });
 
-    it('returns "Just now" for very recent sync', () => {
+    it('returns seconds ago for very recent sync', () => {
       const recentSync = new Date(Date.now() - 30 * 1000); // 30 seconds ago
-      expect(formatLastSyncTime(recentSync)).toBe('Just now');
+      expect(formatLastSyncTime(recentSync)).toBe('30 seconds ago');
     });
 
     it('returns minutes ago for sync within an hour', () => {
@@ -110,6 +111,30 @@ describe('Sync Utility', () => {
     it('returns days ago for sync within a week', () => {
       const sync = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 days ago
       expect(formatLastSyncTime(sync)).toBe('2 days ago');
+    });
+
+    /**
+     * Property 1: formatLastSyncTime Delegation
+     *
+     * For any non-null Date value, formatLastSyncTime SHALL produce the same
+     * output as formatRelativeTime when given the same input.
+     *
+     * Feature: web-app-code-cleanup, Property 1: formatLastSyncTime Delegation
+     * Validates: Requirements 2.4
+     */
+    it('Property 1: delegates to formatRelativeTime for non-null dates', () => {
+      fc.assert(
+        fc.property(
+          fc.date({
+            min: new Date('2020-01-01'),
+            max: new Date('2030-01-01'),
+          }),
+          date => {
+            return formatLastSyncTime(date) === formatRelativeTime(date);
+          },
+        ),
+        { numRuns: 100 },
+      );
     });
   });
 

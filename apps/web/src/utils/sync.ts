@@ -6,6 +6,8 @@
  * Requirements: 5.6
  */
 
+import { formatRelativeTime } from '@/lib/utils';
+
 /**
  * Validates that a sync timestamp was properly updated.
  *
@@ -48,6 +50,9 @@ export function isSyncDataStale(
 /**
  * Formats the last sync time for display.
  *
+ * Delegates to formatRelativeTime for actual formatting while providing
+ * null-safe handling with "Never" fallback.
+ *
  * @param lastSyncAt - The group's lastSyncAt timestamp
  * @returns Formatted string or "Never" if not synced
  */
@@ -57,28 +62,7 @@ export function formatLastSyncTime(
   if (!lastSyncAt) {
     return 'Never';
   }
-
-  const now = new Date();
-  const diffMs = now.getTime() - lastSyncAt.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSeconds < 60) {
-    return 'Just now';
-  }
-  if (diffMinutes < 60) {
-    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
-  }
-  if (diffHours < 24) {
-    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
-  }
-  if (diffDays < 7) {
-    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-  }
-
-  return lastSyncAt.toLocaleDateString();
+  return formatRelativeTime(lastSyncAt);
 }
 
 /**

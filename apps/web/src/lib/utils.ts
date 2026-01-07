@@ -40,9 +40,3 @@ export function formatRelativeTime(input: Date | string | number): string {
 
   return `0 seconds ${suffix}`;
 }
-
-export function extractPhoneNumber(jid: string): string {
-  // JID format: "201021347532:80@s.whatsapp.net" -> "201021347532"
-  const match = jid.match(/^(\d+)/);
-  return match ? match[1] : jid;
-}

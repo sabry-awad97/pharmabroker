@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
+import { extractPhoneFromJid } from '@/utils/jid';
+
 type DialogType = 'qr' | 'delete' | 'testMessage' | 'settings' | null;
 
 interface SelectedSession {
@@ -65,12 +67,6 @@ export const useWhatsappSessionStore = create<WhatsappSessionState>(set => ({
   resetTestMessageForm: () =>
     set({ testMessagePhone: '', testMessageText: DEFAULT_TEST_MESSAGE }),
 }));
-
-// Helper to extract phone number from JID
-function extractPhoneFromJid(jid: string): string {
-  const match = jid.match(/^(\d+)/);
-  return match ? match[1] : '';
-}
 
 // Selector hooks for better performance
 export const useActiveDialog = () =>

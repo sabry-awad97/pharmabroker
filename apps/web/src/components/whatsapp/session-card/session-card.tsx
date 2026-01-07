@@ -16,7 +16,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { formatRelativeTime, extractPhoneNumber } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/utils';
+import { extractPhoneFromJid } from '@/utils/jid';
 import {
   useReconnectWhatsappSession,
   useDisconnectWhatsappSession,
@@ -90,7 +91,7 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
             <CardTitle className="truncate text-base">{session.name}</CardTitle>
             {session.jid && (
               <p className="text-muted-foreground mt-0.5 text-sm font-medium tabular-nums">
-                +{extractPhoneNumber(session.jid)}
+                +{extractPhoneFromJid(session.jid)}
               </p>
             )}
           </div>
