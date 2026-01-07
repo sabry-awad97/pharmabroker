@@ -80,9 +80,17 @@ export class EventBridgeService {
   private pongTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect: boolean = true;
+  private onConnectedCallback?: () => void | Promise<void>;
 
   constructor(config: EventBridgeConfig) {
     this.config = config;
+  }
+
+  /**
+   * Set a callback to be called when connected (on initial or reconnect)
+   */
+  onConnected(callback: () => void | Promise<void>): void {
+    this.onConnectedCallback = callback;
   }
 
   /**
@@ -194,6 +202,24 @@ export class EventBridgeService {
           this.reconnectAttempts = 0;
           this.lastError = undefined;
           this.startPingInterval();
+
+          // Call onConnected callback (for session sync on startup/reconnect)
+          if (this.onConnectedCallback) {
+            try {
+              const result = this.onConnectedCallback();
+              if (result instanceof Promise) {
+                result.catch(err =>
+                  console.error(
+                    '[EventBridge] onConnected callback error:',
+                    err,
+                  ),
+                );
+              }
+            } catch (err) {
+              console.error('[EventBridge] onConnected callback error:', err);
+            }
+          }
+
           onAuthSuccess?.();
         } else {
           const error = new Error(

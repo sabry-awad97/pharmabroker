@@ -14,6 +14,7 @@ import (
 // PublisherConfig holds configuration for the WebSocket publisher
 type PublisherConfig struct {
 	URL            string
+	APIKey         string // API key for authentication with Node.js API
 	PingInterval   time.Duration
 	PongTimeout    time.Duration
 	ReconnectDelay time.Duration
@@ -35,13 +36,14 @@ func DefaultPublisherConfig() PublisherConfig {
 
 // GorillaEventPublisher implements EventPublisher using Gorilla WebSocket
 type GorillaEventPublisher struct {
-	config    PublisherConfig
-	conn      *websocket.Conn
-	mu        sync.RWMutex
-	queue     chan *entity.Event
-	done      chan struct{}
-	connected bool
-	wg        sync.WaitGroup
+	config        PublisherConfig
+	conn          *websocket.Conn
+	mu            sync.RWMutex
+	queue         chan *entity.Event
+	done          chan struct{}
+	connected     bool
+	authenticated bool
+	wg            sync.WaitGroup
 }
 
 // NewGorillaEventPublisher creates a new WebSocket event publisher
@@ -99,6 +101,27 @@ func (p *GorillaEventPublisher) connectWithRetry(ctx context.Context) error {
 			conn.SetPongHandler(func(string) error {
 				return conn.SetReadDeadline(time.Now().Add(p.config.PongTimeout + p.config.PingInterval))
 			})
+
+			// Send authentication message
+			if err := p.sendAuth(); err != nil {
+				p.mu.Lock()
+				_ = conn.Close()
+				p.conn = nil
+				p.connected = false
+				p.mu.Unlock()
+				lastErr = err
+				attempts++
+				if p.config.MaxReconnects > 0 && attempts >= p.config.MaxReconnects {
+					return errors.ErrConnectionFailed.WithCause(lastErr)
+				}
+				select {
+				case <-ctx.Done():
+					return errors.ErrConnectionFailed.WithCause(ctx.Err())
+				case <-time.After(delay):
+					delay = calculateBackoff(delay, 10*time.Minute)
+				}
+				continue
+			}
 
 			return nil
 		}
@@ -235,6 +258,59 @@ func (p *GorillaEventPublisher) pingLoop() {
 	}
 }
 
+// sendAuth sends authentication message and waits for response
+func (p *GorillaEventPublisher) sendAuth() error {
+	p.mu.RLock()
+	conn := p.conn
+	p.mu.RUnlock()
+
+	if conn == nil {
+		return errors.ErrDisconnected
+	}
+
+	// Send auth message
+	authMsg := map[string]string{
+		"type":    "auth",
+		"api_key": p.config.APIKey,
+	}
+	data, err := json.Marshal(authMsg)
+	if err != nil {
+		return err
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		return err
+	}
+
+	// Wait for auth response with timeout
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		return errors.ErrConnectionFailed.WithMessage("failed to read auth response")
+	}
+
+	var response struct {
+		Type    string `json:"type"`
+		Success bool   `json:"success"`
+		Message string `json:"message,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		return errors.ErrConnectionFailed.WithMessage("invalid auth response format")
+	}
+
+	if response.Type != "auth_response" || !response.Success {
+		return errors.ErrConnectionFailed.WithMessage("authentication failed: " + response.Message)
+	}
+
+	p.mu.Lock()
+	p.authenticated = true
+	p.mu.Unlock()
+
+	// Clear read deadline
+	conn.SetReadDeadline(time.Time{})
+
+	return nil
+}
+
 // sendEvent sends a single event over the WebSocket
 func (p *GorillaEventPublisher) sendEvent(event *entity.Event) error {
 	p.mu.RLock()
@@ -315,6 +391,22 @@ func (p *GorillaEventPublisher) reconnect() {
 			})
 
 			p.mu.Unlock()
+
+			// Send authentication message after reconnect
+			if err := p.sendAuth(); err != nil {
+				p.handleDisconnect()
+				attempts++
+				if p.config.MaxReconnects > 0 && attempts >= p.config.MaxReconnects {
+					return
+				}
+				select {
+				case <-p.done:
+					return
+				case <-time.After(delay):
+					delay = calculateBackoff(delay, 10*time.Minute)
+				}
+				continue
+			}
 			return
 		}
 		p.mu.Unlock()

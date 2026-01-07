@@ -48,7 +48,7 @@ interface WebSocketClient {
 // ============================================================================
 
 export class WhatsAppWebSocketService {
-  private connections: Map<WSContext, WebSocketClient> = new Map();
+  private currentClient: WebSocketClient | null = null;
   private apiKey: string;
 
   constructor(apiKey: string) {
@@ -59,22 +59,27 @@ export class WhatsAppWebSocketService {
    * Handle new WebSocket connection
    */
   handleOpen(ws: WSContext): void {
-    const client: WebSocketClient = {
+    // Close any existing connection
+    if (this.currentClient) {
+      console.log('[WhatsAppWS] Replacing existing connection');
+    }
+
+    this.currentClient = {
       ws,
       authenticated: false,
       connectedAt: new Date(),
     };
-    this.connections.set(ws, client);
     console.log('[WhatsAppWS] New connection from Go service');
   }
 
   /**
    * Handle WebSocket message
    */
-  async handleMessage(ws: WSContext, message: string): Promise<void> {
-    const client = this.connections.get(ws);
+  async handleMessage(_ws: WSContext, message: string): Promise<void> {
+    // Use current client regardless of ws reference (Hono gives different refs per callback)
+    const client = this.currentClient;
     if (!client) {
-      console.warn('[WhatsAppWS] Message from unknown client');
+      console.warn('[WhatsAppWS] Message but no active client');
       return;
     }
 
@@ -109,8 +114,8 @@ export class WhatsAppWebSocketService {
   /**
    * Handle WebSocket close
    */
-  handleClose(ws: WSContext): void {
-    this.connections.delete(ws);
+  handleClose(_ws: WSContext): void {
+    this.currentClient = null;
     console.log('[WhatsAppWS] Connection closed');
   }
 
@@ -261,27 +266,21 @@ export class WhatsAppWebSocketService {
    * Get connection count
    */
   getConnectionCount(): number {
-    return this.connections.size;
+    return this.currentClient ? 1 : 0;
   }
 
   /**
    * Get authenticated connection count
    */
   getAuthenticatedCount(): number {
-    let count = 0;
-    for (const client of this.connections.values()) {
-      if (client.authenticated) {
-        count++;
-      }
-    }
-    return count;
+    return this.currentClient?.authenticated ? 1 : 0;
   }
 
   /**
    * Check if any Go service is connected
    */
   isConnected(): boolean {
-    return this.getAuthenticatedCount() > 0;
+    return this.currentClient?.authenticated ?? false;
   }
 
   /**

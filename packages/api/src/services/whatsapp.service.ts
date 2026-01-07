@@ -377,6 +377,71 @@ class WhatsAppSessionService {
 
     return { status: session.status as SessionStatus };
   }
+
+  /** Get all sessions with status 'connected' or 'connecting' (for startup sync) */
+  async getSessionsRequiringSync(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      jid: string | null;
+      autoConnect: boolean;
+    }>
+  > {
+    return prisma.whatsAppSession.findMany({
+      where: {
+        status: { in: ['connected', 'connecting'] },
+      },
+      select: {
+        id: true,
+        name: true,
+        jid: true,
+        autoConnect: true,
+      },
+    });
+  }
+
+  /** Update session status directly (internal use, no user check) */
+  async updateSessionStatusDirect(
+    sessionId: string,
+    status: SessionStatus,
+  ): Promise<void> {
+    await prisma.whatsAppSession.update({
+      where: { id: sessionId },
+      data: { status },
+    });
+  }
+
+  /** Reconnect session internally (no user authentication check) */
+  async reconnectSessionInternal(
+    sessionId: string,
+  ): Promise<{ success: boolean; message?: string }> {
+    const session = await prisma.whatsAppSession.findUnique({
+      where: { id: sessionId },
+      select: { jid: true, status: true },
+    });
+
+    if (!session) {
+      throw new ORPCError('SESSION_NOT_FOUND', {
+        message: 'Session not found',
+      });
+    }
+
+    // Update status to connecting before calling Go service
+    await prisma.whatsAppSession.update({
+      where: { id: sessionId },
+      data: { status: 'connecting' },
+    });
+
+    try {
+      return await goClient.reconnectSession(
+        sessionId,
+        session.jid ?? undefined,
+      );
+    } catch (error) {
+      // On error, mark as disconnected (sync service will handle this)
+      throw error;
+    }
+  }
 }
 
 // ============================================================================
@@ -429,6 +494,18 @@ class WhatsAppService {
 
   getSessionStatus(sessionId: string) {
     return this.sessions.getSessionStatus(sessionId);
+  }
+
+  getSessionsRequiringSync() {
+    return this.sessions.getSessionsRequiringSync();
+  }
+
+  updateSessionStatusDirect(sessionId: string, status: SessionStatus) {
+    return this.sessions.updateSessionStatusDirect(sessionId, status);
+  }
+
+  reconnectSessionInternal(sessionId: string) {
+    return this.sessions.reconnectSessionInternal(sessionId);
   }
 
   // Messaging (Go Service)

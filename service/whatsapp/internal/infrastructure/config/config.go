@@ -101,6 +101,7 @@ type WhatsAppConfig struct {
 // WebSocketConfig holds WebSocket configuration for API server connection
 type WebSocketConfig struct {
 	URL            string        `mapstructure:"url"`
+	APIKey         string        `mapstructure:"api_key"` // API key for authentication with Node.js API
 	PingInterval   time.Duration `mapstructure:"ping_interval"`
 	PongTimeout    time.Duration `mapstructure:"pong_timeout"`
 	ReconnectDelay time.Duration `mapstructure:"reconnect_delay"`
@@ -307,6 +308,7 @@ func setDefaults(v *viper.Viper) {
 
 	// WebSocket defaults
 	v.SetDefault("websocket.url", "ws://localhost:3000/ws/whatsapp")
+	v.SetDefault("websocket.api_key", "") // API key for authenticating with Node.js API
 	v.SetDefault("websocket.ping_interval", 30*time.Second)
 	v.SetDefault("websocket.pong_timeout", 10*time.Second)
 	v.SetDefault("websocket.reconnect_delay", 5*time.Second)
@@ -367,6 +369,7 @@ func bindEnvVars(v *viper.Viper) {
 
 	// WebSocket
 	_ = v.BindEnv("websocket.url", "WHATSAPP_WEBSOCKET_URL", "API_WEBHOOK_URL")
+	_ = v.BindEnv("websocket.api_key", "WHATSAPP_WEBSOCKET_API_KEY")
 	_ = v.BindEnv("websocket.ping_interval", "WHATSAPP_WEBSOCKET_PING_INTERVAL")
 	_ = v.BindEnv("websocket.pong_timeout", "WHATSAPP_WEBSOCKET_PONG_TIMEOUT")
 	_ = v.BindEnv("websocket.reconnect_delay", "WHATSAPP_WEBSOCKET_RECONNECT_DELAY")

@@ -18,6 +18,7 @@ require (
 	golang.org/x/time v0.14.0
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.42.2
+	pgregory.net/rapid v1.2.0
 )
 
 require (

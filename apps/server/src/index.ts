@@ -5,11 +5,9 @@ import { RPCHandler } from '@orpc/server/fetch';
 import { ZodToJsonSchemaConverter } from '@orpc/zod/zod4';
 import { createContext } from '@pharmabroker/api/context';
 import { appRouter } from '@pharmabroker/api/routers/index';
-import {
-  initEventBridge,
-  getEventBridge,
-} from '@pharmabroker/api/services/event-bridge.service';
+import { getEventBridge } from '@pharmabroker/api/services/event-bridge.service';
 import { getWhatsAppWebSocketService } from '@pharmabroker/api/services/whatsapp-ws.service';
+import { syncSessionsOnStartup } from '@pharmabroker/api/services/session-sync.service';
 import { auth } from '@pharmabroker/auth';
 import { env } from '@pharmabroker/env/server';
 import { Hono } from 'hono';
@@ -133,24 +131,38 @@ app.get(
 );
 
 // Initialize Event Bridge on server startup
-initEventBridge({
+const eventBridge = getEventBridge({
   wsUrl: env.WHATSAPP_WS_URL,
   apiKey: env.WHATSAPP_API_KEY,
   pingInterval: 30000, // 30 seconds
   pongTimeout: 10000, // 10 seconds
   reconnectDelay: 1000, // 1 second initial
   maxReconnectDelay: 60000, // 60 seconds max
-})
-  .then(() => {
-    console.log('[Server] Event Bridge connected successfully');
-  })
-  .catch(error => {
-    console.error(
-      '[Server] Event Bridge connection failed, will retry:',
-      error,
-    );
-    // The EventBridgeService will automatically retry with exponential backoff
-  });
+});
+
+// Flag to ensure session sync only runs once on initial startup
+let hasRunInitialSync = false;
+
+// Set up onConnected callback - runs on both initial connect and reconnect
+eventBridge.onConnected(async () => {
+  console.log('[Server] Event Bridge connected');
+
+  // Only sync sessions on initial startup, not on every reconnect
+  if (!hasRunInitialSync) {
+    hasRunInitialSync = true;
+    console.log('[Server] Running initial session sync...');
+    await syncSessionsOnStartup();
+  }
+});
+
+// Start connection (will retry automatically on failure)
+eventBridge.connect().catch(error => {
+  console.error(
+    '[Server] Event Bridge initial connection failed, will retry:',
+    error,
+  );
+  // onConnected callback will be called when it eventually connects
+});
 
 // Initialize WhatsApp WebSocket service
 getWhatsAppWebSocketService();

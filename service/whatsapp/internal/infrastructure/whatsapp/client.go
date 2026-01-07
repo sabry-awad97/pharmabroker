@@ -227,9 +227,7 @@ func (c *WhatsmeowClient) sendMessageInternal(ctx context.Context, msg *entity.M
 
 	// Parse recipient JID - strip leading + from phone number
 	phoneNumber := string(msg.To)
-	if strings.HasPrefix(phoneNumber, "+") {
-		phoneNumber = phoneNumber[1:]
-	}
+	phoneNumber = strings.TrimPrefix(phoneNumber, "+")
 	recipientJID, err := types.ParseJID(phoneNumber + "@s.whatsapp.net")
 	if err != nil {
 		return errors.ErrInvalidPhoneNumber.WithCause(err)

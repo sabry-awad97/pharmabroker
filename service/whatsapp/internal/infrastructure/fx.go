@@ -69,6 +69,7 @@ func NewWhatsmeowClient(lc fx.Lifecycle, cfg *config.Config) (*whatsapp.Whatsmeo
 func NewGorillaEventPublisher(lc fx.Lifecycle, cfg *config.Config) repository.EventPublisher {
 	publisherConfig := websocket.PublisherConfig{
 		URL:            cfg.WebSocket.URL,
+		APIKey:         cfg.WebSocket.APIKey,
 		PingInterval:   cfg.WebSocket.PingInterval,
 		PongTimeout:    cfg.WebSocket.PongTimeout,
 		ReconnectDelay: cfg.WebSocket.ReconnectDelay,

@@ -59,6 +59,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      whatsapp-dev:
+        condition: service_started
     develop:
       watch:
         - action: sync+restart
@@ -120,6 +122,7 @@ services:
       WHATSAPP_MESSAGE_RATE_LIMIT: 30
       # WebSocket configuration for API server connection
       WHATSAPP_WEBSOCKET_URL: ws://api:3000/ws/whatsapp
+      WHATSAPP_WEBSOCKET_API_KEY: ${WHATSAPP_API_KEY:-dev-api-key}
       WHATSAPP_WEBSOCKET_PING_INTERVAL: 30s
       WHATSAPP_WEBSOCKET_PONG_TIMEOUT: 10s
       WHATSAPP_WEBSOCKET_RECONNECT_DELAY: 5s
