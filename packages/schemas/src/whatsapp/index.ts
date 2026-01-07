@@ -70,9 +70,11 @@ export {
   messageFailedEvent,
   messageEvent,
   // Connection events
+  connectionConnectingEvent,
   connectionConnectedEvent,
   connectionDisconnectedEvent,
   connectionLoggedOutEvent,
+  connectionFailedEvent,
   connectionEvent,
   // Session events
   sessionQrScannedEvent,
@@ -97,9 +99,11 @@ export {
   type MessageReadEvent,
   type MessageFailedEvent,
   type MessageEvent,
+  type ConnectionConnectingEvent,
   type ConnectionConnectedEvent,
   type ConnectionDisconnectedEvent,
   type ConnectionLoggedOutEvent,
+  type ConnectionFailedEvent,
   type ConnectionEvent,
   type SessionQrScannedEvent,
   type SessionAuthenticatedEvent,

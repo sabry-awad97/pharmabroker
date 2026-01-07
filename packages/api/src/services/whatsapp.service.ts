@@ -283,7 +283,10 @@ class WhatsAppSessionService {
       });
     }
 
-    // Update status to connecting
+    // Store original status to restore on HTTP error
+    const originalStatus = session.status;
+
+    // Update status to connecting before calling Go service
     await prisma.whatsAppSession.update({
       where: { id },
       data: { status: 'connecting' },
@@ -291,23 +294,13 @@ class WhatsAppSessionService {
 
     try {
       // Pass JID to Go service for device lookup after restart
-      const result = await goClient.reconnectSession(
-        id,
-        session.jid ?? undefined,
-      );
-
-      // Update status to connected on success
-      await prisma.whatsAppSession.update({
-        where: { id },
-        data: { status: 'connected' },
-      });
-
-      return result;
+      // Status updates (connected/disconnected) will come via WebSocket events
+      return await goClient.reconnectSession(id, session.jid ?? undefined);
     } catch (error) {
-      // Revert status on failure
+      // On HTTP error, restore original status (requirement 3.4)
       await prisma.whatsAppSession.update({
         where: { id },
-        data: { status: 'disconnected' },
+        data: { status: originalStatus },
       });
       throw error;
     }
@@ -327,19 +320,9 @@ class WhatsAppSessionService {
       });
     }
 
-    try {
-      const result = await goClient.disconnectSession(id);
-
-      // Update status to disconnected
-      await prisma.whatsAppSession.update({
-        where: { id },
-        data: { status: 'disconnected' },
-      });
-
-      return result;
-    } catch (error) {
-      throw error;
-    }
+    // Forward request to Go service
+    // Status update to 'disconnected' will come via WebSocket events
+    return goClient.disconnectSession(id);
   }
 
   async updateSessionStatus(
@@ -377,6 +360,22 @@ class WhatsAppSessionService {
       select: { id: true, name: true },
     });
     return sessions;
+  }
+
+  /** Get session status by ID (for idempotent updates) */
+  async getSessionStatus(
+    sessionId: string,
+  ): Promise<{ status: SessionStatus } | null> {
+    const session = await prisma.whatsAppSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true },
+    });
+
+    if (!session) {
+      return null;
+    }
+
+    return { status: session.status as SessionStatus };
   }
 }
 
@@ -426,6 +425,10 @@ class WhatsAppService {
 
   getAutoConnectSessions() {
     return this.sessions.getAutoConnectSessions();
+  }
+
+  getSessionStatus(sessionId: string) {
+    return this.sessions.getSessionStatus(sessionId);
   }
 
   // Messaging (Go Service)

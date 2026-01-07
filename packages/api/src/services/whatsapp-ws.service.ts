@@ -178,43 +178,82 @@ export class WhatsAppWebSocketService {
 
   /**
    * Handle session status synchronization based on connection events
+   * Implements idempotent updates - skips database write if status already matches
    */
   private async handleSessionStatusSync(event: WhatsAppEvent): Promise<void> {
     try {
+      let newStatus:
+        | 'pending'
+        | 'connecting'
+        | 'connected'
+        | 'disconnected'
+        | null = null;
+      let jid: string | undefined;
+
       switch (event.type) {
+        case 'connection.connecting':
+          newStatus = 'connecting';
+          break;
+
         case 'connection.connected':
-          await whatsappService.updateSessionStatus(
-            event.session_id,
-            'connected',
-          );
+          newStatus = 'connected';
           break;
 
         case 'connection.disconnected':
-          await whatsappService.updateSessionStatus(
-            event.session_id,
-            'disconnected',
-          );
+          newStatus = 'disconnected';
+          break;
+
+        case 'connection.failed':
+          newStatus = 'disconnected';
           break;
 
         case 'session.authenticated':
-          if (event.data?.jid) {
-            await whatsappService.updateSessionStatus(
-              event.session_id,
-              'connected',
-              event.data.jid,
-            );
-          }
+          newStatus = 'connected';
+          jid = event.data?.jid;
           break;
 
         case 'connection.logged_out':
-          await whatsappService.updateSessionStatus(
-            event.session_id,
-            'disconnected',
-          );
+          newStatus = 'disconnected';
           break;
+      }
+
+      // Only update if we have a status change to make
+      if (newStatus && 'session_id' in event) {
+        await this.updateStatusIdempotent(event.session_id, newStatus, jid);
       }
     } catch (error) {
       console.error('[WhatsAppWS] Failed to sync session status:', error);
+    }
+  }
+
+  /**
+   * Update session status idempotently - skips database write if status already matches
+   */
+  private async updateStatusIdempotent(
+    sessionId: string,
+    newStatus: 'pending' | 'connecting' | 'connected' | 'disconnected',
+    jid?: string,
+  ): Promise<void> {
+    try {
+      // Fetch current session status
+      const currentSession = await whatsappService.getSessionStatus(sessionId);
+
+      // Skip update if status already matches (idempotent)
+      if (currentSession?.status === newStatus && !jid) {
+        console.log(
+          `[WhatsAppWS] Status unchanged: ${sessionId} already ${currentSession.status}`,
+        );
+        return;
+      }
+
+      // Perform the update
+      await whatsappService.updateSessionStatus(sessionId, newStatus, jid);
+      console.log(`[WhatsAppWS] Status updated: ${sessionId} → ${newStatus}`);
+    } catch (error) {
+      console.error(
+        `[WhatsAppWS] Failed to update status for ${sessionId}:`,
+        error,
+      );
     }
   }
 

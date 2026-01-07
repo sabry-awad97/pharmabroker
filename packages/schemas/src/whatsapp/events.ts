@@ -102,6 +102,12 @@ export const messageEvent = z.union([
 // Connection Events (unbranded for output)
 // ============================================================================
 
+export const connectionConnectingEvent = z.object({
+  type: z.literal('connection.connecting'),
+  session_id: unbranded.uuid,
+  timestamp: z.iso.datetime(),
+});
+
 export const connectionConnectedEvent = z.object({
   type: z.literal('connection.connected'),
   session_id: unbranded.uuid,
@@ -117,11 +123,23 @@ export const connectionLoggedOutEvent = z.object({
   session_id: unbranded.uuid,
 });
 
+export const connectionFailedEvent = z.object({
+  type: z.literal('connection.failed'),
+  session_id: unbranded.uuid,
+  timestamp: z.iso.datetime(),
+  data: z.object({
+    error_code: z.string(),
+    error_message: z.string(),
+  }),
+});
+
 /** Union of all connection events */
-export const connectionEvent = z.union([
+export const connectionEvent = z.discriminatedUnion('type', [
+  connectionConnectingEvent,
   connectionConnectedEvent,
   connectionDisconnectedEvent,
   connectionLoggedOutEvent,
+  connectionFailedEvent,
 ]);
 
 // ============================================================================
@@ -166,9 +184,11 @@ export const whatsappEvent = z.discriminatedUnion('type', [
   messageReadEvent,
   messageFailedEvent,
   // Connection events
+  connectionConnectingEvent,
   connectionConnectedEvent,
   connectionDisconnectedEvent,
   connectionLoggedOutEvent,
+  connectionFailedEvent,
   // Session events
   sessionQrScannedEvent,
   sessionAuthenticatedEvent,
@@ -182,9 +202,11 @@ export const whatsappEventType = z.enum([
   'message.delivered',
   'message.read',
   'message.failed',
+  'connection.connecting',
   'connection.connected',
   'connection.disconnected',
   'connection.logged_out',
+  'connection.failed',
   'session.qr_scanned',
   'session.authenticated',
   'session.expired',
@@ -221,11 +243,15 @@ export type MessageReadEvent = z.infer<typeof messageReadEvent>;
 export type MessageFailedEvent = z.infer<typeof messageFailedEvent>;
 export type MessageEvent = z.infer<typeof messageEvent>;
 
+export type ConnectionConnectingEvent = z.infer<
+  typeof connectionConnectingEvent
+>;
 export type ConnectionConnectedEvent = z.infer<typeof connectionConnectedEvent>;
 export type ConnectionDisconnectedEvent = z.infer<
   typeof connectionDisconnectedEvent
 >;
 export type ConnectionLoggedOutEvent = z.infer<typeof connectionLoggedOutEvent>;
+export type ConnectionFailedEvent = z.infer<typeof connectionFailedEvent>;
 export type ConnectionEvent = z.infer<typeof connectionEvent>;
 
 export type SessionQrScannedEvent = z.infer<typeof sessionQrScannedEvent>;

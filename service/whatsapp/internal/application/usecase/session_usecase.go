@@ -127,9 +127,13 @@ func (uc *SessionUseCase) ReconnectSessionWithJID(ctx context.Context, sessionID
 	// Update status to connecting
 	_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusConnecting)
 
+	// Publish connection.connecting event
+	uc.publishConnectionEvent(ctx, sessionID, entity.EventTypeConnectionConnecting)
+
 	// Attempt to connect using stored credentials
 	if uc.waClient == nil {
 		_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusDisconnected)
+		uc.publishConnectionFailedEvent(ctx, sessionID, "CLIENT_UNAVAILABLE", "WhatsApp client not available")
 		return errors.ErrConnectionFailed.WithMessage("WhatsApp client not available")
 	}
 
@@ -140,6 +144,7 @@ func (uc *SessionUseCase) ReconnectSessionWithJID(ctx context.Context, sessionID
 
 	if err := uc.waClient.Connect(ctx, sessionID); err != nil {
 		_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusDisconnected)
+		uc.publishConnectionFailedEvent(ctx, sessionID, "CONNECTION_ERROR", err.Error())
 		return errors.ErrConnectionFailed.WithCause(err)
 	}
 
@@ -154,6 +159,39 @@ func (uc *SessionUseCase) ReconnectSessionWithJID(ctx context.Context, sessionID
 	return nil
 }
 
+// publishConnectionEvent publishes a connection event via WebSocket
+func (uc *SessionUseCase) publishConnectionEvent(ctx context.Context, sessionID string, eventType entity.EventType) {
+	if uc.publisher == nil || !uc.publisher.IsConnected() {
+		return
+	}
+
+	event := entity.NewEvent(
+		uuid.New().String(),
+		eventType,
+		sessionID,
+		nil,
+	)
+	_ = uc.publisher.Publish(ctx, event)
+}
+
+// publishConnectionFailedEvent publishes a connection.failed event with error details
+func (uc *SessionUseCase) publishConnectionFailedEvent(ctx context.Context, sessionID, errorCode, errorMessage string) {
+	if uc.publisher == nil || !uc.publisher.IsConnected() {
+		return
+	}
+
+	event, err := entity.NewConnectionFailedEvent(
+		uuid.New().String(),
+		sessionID,
+		errorCode,
+		errorMessage,
+	)
+	if err != nil {
+		return
+	}
+	_ = uc.publisher.Publish(ctx, event)
+}
+
 // DisconnectSession disconnects a session without deleting it (keeps credentials)
 func (uc *SessionUseCase) DisconnectSession(ctx context.Context, sessionID string) error {
 	// Disconnect the WhatsApp client if connected
@@ -165,6 +203,9 @@ func (uc *SessionUseCase) DisconnectSession(ctx context.Context, sessionID strin
 
 	// Update status to disconnected
 	_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusDisconnected)
+
+	// Publish connection.disconnected event
+	uc.publishConnectionEvent(ctx, sessionID, entity.EventTypeDisconnected)
 
 	return nil
 }

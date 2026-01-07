@@ -19,9 +19,11 @@ const (
 
 // Connection events
 const (
-	EventTypeConnected    EventType = "connection.connected"
-	EventTypeDisconnected EventType = "connection.disconnected"
-	EventTypeLoggedOut    EventType = "connection.logged_out"
+	EventTypeConnectionConnecting EventType = "connection.connecting"
+	EventTypeConnected            EventType = "connection.connected"
+	EventTypeDisconnected         EventType = "connection.disconnected"
+	EventTypeLoggedOut            EventType = "connection.logged_out"
+	EventTypeConnectionFailed     EventType = "connection.failed"
 )
 
 // Session events
@@ -40,9 +42,10 @@ const (
 func (et EventType) IsValid() bool {
 	switch et {
 	case EventTypeMessageReceived, EventTypeMessageSent, EventTypeMessageDelivered,
-		EventTypeMessageRead, EventTypeMessageFailed, EventTypeConnected,
-		EventTypeDisconnected, EventTypeLoggedOut, EventTypeQRScanned,
-		EventTypeAuthenticated, EventTypeSessionExpired, EventTypeQRCode:
+		EventTypeMessageRead, EventTypeMessageFailed, EventTypeConnectionConnecting,
+		EventTypeConnected, EventTypeDisconnected, EventTypeLoggedOut,
+		EventTypeConnectionFailed, EventTypeQRScanned, EventTypeAuthenticated,
+		EventTypeSessionExpired, EventTypeQRCode:
 		return true
 	}
 	return false
@@ -66,7 +69,8 @@ func (et EventType) IsMessageEvent() bool {
 // IsConnectionEvent returns true if this is a connection-related event
 func (et EventType) IsConnectionEvent() bool {
 	switch et {
-	case EventTypeConnected, EventTypeDisconnected, EventTypeLoggedOut:
+	case EventTypeConnectionConnecting, EventTypeConnected, EventTypeDisconnected,
+		EventTypeLoggedOut, EventTypeConnectionFailed:
 		return true
 	}
 	return false
@@ -131,4 +135,19 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 // UnmarshalData unmarshals the event data into the provided target
 func (e *Event) UnmarshalData(target any) error {
 	return json.Unmarshal(e.Data, target)
+}
+
+// ConnectionFailedData represents the data payload for connection.failed events
+type ConnectionFailedData struct {
+	ErrorCode    string `json:"error_code"`
+	ErrorMessage string `json:"error_message"`
+}
+
+// NewConnectionFailedEvent creates a new connection.failed event with error details
+func NewConnectionFailedEvent(id, sessionID string, errorCode, errorMessage string) (*Event, error) {
+	data := ConnectionFailedData{
+		ErrorCode:    errorCode,
+		ErrorMessage: errorMessage,
+	}
+	return NewEventWithPayload(id, EventTypeConnectionFailed, sessionID, data)
 }
