@@ -5,7 +5,11 @@
  * Provides type-safe queries, mutations, and streaming subscriptions.
  */
 
-import type { SessionID, WhatsAppEvent } from '@pharmabroker/schemas/whatsapp';
+import type {
+  Session,
+  SessionID,
+  WhatsAppEvent,
+} from '@pharmabroker/schemas/whatsapp';
 
 import { isDefinedError } from '@orpc/client';
 import {
@@ -131,13 +135,83 @@ export function useDeleteWhatsappSession() {
 
 /**
  * Reconnect a WhatsApp session
+ *
+ * Enhanced with optimistic updates for immediate UI feedback.
+ *
+ * Feature: frontend-realtime-sync
+ * Requirements: 2.2, 2.3, 2.4
  */
 export function useReconnectWhatsappSession() {
   const queryClient = useQueryClient();
 
   return useMutation(
     orpc.whatsapp.reconnectSession.mutationOptions({
-      onSuccess: (_, variables) => {
+      // Requirement 2.2: Optimistically update status to 'connecting' before server responds
+      onMutate: async variables => {
+        // Cancel any outgoing refetches to avoid overwriting optimistic update
+        await queryClient.cancelQueries({
+          queryKey: whatsappKeys.sessions.detail(variables.id),
+        });
+        await queryClient.cancelQueries({
+          queryKey: whatsappKeys.sessions.list(),
+        });
+
+        // Snapshot the previous values for rollback
+        const previousSession = queryClient.getQueryData<Session>(
+          whatsappKeys.sessions.detail(variables.id),
+        );
+        const previousSessions = queryClient.getQueryData<Session[]>(
+          whatsappKeys.sessions.list(),
+        );
+
+        // Optimistically update session detail to 'connecting' status
+        if (previousSession) {
+          queryClient.setQueryData<Session>(
+            whatsappKeys.sessions.detail(variables.id),
+            {
+              ...previousSession,
+              status: 'connecting',
+            },
+          );
+        }
+
+        // Optimistically update sessions list
+        if (previousSessions) {
+          queryClient.setQueryData<Session[]>(
+            whatsappKeys.sessions.list(),
+            previousSessions.map(session =>
+              session.id === variables.id
+                ? { ...session, status: 'connecting' as const }
+                : session,
+            ),
+          );
+        }
+
+        // Return context with previous values for rollback
+        return { previousSession, previousSessions };
+      },
+
+      // Requirement 2.3: Rollback on mutation failure
+      onError: (_error, variables, context) => {
+        // Restore previous session detail
+        if (context?.previousSession) {
+          queryClient.setQueryData(
+            whatsappKeys.sessions.detail(variables.id),
+            context.previousSession,
+          );
+        }
+
+        // Restore previous sessions list
+        if (context?.previousSessions) {
+          queryClient.setQueryData(
+            whatsappKeys.sessions.list(),
+            context.previousSessions,
+          );
+        }
+      },
+
+      // Requirement 2.4: Invalidate queries on settle (success or failure)
+      onSettled: (_, __, variables) => {
         queryClient.invalidateQueries({
           queryKey: whatsappKeys.sessions.detail(variables.id),
         });
@@ -151,13 +225,83 @@ export function useReconnectWhatsappSession() {
 
 /**
  * Disconnect a WhatsApp session
+ *
+ * Enhanced with optimistic updates for immediate UI feedback.
+ *
+ * Feature: frontend-realtime-sync
+ * Requirements: 2.1, 2.3, 2.4
  */
 export function useDisconnectWhatsappSession() {
   const queryClient = useQueryClient();
 
   return useMutation(
     orpc.whatsapp.disconnectSession.mutationOptions({
-      onSuccess: (_, variables) => {
+      // Requirement 2.1: Optimistically update status to 'disconnecting' before server responds
+      onMutate: async variables => {
+        // Cancel any outgoing refetches to avoid overwriting optimistic update
+        await queryClient.cancelQueries({
+          queryKey: whatsappKeys.sessions.detail(variables.id),
+        });
+        await queryClient.cancelQueries({
+          queryKey: whatsappKeys.sessions.list(),
+        });
+
+        // Snapshot the previous values for rollback
+        const previousSession = queryClient.getQueryData<Session>(
+          whatsappKeys.sessions.detail(variables.id),
+        );
+        const previousSessions = queryClient.getQueryData<Session[]>(
+          whatsappKeys.sessions.list(),
+        );
+
+        // Optimistically update session detail to 'disconnecting' status
+        if (previousSession) {
+          queryClient.setQueryData<Session>(
+            whatsappKeys.sessions.detail(variables.id),
+            {
+              ...previousSession,
+              status: 'disconnected', // Use 'disconnected' as closest status
+            },
+          );
+        }
+
+        // Optimistically update sessions list
+        if (previousSessions) {
+          queryClient.setQueryData<Session[]>(
+            whatsappKeys.sessions.list(),
+            previousSessions.map(session =>
+              session.id === variables.id
+                ? { ...session, status: 'disconnected' as const }
+                : session,
+            ),
+          );
+        }
+
+        // Return context with previous values for rollback
+        return { previousSession, previousSessions };
+      },
+
+      // Requirement 2.3: Rollback on mutation failure
+      onError: (_error, variables, context) => {
+        // Restore previous session detail
+        if (context?.previousSession) {
+          queryClient.setQueryData(
+            whatsappKeys.sessions.detail(variables.id),
+            context.previousSession,
+          );
+        }
+
+        // Restore previous sessions list
+        if (context?.previousSessions) {
+          queryClient.setQueryData(
+            whatsappKeys.sessions.list(),
+            context.previousSessions,
+          );
+        }
+      },
+
+      // Requirement 2.4: Invalidate queries on settle (success or failure)
+      onSettled: (_, __, variables) => {
         queryClient.invalidateQueries({
           queryKey: whatsappKeys.sessions.detail(variables.id),
         });

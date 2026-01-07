@@ -13,6 +13,11 @@ import type { WhatsAppGroup } from '@pharmabroker/schemas';
 
 describe('GroupCard', () => {
   // Arbitrary for generating valid WhatsApp groups
+  // Use integer timestamps to avoid invalid Date objects
+  const validDateArb = fc
+    .integer({ min: 1577836800000, max: 1893456000000 })
+    .map(ts => new Date(ts));
+
   const validGroupArb: fc.Arbitrary<WhatsAppGroup> = fc.record({
     id: fc.uuid(),
     jid: fc.string({ minLength: 10, maxLength: 30 }).map(s => `${s}@g.us`),
@@ -35,16 +40,10 @@ describe('GroupCard', () => {
     ),
     sessionId: fc.uuid(),
     memberCount: fc.integer({ min: 0, max: 1000 }),
-    createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
-    updatedAt: fc.date({ min: new Date('2020-01-01'), max: new Date() }),
-    groupCreatedAt: fc.option(
-      fc.date({ min: new Date('2020-01-01'), max: new Date() }),
-      { nil: null },
-    ),
-    lastSyncAt: fc.option(
-      fc.date({ min: new Date('2020-01-01'), max: new Date() }),
-      { nil: null },
-    ),
+    createdAt: validDateArb,
+    updatedAt: validDateArb,
+    groupCreatedAt: fc.option(validDateArb, { nil: null }),
+    lastSyncAt: fc.option(validDateArb, { nil: null }),
   });
 
   describe('extractGroupCardData', () => {
@@ -237,19 +236,7 @@ describe('GroupCard', () => {
       fc.assert(
         fc.property(validGroupArb, group => {
           const data = extractGroupCardData(group);
-
-          // Handle invalid dates (NaN)
-          const lastSyncAtValid =
-            group.lastSyncAt && !isNaN(group.lastSyncAt.getTime());
-          const expectedActivity = lastSyncAtValid
-            ? group.lastSyncAt
-            : group.updatedAt;
-
-          // If both are invalid, skip this test case
-          if (!expectedActivity || isNaN(expectedActivity.getTime())) {
-            return true;
-          }
-
+          const expectedActivity = group.lastSyncAt ?? group.updatedAt;
           return data.lastActivity?.getTime() === expectedActivity?.getTime();
         }),
         { numRuns: 100 },
