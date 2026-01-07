@@ -149,10 +149,14 @@ func TestReady_AllComponentsHealthy(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Equal(t, "ready", response["status"])
-	assert.NotNil(t, response["components"])
+	// Response is wrapped in APIResponse format: { "success": true, "data": { ... } }
+	assert.True(t, response["success"].(bool))
+	data := response["data"].(map[string]interface{})
 
-	components := response["components"].([]interface{})
+	assert.Equal(t, "ready", data["status"])
+	assert.NotNil(t, data["components"])
+
+	components := data["components"].([]interface{})
 	assert.Len(t, components, 3)
 
 	// Verify all components are healthy
@@ -181,10 +185,14 @@ func TestReady_SomeComponentsUnhealthy(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Equal(t, "not_ready", response["status"])
-	assert.NotNil(t, response["components"])
+	// Response is wrapped in APIResponse format: { "success": false, "data": { ... } }
+	assert.False(t, response["success"].(bool))
+	data := response["data"].(map[string]interface{})
 
-	components := response["components"].([]interface{})
+	assert.Equal(t, "not_ready", data["status"])
+	assert.NotNil(t, data["components"])
+
+	components := data["components"].([]interface{})
 	assert.Len(t, components, 3)
 
 	// Find the unhealthy component
@@ -218,9 +226,13 @@ func TestReady_AllComponentsUnhealthy(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Equal(t, "not_ready", response["status"])
+	// Response is wrapped in APIResponse format: { "success": false, "data": { ... } }
+	assert.False(t, response["success"].(bool))
+	data := response["data"].(map[string]interface{})
 
-	components := response["components"].([]interface{})
+	assert.Equal(t, "not_ready", data["status"])
+
+	components := data["components"].([]interface{})
 	for _, comp := range components {
 		c := comp.(map[string]interface{})
 		assert.False(t, c["healthy"].(bool))
@@ -242,8 +254,12 @@ func TestReady_NoCheckers(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	assert.Equal(t, "ready", response["status"])
-	components := response["components"].([]interface{})
+	// Response is wrapped in APIResponse format: { "success": true, "data": { ... } }
+	assert.True(t, response["success"].(bool))
+	data := response["data"].(map[string]interface{})
+
+	assert.Equal(t, "ready", data["status"])
+	components := data["components"].([]interface{})
 	assert.Empty(t, components)
 }
 

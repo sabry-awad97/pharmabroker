@@ -778,6 +778,22 @@ func (c *WhatsmeowClient) GetJoinedGroups(ctx context.Context, sessionID string)
 	now := time.Now()
 
 	for _, waGroup := range waGroups {
+		// Fetch chat settings (archived/muted) from whatsmeow store
+		isArchived := false
+		isMuted := false
+		var mutedUntil *time.Time
+
+		if client.Store != nil && client.Store.ChatSettings != nil {
+			chatSettings, err := client.Store.ChatSettings.GetChatSettings(ctx, waGroup.JID)
+			if err == nil {
+				isArchived = chatSettings.Archived
+				isMuted = chatSettings.MutedUntil != time.Time{}
+				if isMuted {
+					mutedUntil = &chatSettings.MutedUntil
+				}
+			}
+		}
+
 		group := &entity.Group{
 			JID:         waGroup.JID.String(),
 			Name:        waGroup.Name,
@@ -785,12 +801,11 @@ func (c *WhatsmeowClient) GetJoinedGroups(ctx context.Context, sessionID string)
 			MemberCount: len(waGroup.Participants),
 			IsAnnounce:  waGroup.IsAnnounce,
 			IsLocked:    waGroup.IsLocked,
-			// Archived and muted are user-specific settings managed at the application level
-			// WhatsApp API doesn't expose these as they're stored in the local client database
-			IsArchived: false,
-			IsMuted:    false,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			IsArchived:  isArchived,
+			IsMuted:     isMuted,
+			MutedUntil:  mutedUntil,
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		}
 
 		// Set optional fields
