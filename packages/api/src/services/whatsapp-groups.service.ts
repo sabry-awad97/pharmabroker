@@ -23,6 +23,7 @@ import type {
   SyncGroupsResponse,
   FilterCountsResponse,
 } from '@pharmabroker/schemas/whatsapp';
+import { escapeSqlWildcards } from '../utils/prisma';
 
 // ============================================================================
 // Sync Configuration
@@ -107,7 +108,7 @@ class WhatsAppGroupsService {
     // Search by name (case-insensitive)
     if (search) {
       where.name = {
-        contains: search,
+        contains: escapeSqlWildcards(search),
         mode: 'insensitive',
       };
     }
@@ -269,9 +270,10 @@ class WhatsAppGroupsService {
 
     // Search by name or JID (case-insensitive)
     if (search) {
+      const escapedSearch = escapeSqlWildcards(search);
       where.OR = [
-        { displayName: { contains: search, mode: 'insensitive' } },
-        { jid: { contains: search, mode: 'insensitive' } },
+        { displayName: { contains: escapedSearch, mode: 'insensitive' } },
+        { jid: { contains: escapedSearch, mode: 'insensitive' } },
       ];
     }
 
