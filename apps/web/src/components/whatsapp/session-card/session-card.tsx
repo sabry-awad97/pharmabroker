@@ -1,6 +1,7 @@
 import type { Session } from '@/hooks/whatsapp';
 
 import { cva } from 'class-variance-authority';
+import { Zap } from 'lucide-react';
 
 import {
   Card,
@@ -10,6 +11,11 @@ import {
   CardTitle,
   CardAction,
 } from '@/components/ui/card';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { formatRelativeTime, extractPhoneNumber } from '@/lib/utils';
 import {
   useReconnectWhatsappSession,
@@ -46,8 +52,12 @@ interface WhatsappSessionCardProps {
 }
 
 export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
-  const { openQRDialog, openDeleteDialog, openTestMessageDialog } =
-    useDialogActions();
+  const {
+    openQRDialog,
+    openDeleteDialog,
+    openTestMessageDialog,
+    openSettingsDialog,
+  } = useDialogActions();
 
   const reconnectSession = useReconnectWhatsappSession();
   const disconnectSession = useDisconnectWhatsappSession();
@@ -60,6 +70,7 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
     id: session.id,
     name: session.name,
     jid: session.jid,
+    auto_connect: session.auto_connect,
   };
 
   const handleReconnect = () => {
@@ -87,6 +98,16 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
 
         <CardAction>
           <div className="flex items-center gap-2">
+            {session.auto_connect && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/10">
+                    <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>Auto-connect enabled</TooltipContent>
+              </Tooltip>
+            )}
             <SessionStatusBadge status={status} />
             <SessionActionsMenu
               status={status}
@@ -98,6 +119,7 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
               onConnect={handleReconnect}
               onDisconnect={handleDisconnect}
               onSendTest={() => openTestMessageDialog(sessionData)}
+              onSettings={() => openSettingsDialog(sessionData)}
               onDelete={() => openDeleteDialog(sessionData)}
             />
           </div>

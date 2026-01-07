@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-type DialogType = 'qr' | 'delete' | 'testMessage' | null;
+type DialogType = 'qr' | 'delete' | 'testMessage' | 'settings' | null;
 
 interface SelectedSession {
   id: string;
   name: string;
   jid?: string;
+  auto_connect?: boolean;
 }
 
 interface WhatsappSessionState {
@@ -18,6 +19,7 @@ interface WhatsappSessionState {
   openQRDialog: (session: SelectedSession) => void;
   openDeleteDialog: (session: SelectedSession) => void;
   openTestMessageDialog: (session: SelectedSession) => void;
+  openSettingsDialog: (session: SelectedSession) => void;
   closeDialog: () => void;
 
   // Test message form state
@@ -52,6 +54,9 @@ export const useWhatsappSessionStore = create<WhatsappSessionState>(set => ({
       testMessagePhone: session.jid ? extractPhoneFromJid(session.jid) : '',
     }),
 
+  openSettingsDialog: session =>
+    set({ activeDialog: 'settings', selectedSession: session }),
+
   closeDialog: () => set({ activeDialog: null, selectedSession: null }),
 
   // Test message form actions
@@ -80,6 +85,7 @@ export const useDialogActions = () =>
       openQRDialog: state.openQRDialog,
       openDeleteDialog: state.openDeleteDialog,
       openTestMessageDialog: state.openTestMessageDialog,
+      openSettingsDialog: state.openSettingsDialog,
       closeDialog: state.closeDialog,
     })),
   );

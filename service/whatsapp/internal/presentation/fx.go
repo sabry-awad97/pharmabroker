@@ -28,13 +28,12 @@ func NewHTTPHandler(
 	healthUC *usecase.HealthUseCase,
 	groupsUC *usecase.GroupsUseCase,
 ) *http.Handler {
-	return http.NewHandlerFull(sessionUC, messageUC, healthUC, groupsUC)
+	return http.NewHandler(sessionUC, messageUC, healthUC, groupsUC)
 }
 
 // NewRouter creates a new Gin router with all routes configured
 func NewRouter(
-	sessionUC *usecase.SessionUseCase,
-	messageUC *usecase.MessageUseCase,
+	handler *http.Handler,
 	cfg *config.Config,
 ) *gin.Engine {
 	// Create rate limiter if enabled
@@ -60,7 +59,7 @@ func NewRouter(
 		APIKeyConfig:         &cfg.APIKey,
 	}
 
-	return http.NewRouter(sessionUC, messageUC, routerConfig)
+	return http.NewRouter(handler, routerConfig)
 }
 
 // NewQRHandler creates a new QR WebSocket handler

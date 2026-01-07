@@ -38,10 +38,7 @@ func NewMessageUseCase(
 	cfg *config.Config,
 ) *usecase.MessageUseCase {
 	// Convert rate limit from per minute to per second
-	rateLimitPerSecond := cfg.WhatsApp.MessageRateLimit / 60
-	if rateLimitPerSecond < 1 {
-		rateLimitPerSecond = 1
-	}
+	rateLimitPerSecond := max(cfg.WhatsApp.MessageRateLimit/60, 1)
 
 	msgConfig := usecase.MessageUseCaseConfig{
 		MaxRetries:         3,
@@ -70,11 +67,6 @@ func NewHealthUseCase(checkers *infrastructure.HealthCheckers) *usecase.HealthUs
 }
 
 // NewGroupsUseCase creates a new groups use case
-func NewGroupsUseCase(waClient repository.WhatsAppClient) *usecase.GroupsUseCase {
-	// Cast to GroupFetcher interface
-	groupFetcher, ok := waClient.(repository.GroupFetcher)
-	if !ok {
-		return usecase.NewGroupsUseCase(nil)
-	}
+func NewGroupsUseCase(groupFetcher repository.GroupFetcher) *usecase.GroupsUseCase {
 	return usecase.NewGroupsUseCase(groupFetcher)
 }

@@ -6,6 +6,7 @@ import {
   WifiOff,
   Loader2,
   MessageSquare,
+  Settings,
 } from 'lucide-react';
 
 import {
@@ -69,6 +70,7 @@ interface SessionActionsMenuProps {
   onConnect: () => void;
   onDisconnect: () => void;
   onSendTest: () => void;
+  onSettings: () => void;
   onDelete: () => void;
 }
 
@@ -82,6 +84,7 @@ export function SessionActionsMenu({
   onConnect,
   onDisconnect,
   onSendTest,
+  onSettings,
   onDelete,
 }: SessionActionsMenuProps) {
   const needsAuth = status === 'pending' || status === 'logged_out';
@@ -155,6 +158,16 @@ export function SessionActionsMenu({
             <DropdownMenuSeparator className="my-1" />
           </>
         )}
+
+        <MenuItem
+          icon={<Settings className="text-muted-foreground h-4 w-4" />}
+          iconBg="bg-muted"
+          label="Settings"
+          description="Configure session"
+          onClick={onSettings}
+        />
+
+        <DropdownMenuSeparator className="my-1" />
 
         <MenuItem
           icon={<Trash2 className="h-4 w-4" />}

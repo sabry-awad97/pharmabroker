@@ -18,6 +18,14 @@ var Module = fx.Module("infrastructure",
 	fx.Provide(
 		NewInMemorySessionRepository,
 		NewWhatsmeowClient,
+		fx.Annotate(
+			func(c *whatsapp.WhatsmeowClient) *whatsapp.WhatsmeowClient { return c },
+			fx.As(new(repository.WhatsAppClient)),
+		),
+		fx.Annotate(
+			func(c *whatsapp.WhatsmeowClient) *whatsapp.WhatsmeowClient { return c },
+			fx.As(new(repository.GroupFetcher)),
+		),
 		NewGorillaEventPublisher,
 		NewHealthCheckers,
 		NewMediaUploader,
@@ -31,7 +39,7 @@ func NewInMemorySessionRepository() repository.SessionRepository {
 }
 
 // NewWhatsmeowClient creates a new WhatsApp client
-func NewWhatsmeowClient(lc fx.Lifecycle, cfg *config.Config) (repository.WhatsAppClient, error) {
+func NewWhatsmeowClient(lc fx.Lifecycle, cfg *config.Config) (*whatsapp.WhatsmeowClient, error) {
 	clientConfig := whatsapp.ClientConfig{
 		DBPath:           cfg.WhatsApp.DBPath,
 		QRTimeout:        cfg.WhatsApp.QRTimeout,
@@ -101,14 +109,7 @@ func NewHealthCheckers(
 }
 
 // NewMediaUploader creates a new media uploader
-func NewMediaUploader(waClient repository.WhatsAppClient, cfg *config.Config) repository.MediaUploader {
-	// Get the underlying WhatsmeowClient
-	whatsmeowClient, ok := waClient.(*whatsapp.WhatsmeowClient)
-	if !ok {
-		// If not a WhatsmeowClient, return nil (media upload won't be available)
-		return nil
-	}
-
+func NewMediaUploader(waClient *whatsapp.WhatsmeowClient, cfg *config.Config) repository.MediaUploader {
 	// Create media constraints
 	constraints := valueobject.DefaultMediaConstraints()
 
@@ -119,10 +120,10 @@ func NewMediaUploader(waClient repository.WhatsAppClient, cfg *config.Config) re
 	downloader := whatsapp.NewHTTPMediaDownloader(downloaderConfig, constraints)
 
 	// Create the media uploader
-	mediaUploader := whatsapp.NewWhatsmeowMediaUploader(whatsmeowClient, downloader, constraints)
+	mediaUploader := whatsapp.NewWhatsmeowMediaUploader(waClient, downloader, constraints)
 
 	// Wire the media uploader to the client for sending media messages
-	whatsmeowClient.SetMediaUploader(mediaUploader)
+	waClient.SetMediaUploader(mediaUploader)
 
 	return mediaUploader
 }

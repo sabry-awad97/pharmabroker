@@ -19,7 +19,8 @@ import (
 
 func setupMessageTestRouter(messageUC *usecase.MessageUseCase) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return httpHandler.NewRouter(nil, messageUC, httpHandler.DefaultRouterConfig())
+	handler := httpHandler.NewHandler(nil, messageUC, nil, nil)
+	return httpHandler.NewRouter(handler, httpHandler.DefaultRouterConfig())
 }
 
 // ==================== POST /api/messages Tests ====================

@@ -9,6 +9,7 @@ import { useDeleteWhatsappSession } from '@/hooks/whatsapp';
 import { WhatsappQRDialog } from '../qr-dialog';
 import { SendTestMessageDialog } from './send-test-message-dialog';
 import { DeleteSessionDialog } from './delete-session-dialog';
+import { SessionSettingsDialog } from './session-settings-dialog';
 
 export function WhatsappSessionDialogs() {
   const activeDialog = useActiveDialog();
@@ -50,6 +51,16 @@ export function WhatsappSessionDialogs() {
         onOpenChange={open => !open && closeDialog()}
         onConfirm={handleDelete}
         isDeleting={deleteSession.isPending}
+      />
+
+      <SessionSettingsDialog
+        session={{
+          id: selectedSession.id,
+          name: selectedSession.name,
+          auto_connect: selectedSession.auto_connect ?? false,
+        }}
+        open={activeDialog === 'settings'}
+        onOpenChange={open => !open && closeDialog()}
       />
     </>
   );

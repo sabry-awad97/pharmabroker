@@ -22,7 +22,8 @@ import (
 
 func setupTestRouter(sessionUC *usecase.SessionUseCase) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return httpHandler.NewRouter(sessionUC, nil, httpHandler.DefaultRouterConfig())
+	handler := httpHandler.NewHandler(sessionUC, nil, nil, nil)
+	return httpHandler.NewRouter(handler, httpHandler.DefaultRouterConfig())
 }
 
 // ==================== POST /api/internal/sessions/register Tests ====================

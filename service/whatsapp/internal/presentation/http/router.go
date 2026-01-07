@@ -2,7 +2,6 @@ package http
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/pharmabroker/whatsapp/internal/application/usecase"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/config"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/metrics"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/ratelimit"
@@ -121,16 +120,8 @@ func registerRoutes(router *gin.Engine, handler *Handler, routerConfig RouterCon
 	messages.POST("", handler.SendMessage)
 }
 
-// NewRouter creates a new Gin router with all routes configured
-func NewRouter(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUseCase, routerConfig RouterConfig) *gin.Engine {
-	router := setupRouter(routerConfig)
-	handler := NewHandler(sessionUC, messageUC)
-	registerRoutes(router, handler, routerConfig)
-	return router
-}
-
-// NewRouterWithHandler creates a new Gin router with a pre-configured handler
-func NewRouterWithHandler(handler *Handler, routerConfig RouterConfig) *gin.Engine {
+// NewRouter creates a new Gin router with a pre-configured handler
+func NewRouter(handler *Handler, routerConfig RouterConfig) *gin.Engine {
 	router := setupRouter(routerConfig)
 	registerRoutes(router, handler, routerConfig)
 	return router

@@ -3,6 +3,12 @@
  *
  * Service layer for WhatsApp group management.
  * Handles business logic, authorization, and Go service communication.
+ *
+ * Performance Optimizations:
+ * - Batch processing: Groups processed in batches of 50, participants in batches of 500
+ * - Parallel execution: Up to 5 groups processed concurrently
+ * - Transaction batching: Database operations grouped for efficiency
+ * - Performance monitoring: Warnings logged if sync exceeds 30 seconds
  */
 
 import { ORPCError } from '@orpc/server';
@@ -16,6 +22,39 @@ import type {
   ParticipantsListResponse,
   SyncGroupsResponse,
 } from '@pharmabroker/schemas/whatsapp';
+
+// ============================================================================
+// Sync Configuration
+// ============================================================================
+
+const SYNC_CONFIG = {
+  /** Maximum groups to process in a single batch */
+  GROUP_BATCH_SIZE: 50,
+  /** Maximum participants to upsert in a single transaction */
+  PARTICIPANT_BATCH_SIZE: 500,
+  /** Maximum groups to process concurrently */
+  PARALLEL_GROUPS: 5,
+  /** Log warning if sync exceeds this duration (ms) */
+  PERFORMANCE_WARN_MS: 30000,
+} as const;
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Split an array into chunks of specified size
+ */
+function chunkArray<T>(array: T[], size: number): T[][] {
+  if (size <= 0) return [array];
+  if (array.length === 0) return [];
+
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
 
 // ============================================================================
 // Types
@@ -227,11 +266,14 @@ class WhatsAppGroupsService {
   /**
    * Sync groups from WhatsApp via Go service
    * Verifies session belongs to user and is connected before syncing
+   * Uses batch processing and parallel execution for performance
    */
   async syncGroups(
     userId: string,
     sessionId: string,
   ): Promise<SyncGroupsResponse> {
+    const startTime = Date.now();
+
     // Verify session belongs to user
     const session = await prisma.whatsAppSession.findFirst({
       where: {
@@ -266,7 +308,11 @@ class WhatsAppGroupsService {
 
       const json = (await response.json()) as {
         success: boolean;
-        data?: { synced: number; errors: string[] };
+        data?: {
+          groups: GoGroupData[];
+          synced: number;
+          errors: string[];
+        };
         error?: { code: string; message: string };
       };
 
@@ -276,9 +322,30 @@ class WhatsAppGroupsService {
         });
       }
 
+      const groups = json.data?.groups ?? [];
+      const errors: string[] = [...(json.data?.errors ?? [])];
+
+      // Process groups in batches with parallel execution
+      const groupBatches = chunkArray(groups, SYNC_CONFIG.GROUP_BATCH_SIZE);
+      let totalSynced = 0;
+
+      for (const batch of groupBatches) {
+        const result = await this.syncGroupsBatch(sessionId, batch);
+        totalSynced += result.synced;
+        errors.push(...result.errors);
+      }
+
+      // Log performance warning if sync took too long
+      const duration = Date.now() - startTime;
+      if (duration > SYNC_CONFIG.PERFORMANCE_WARN_MS) {
+        console.warn(
+          `[WhatsApp Groups Sync] Performance warning: sync took ${duration}ms for ${groups.length} groups`,
+        );
+      }
+
       return {
-        synced: json.data?.synced ?? 0,
-        errors: json.data?.errors ?? [],
+        synced: totalSynced,
+        errors,
       };
     } catch (error) {
       if (error instanceof ORPCError) {
@@ -290,6 +357,205 @@ class WhatsAppGroupsService {
       });
     }
   }
+
+  /**
+   * Process a batch of groups in parallel
+   */
+  private async syncGroupsBatch(
+    sessionId: string,
+    groups: GoGroupData[],
+  ): Promise<{ synced: number; errors: string[] }> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    // Process groups in parallel chunks
+    const parallelChunks = chunkArray(groups, SYNC_CONFIG.PARALLEL_GROUPS);
+
+    for (const chunk of parallelChunks) {
+      const results = await Promise.allSettled(
+        chunk.map(group => this.upsertGroupOptimized(sessionId, group)),
+      );
+
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const group = chunk[i];
+
+        if (result?.status === 'fulfilled') {
+          synced++;
+        } else if (result?.status === 'rejected') {
+          const errorMsg =
+            result.reason instanceof Error
+              ? result.reason.message
+              : 'Unknown error';
+          errors.push(
+            `Failed to save group ${group?.name ?? 'unknown'}: ${errorMsg}`,
+          );
+        }
+      }
+    }
+
+    return { synced, errors };
+  }
+
+  /**
+   * Upsert a single group with optimized participant batching
+   */
+  private async upsertGroupOptimized(
+    sessionId: string,
+    group: GoGroupData,
+  ): Promise<void> {
+    const now = new Date();
+
+    // Upsert the group
+    const dbGroup = await prisma.whatsAppGroup.upsert({
+      where: {
+        sessionId_jid: {
+          sessionId,
+          jid: group.jid,
+        },
+      },
+      create: {
+        jid: group.jid,
+        name: group.name,
+        description: group.description ?? null,
+        avatarUrl: group.avatar_url ?? null,
+        isAnnounce: group.is_announce ?? false,
+        isLocked: group.is_locked ?? false,
+        isEphemeral: group.is_ephemeral ?? false,
+        ephemeralTime: group.ephemeral_time ?? null,
+        ownerJid: group.owner_jid ?? null,
+        memberCount: group.member_count ?? 0,
+        groupCreatedAt: group.group_created_at
+          ? new Date(group.group_created_at)
+          : null,
+        lastSyncAt: now,
+        sessionId,
+      },
+      update: {
+        name: group.name,
+        description: group.description ?? null,
+        avatarUrl: group.avatar_url ?? null,
+        isAnnounce: group.is_announce ?? false,
+        isLocked: group.is_locked ?? false,
+        isEphemeral: group.is_ephemeral ?? false,
+        ephemeralTime: group.ephemeral_time ?? null,
+        ownerJid: group.owner_jid ?? null,
+        memberCount: group.member_count ?? 0,
+        groupCreatedAt: group.group_created_at
+          ? new Date(group.group_created_at)
+          : null,
+        lastSyncAt: now,
+        updatedAt: now,
+      },
+      select: { id: true },
+    });
+
+    // Batch upsert participants
+    const participants = group.participants ?? [];
+    if (participants.length > 0) {
+      await this.batchUpsertParticipants(dbGroup.id, participants);
+    }
+
+    // Remove stale participants
+    const currentJids = participants.map(p => p.jid);
+    if (currentJids.length > 0) {
+      await prisma.whatsAppGroupParticipant.deleteMany({
+        where: {
+          groupId: dbGroup.id,
+          jid: { notIn: currentJids },
+        },
+      });
+    } else {
+      // If no participants in sync data, remove all
+      await prisma.whatsAppGroupParticipant.deleteMany({
+        where: { groupId: dbGroup.id },
+      });
+    }
+  }
+
+  /**
+   * Batch upsert participants using transactions
+   */
+  private async batchUpsertParticipants(
+    groupId: string,
+    participants: GoParticipantData[],
+  ): Promise<void> {
+    const batches = chunkArray(
+      participants,
+      SYNC_CONFIG.PARTICIPANT_BATCH_SIZE,
+    );
+    const now = new Date();
+
+    for (const batch of batches) {
+      await prisma.$transaction(async tx => {
+        // First, try to create all new participants (skip duplicates)
+        await tx.whatsAppGroupParticipant.createMany({
+          data: batch.map(p => ({
+            jid: p.jid,
+            role: p.role ?? 'member',
+            displayName: p.display_name ?? null,
+            avatarUrl: p.avatar_url ?? null,
+            addedBy: p.added_by ?? null,
+            groupId,
+          })),
+          skipDuplicates: true,
+        });
+
+        // Then update existing participants
+        for (const p of batch) {
+          await tx.whatsAppGroupParticipant.updateMany({
+            where: {
+              groupId,
+              jid: p.jid,
+            },
+            data: {
+              role: p.role ?? 'member',
+              displayName: p.display_name ?? null,
+              avatarUrl: p.avatar_url ?? null,
+              addedBy: p.added_by ?? null,
+              updatedAt: now,
+            },
+          });
+        }
+      });
+    }
+  }
+}
+
+// ============================================================================
+// Go Service Response Types
+// ============================================================================
+
+interface GoGroupData {
+  id?: string;
+  jid: string;
+  name: string;
+  description?: string | null;
+  avatar_url?: string | null;
+  is_announce?: boolean;
+  is_locked?: boolean;
+  is_ephemeral?: boolean;
+  ephemeral_time?: number | null;
+  owner_jid?: string | null;
+  session_id?: string;
+  member_count?: number;
+  created_at?: string;
+  updated_at?: string;
+  group_created_at?: string | null;
+  last_sync_at?: string | null;
+  participants?: GoParticipantData[];
+}
+
+interface GoParticipantData {
+  id?: string;
+  jid: string;
+  role?: 'member' | 'admin' | 'superadmin';
+  display_name?: string | null;
+  avatar_url?: string | null;
+  group_id?: string;
+  joined_at?: string;
+  added_by?: string | null;
+  updated_at?: string;
 }
 
 /** Singleton WhatsApp Groups service */

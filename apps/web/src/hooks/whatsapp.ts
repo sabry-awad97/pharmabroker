@@ -169,6 +169,26 @@ export function useDisconnectWhatsappSession() {
   );
 }
 
+/**
+ * Update a WhatsApp session (name, auto_connect)
+ */
+export function useUpdateWhatsappSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    orpc.whatsapp.updateSession.mutationOptions({
+      onSuccess: updatedSession => {
+        queryClient.invalidateQueries({
+          queryKey: whatsappKeys.sessions.detail(updatedSession.id),
+        });
+        queryClient.invalidateQueries({
+          queryKey: whatsappKeys.sessions.all(),
+        });
+      },
+    }),
+  );
+}
+
 // ============================================================================
 // Messaging Hooks
 // ============================================================================
@@ -462,6 +482,7 @@ export type {
   Session,
   SessionStatus,
   CreateSessionInput,
+  UpdateSessionInput,
   SendMessageInput,
   SendMessageResponse,
   MessageType,

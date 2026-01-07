@@ -19,44 +19,14 @@ type Handler struct {
 	groupsUC  *usecase.GroupsUseCase
 }
 
-// NewHandler creates a new Handler
-func NewHandler(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUseCase) *Handler {
-	return &Handler{
-		sessionUC: sessionUC,
-		messageUC: messageUC,
-		healthUC:  nil,
-		groupsUC:  nil,
-	}
-}
-
-// NewHandlerWithHealth creates a new Handler with health use case
-func NewHandlerWithHealth(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUseCase, healthUC *usecase.HealthUseCase) *Handler {
-	return &Handler{
-		sessionUC: sessionUC,
-		messageUC: messageUC,
-		healthUC:  healthUC,
-		groupsUC:  nil,
-	}
-}
-
-// NewHandlerFull creates a new Handler with all use cases
-func NewHandlerFull(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUseCase, healthUC *usecase.HealthUseCase, groupsUC *usecase.GroupsUseCase) *Handler {
+// NewHandler creates a new Handler with all use cases
+func NewHandler(sessionUC *usecase.SessionUseCase, messageUC *usecase.MessageUseCase, healthUC *usecase.HealthUseCase, groupsUC *usecase.GroupsUseCase) *Handler {
 	return &Handler{
 		sessionUC: sessionUC,
 		messageUC: messageUC,
 		healthUC:  healthUC,
 		groupsUC:  groupsUC,
 	}
-}
-
-// SetHealthUseCase sets the health use case (for dependency injection)
-func (h *Handler) SetHealthUseCase(healthUC *usecase.HealthUseCase) {
-	h.healthUC = healthUC
-}
-
-// SetGroupsUseCase sets the groups use case (for dependency injection)
-func (h *Handler) SetGroupsUseCase(groupsUC *usecase.GroupsUseCase) {
-	h.groupsUC = groupsUC
 }
 
 // SyncGroups handles POST /api/sessions/:id/groups/sync
@@ -319,9 +289,13 @@ func mapErrorToHTTPStatus(code string) int {
 		return http.StatusConflict
 	case "INVALID_PHONE", "VALIDATION_FAILED", "INVALID_INPUT", "EMPTY_CONTENT", "INVALID_MESSAGE_TYPE":
 		return http.StatusBadRequest
+	case "DISCONNECTED":
+		return http.StatusBadRequest
+	case "INVALID_MEDIA_SIZE", "MEDIA_TOO_LARGE", "UNSUPPORTED_MEDIA_TYPE", "INVALID_MIME_TYPE", "UNSUPPORTED_MIME_TYPE":
+		return http.StatusBadRequest
 	case "QR_TIMEOUT":
 		return http.StatusRequestTimeout
-	case "CONNECTION_FAILED", "DISCONNECTED", "RECONNECT_FAILED":
+	case "CONNECTION_FAILED", "RECONNECT_FAILED", "CIRCUIT_OPEN":
 		return http.StatusServiceUnavailable
 	case "DATABASE_ERROR", "INTERNAL_ERROR":
 		return http.StatusInternalServerError
