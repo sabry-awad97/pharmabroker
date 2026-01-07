@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 
+	"github.com/pharmabroker/whatsapp/internal/domain/entity"
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
 	"github.com/pharmabroker/whatsapp/internal/domain/valueobject"
 	"github.com/pharmabroker/whatsapp/internal/infrastructure/config"
@@ -30,6 +31,8 @@ var Module = fx.Module("infrastructure",
 		NewHealthCheckers,
 		NewMediaUploader,
 	),
+	// Wire EventHub to WhatsApp client events
+	fx.Invoke(WireEventHubToWhatsAppClient),
 )
 
 // NewInMemorySessionRepository creates a new in-memory session repository
@@ -126,4 +129,17 @@ func NewMediaUploader(waClient *whatsapp.WhatsmeowClient, cfg *config.Config) re
 	waClient.SetMediaUploader(mediaUploader)
 
 	return mediaUploader
+}
+
+// WireEventHubToWhatsAppClient connects the EventHub to receive events from the WhatsApp client
+// This enables real-time event broadcasting to connected WebSocket clients
+func WireEventHubToWhatsAppClient(
+	waClient *whatsapp.WhatsmeowClient,
+	hub *websocket.EventHub,
+) {
+	// Register an event handler that broadcasts events to the EventHub
+	waClient.RegisterEventHandler(func(event *entity.Event) {
+		// Broadcast the event to all connected WebSocket clients
+		hub.Broadcast(event)
+	})
 }

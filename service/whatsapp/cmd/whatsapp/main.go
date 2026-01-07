@@ -31,10 +31,14 @@ func startServer(
 	lc fx.Lifecycle,
 	router *gin.Engine,
 	qrHandler *ws.QRHandler,
+	eventHandler *ws.EventHandler,
 	cfg *config.Config,
 ) {
 	// Register QR WebSocket routes on the router
 	qrHandler.RegisterRoutes(router)
+
+	// Register Event WebSocket routes on the router
+	eventHandler.RegisterRoutes(router)
 
 	// Create HTTP server
 	srv := &http.Server{

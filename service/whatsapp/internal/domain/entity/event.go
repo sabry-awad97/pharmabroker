@@ -83,27 +83,27 @@ func (et EventType) IsSessionEvent() bool {
 
 // Event represents a WhatsApp event for propagation
 type Event struct {
-	ID        string          `json:"id"`
+	ID        string          `json:"id,omitempty"`
 	Type      EventType       `json:"type"`
 	SessionID string          `json:"session_id"`
-	Payload   json.RawMessage `json:"payload"`
-	Timestamp time.Time       `json:"timestamp"`
+	Data      json.RawMessage `json:"data,omitempty"`
+	Timestamp time.Time       `json:"timestamp,omitempty"`
 }
 
 // NewEvent creates a new Event
-func NewEvent(id string, eventType EventType, sessionID string, payload json.RawMessage) *Event {
+func NewEvent(id string, eventType EventType, sessionID string, data json.RawMessage) *Event {
 	return &Event{
 		ID:        id,
 		Type:      eventType,
 		SessionID: sessionID,
-		Payload:   payload,
+		Data:      data,
 		Timestamp: time.Now(),
 	}
 }
 
 // NewEventWithPayload creates a new Event with a typed payload that gets marshaled to JSON
-func NewEventWithPayload(id string, eventType EventType, sessionID string, payload interface{}) (*Event, error) {
-	payloadBytes, err := json.Marshal(payload)
+func NewEventWithPayload(id string, eventType EventType, sessionID string, data any) (*Event, error) {
+	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func NewEventWithPayload(id string, eventType EventType, sessionID string, paylo
 		ID:        id,
 		Type:      eventType,
 		SessionID: sessionID,
-		Payload:   payloadBytes,
+		Data:      dataBytes,
 		Timestamp: time.Now(),
 	}, nil
 }
@@ -128,7 +128,7 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalPayload unmarshals the event payload into the provided target
-func (e *Event) UnmarshalPayload(target interface{}) error {
-	return json.Unmarshal(e.Payload, target)
+// UnmarshalData unmarshals the event data into the provided target
+func (e *Event) UnmarshalData(target any) error {
+	return json.Unmarshal(e.Data, target)
 }

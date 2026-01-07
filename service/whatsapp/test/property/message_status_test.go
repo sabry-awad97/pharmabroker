@@ -157,7 +157,7 @@ func TestMessageStatusEventEmission_Property9(t *testing.T) {
 
 			// Verify payload contains required fields
 			var payload map[string]interface{}
-			if err := event.UnmarshalPayload(&payload); err != nil {
+			if err := event.UnmarshalData(&payload); err != nil {
 				return false
 			}
 

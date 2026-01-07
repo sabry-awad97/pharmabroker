@@ -5,6 +5,10 @@ import { RPCHandler } from '@orpc/server/fetch';
 import { ZodToJsonSchemaConverter } from '@orpc/zod/zod4';
 import { createContext } from '@pharmabroker/api/context';
 import { appRouter } from '@pharmabroker/api/routers/index';
+import {
+  initEventBridge,
+  getEventBridge,
+} from '@pharmabroker/api/services/event-bridge.service';
 import { auth } from '@pharmabroker/auth';
 import { env } from '@pharmabroker/env/server';
 import { Hono } from 'hono';
@@ -74,5 +78,43 @@ app.use('/*', async (c, next) => {
 app.get('/', c => {
   return c.text('OK');
 });
+
+// Health check endpoint with event bridge status
+app.get('/health/event-bridge', c => {
+  try {
+    const bridge = getEventBridge();
+    const status = bridge.getStatus();
+    return c.json({
+      status:
+        status.connected && status.authenticated ? 'healthy' : 'unhealthy',
+      details: status,
+    });
+  } catch {
+    return c.json({
+      status: 'not_initialized',
+      details: { connected: false, authenticated: false, reconnectAttempts: 0 },
+    });
+  }
+});
+
+// Initialize Event Bridge on server startup
+initEventBridge({
+  wsUrl: env.WHATSAPP_WS_URL,
+  apiKey: env.WHATSAPP_API_KEY,
+  pingInterval: 30000, // 30 seconds
+  pongTimeout: 10000, // 10 seconds
+  reconnectDelay: 1000, // 1 second initial
+  maxReconnectDelay: 60000, // 60 seconds max
+})
+  .then(() => {
+    console.log('[Server] Event Bridge connected successfully');
+  })
+  .catch(error => {
+    console.error(
+      '[Server] Event Bridge connection failed, will retry:',
+      error,
+    );
+    // The EventBridgeService will automatically retry with exponential backoff
+  });
 
 export default app;

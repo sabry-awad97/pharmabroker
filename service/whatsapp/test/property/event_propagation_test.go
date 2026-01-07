@@ -61,9 +61,9 @@ func TestEventPropagationCompleteness_Property11(t *testing.T) {
 			hasType := event.Type != ""
 			hasSessionID := event.SessionID != ""
 			hasTimestamp := !event.Timestamp.IsZero()
-			hasPayload := event.Payload != nil
+			hasData := event.Data != nil
 
-			return hasID && hasType && hasSessionID && hasTimestamp && hasPayload
+			return hasID && hasType && hasSessionID && hasTimestamp && hasData
 		},
 		gen.IntRange(0, 10),
 		gen.Identifier(),
@@ -111,7 +111,7 @@ func TestEventPropagationCompleteness_Property11(t *testing.T) {
 
 			// Verify payload contains message metadata
 			var payloadMap map[string]interface{}
-			if err := json.Unmarshal(event.Payload, &payloadMap); err != nil {
+			if err := json.Unmarshal(event.Data, &payloadMap); err != nil {
 				t.Logf("Failed to unmarshal payload: %v", err)
 				return false
 			}
@@ -164,7 +164,7 @@ func TestEventPropagationCompleteness_Property11(t *testing.T) {
 
 			// Verify payload contains status
 			var payloadMap map[string]string
-			if err := json.Unmarshal(event.Payload, &payloadMap); err != nil {
+			if err := json.Unmarshal(event.Data, &payloadMap); err != nil {
 				t.Logf("Failed to unmarshal payload: %v", err)
 				return false
 			}
@@ -256,9 +256,9 @@ func TestEventPropagationCompleteness_Property11(t *testing.T) {
 			idMatch := restored.ID == original.ID
 			typeMatch := restored.Type == original.Type
 			sessionMatch := restored.SessionID == original.SessionID
-			payloadMatch := string(restored.Payload) == string(original.Payload)
+			dataMatch := string(restored.Data) == string(original.Data)
 
-			return idMatch && typeMatch && sessionMatch && payloadMatch
+			return idMatch && typeMatch && sessionMatch && dataMatch
 		},
 		gen.Identifier(),
 		gen.Identifier(),
