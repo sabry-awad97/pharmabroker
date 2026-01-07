@@ -35,7 +35,7 @@ func NewSQLiteHealthCheckerWithTimeout(db *sql.DB, timeout time.Duration) *SQLit
 func (c *SQLiteHealthChecker) Check(ctx context.Context) repository.HealthStatus {
 	status := repository.HealthStatus{
 		Name:    c.Name(),
-		Details: make(map[string]interface{}),
+		Details: make(map[string]any),
 	}
 
 	if c.db == nil {
@@ -94,7 +94,7 @@ func NewWhatsAppClientHealthChecker(client repository.WhatsAppClient) *WhatsAppC
 func (c *WhatsAppClientHealthChecker) Check(ctx context.Context) repository.HealthStatus {
 	status := repository.HealthStatus{
 		Name:    c.Name(),
-		Details: make(map[string]interface{}),
+		Details: make(map[string]any),
 	}
 
 	if c.client == nil {
@@ -132,7 +132,7 @@ func NewEventPublisherHealthChecker(publisher repository.EventPublisher) *EventP
 func (c *EventPublisherHealthChecker) Check(ctx context.Context) repository.HealthStatus {
 	status := repository.HealthStatus{
 		Name:    c.Name(),
-		Details: make(map[string]interface{}),
+		Details: make(map[string]any),
 	}
 
 	if c.publisher == nil {
@@ -206,7 +206,7 @@ func (c *CompositeHealthChecker) Check(ctx context.Context) repository.HealthSta
 	status := repository.HealthStatus{
 		Name:    c.Name(),
 		Healthy: response.Ready,
-		Details: make(map[string]interface{}),
+		Details: make(map[string]any),
 	}
 
 	if response.Ready {

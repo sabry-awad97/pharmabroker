@@ -51,6 +51,9 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-super-secret-key-change-in-production}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       WHATSAPP_SERVICE_URL: http://whatsapp:8080
+      # WebSocket URL for EventBridge (API → Go service)
+      WHATSAPP_WS_URL: ws://whatsapp:8080/ws/events
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-dev-api-key}
     ports:
       - '3000:3000'
     depends_on:
@@ -84,6 +87,9 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-super-secret-key-change-in-production}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       WHATSAPP_SERVICE_URL: http://whatsapp:8080
+      # WebSocket URL for EventBridge (API → Go service)
+      WHATSAPP_WS_URL: ws://whatsapp:8080/ws/events
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-dev-api-key}
     ports:
       - '3000:3000'
     depends_on:

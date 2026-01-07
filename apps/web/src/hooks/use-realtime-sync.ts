@@ -8,10 +8,7 @@
  * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5
  */
 
-import type {
-  WhatsAppEvent,
-  WhatsAppEventType,
-} from '@pharmabroker/schemas/whatsapp';
+import type { WhatsAppEvent } from '@pharmabroker/schemas/whatsapp';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef } from 'react';

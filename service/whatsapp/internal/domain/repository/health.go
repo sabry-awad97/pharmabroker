@@ -6,10 +6,10 @@ import (
 
 // HealthStatus represents the health status of a component
 type HealthStatus struct {
-	Healthy bool                   `json:"healthy"`
-	Name    string                 `json:"name"`
-	Message string                 `json:"message,omitempty"`
-	Details map[string]interface{} `json:"details,omitempty"`
+	Healthy bool           `json:"healthy"`
+	Name    string         `json:"name"`
+	Message string         `json:"message,omitempty"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 // HealthChecker defines the interface for health checking components

@@ -4,6 +4,9 @@
  * Maintains a persistent WebSocket connection to the Go WhatsApp service
  * for real-time event streaming. Events are validated and published to
  * the oRPC EventPublisher for frontend clients.
+ *
+ * Feature: service-status-cleanup
+ * Requirements: 1.1, 1.2, 2.2, 2.3
  */
 
 import {
@@ -12,6 +15,7 @@ import {
 } from '@pharmabroker/schemas/whatsapp';
 import { whatsappEventPublisher } from '../routers/whatsapp.router';
 import { whatsappService } from './whatsapp.service';
+import { HEALTH_CONFIG } from '../config/health.config';
 
 // ============================================================================
 // Types
@@ -397,6 +401,24 @@ export class EventBridgeService {
 // ============================================================================
 
 let eventBridgeInstance: EventBridgeService | null = null;
+
+/**
+ * Create default EventBridge configuration using shared health config constants.
+ * Use this when initializing the EventBridge to ensure consistent timing values.
+ */
+export function createDefaultEventBridgeConfig(
+  wsUrl: string,
+  apiKey: string,
+): EventBridgeConfig {
+  return {
+    wsUrl,
+    apiKey,
+    pingInterval: HEALTH_CONFIG.PING_INTERVAL_MS,
+    pongTimeout: HEALTH_CONFIG.PONG_TIMEOUT_MS,
+    reconnectDelay: HEALTH_CONFIG.RECONNECT_DELAY_MS,
+    maxReconnectDelay: HEALTH_CONFIG.MAX_RECONNECT_DELAY_MS,
+  };
+}
 
 /**
  * Get or create the EventBridge singleton instance

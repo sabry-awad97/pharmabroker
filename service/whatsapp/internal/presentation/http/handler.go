@@ -77,7 +77,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	respondWithSuccess(c, http.StatusAccepted, map[string]interface{}{
+	respondWithSuccess(c, http.StatusAccepted, map[string]any{
 		"message_id": msg.ID,
 		"status":     msg.GetStatus().String(),
 	})
@@ -188,7 +188,7 @@ func (h *Handler) ReconnectSession(c *gin.Context) {
 		return
 	}
 
-	respondWithSuccess(c, http.StatusOK, map[string]interface{}{
+	respondWithSuccess(c, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Session reconnected successfully",
 	})
@@ -208,7 +208,7 @@ func (h *Handler) DisconnectSession(c *gin.Context) {
 		return
 	}
 
-	respondWithSuccess(c, http.StatusOK, map[string]interface{}{
+	respondWithSuccess(c, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Session disconnected successfully",
 	})
@@ -219,7 +219,7 @@ func (h *Handler) Health(c *gin.Context) {
 	if h.healthUC != nil {
 		response := h.healthUC.CheckLiveness(c.Request.Context())
 		if !response.Alive {
-			c.JSON(http.StatusServiceUnavailable, map[string]interface{}{
+			c.JSON(http.StatusServiceUnavailable, map[string]any{
 				"status":  "unhealthy",
 				"message": response.Message,
 			})
@@ -229,7 +229,7 @@ func (h *Handler) Health(c *gin.Context) {
 		// Include additional details if requested
 		if c.Query("details") == "true" {
 			details := h.healthUC.GetHealthDetails(c.Request.Context())
-			c.JSON(http.StatusOK, map[string]interface{}{
+			c.JSON(http.StatusOK, map[string]any{
 				"status":  "healthy",
 				"message": response.Message,
 				"details": details,
@@ -255,10 +255,25 @@ func (h *Handler) Ready(c *gin.Context) {
 			status = "not_ready"
 		}
 
-		c.JSON(statusCode, map[string]interface{}{
-			"status":     status,
-			"components": response.Components,
-		})
+		// Use respondWithSuccess for consistent API response format
+		if statusCode == http.StatusOK {
+			respondWithSuccess(c, statusCode, map[string]any{
+				"status":     status,
+				"components": response.Components,
+			})
+		} else {
+			c.JSON(statusCode, map[string]any{
+				"success": false,
+				"error": map[string]any{
+					"code":    "NOT_READY",
+					"message": "Service is not ready",
+				},
+				"data": map[string]any{
+					"status":     status,
+					"components": response.Components,
+				},
+			})
+		}
 		return
 	}
 
@@ -305,11 +320,11 @@ func mapErrorToHTTPStatus(code string) int {
 }
 
 // respondWithSuccess sends a successful JSON response
-func respondWithSuccess(c *gin.Context, statusCode int, data interface{}) {
+func respondWithSuccess(c *gin.Context, statusCode int, data any) {
 	c.JSON(statusCode, dto.NewSuccessResponse(data))
 }
 
 // respondWithError sends an error JSON response
 func respondWithError(c *gin.Context, statusCode int, code, message string, details map[string]string) {
-	c.JSON(statusCode, dto.NewErrorResponse[interface{}](code, message, details))
+	c.JSON(statusCode, dto.NewErrorResponse[any](code, message, details))
 }

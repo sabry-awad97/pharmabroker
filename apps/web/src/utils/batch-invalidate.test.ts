@@ -239,8 +239,9 @@ describe('BatchInvalidator', () => {
           vi.advanceTimersByTime(DEFAULT_DEBOUNCE_MS);
 
           // Get all invalidated keys
-          const invalidatedKeys = invalidateQueriesSpy.mock.calls.map(call =>
-            JSON.stringify((call[0] as { queryKey: unknown[] }).queryKey),
+          const invalidatedKeys = invalidateQueriesSpy.mock.calls.map(
+            (call: [{ queryKey: unknown[] }]) =>
+              JSON.stringify(call[0].queryKey),
           );
 
           // Get expected unique keys

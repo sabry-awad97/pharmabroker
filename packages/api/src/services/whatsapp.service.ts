@@ -124,11 +124,21 @@ class WhatsAppGoClient {
   /** Readiness check */
   async ready(): Promise<{
     status: string;
-    components?: Record<string, unknown>;
+    components?: Array<{
+      healthy: boolean;
+      name: string;
+      message?: string;
+      details?: Record<string, unknown>;
+    }>;
   }> {
     return this.request<{
       status: string;
-      components?: Record<string, unknown>;
+      components?: Array<{
+        healthy: boolean;
+        name: string;
+        message?: string;
+        details?: Record<string, unknown>;
+      }>;
     }>('GET', '/ready');
   }
 

@@ -3,6 +3,9 @@
  *
  * Professional hooks for all WhatsApp router procedures.
  * Provides type-safe queries, mutations, and streaming subscriptions.
+ *
+ * Feature: service-status-cleanup
+ * Requirements: 3.2, 3.3
  */
 
 import type {
@@ -20,6 +23,7 @@ import {
 } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { QUERY_CONFIG } from '../config/query.config';
 import { orpc, queryClient } from '../utils/orpc';
 
 // ============================================================================
@@ -50,8 +54,8 @@ export const whatsappKeys = {
 export function useWhatsappSessions() {
   return useQuery(
     orpc.whatsapp.listSessions.queryOptions({
-      staleTime: 30 * 1000,
-      refetchInterval: 60 * 1000,
+      staleTime: QUERY_CONFIG.SESSIONS_STALE_TIME_MS,
+      refetchInterval: QUERY_CONFIG.SESSIONS_REFETCH_INTERVAL_MS,
     }),
   );
 }
@@ -62,7 +66,7 @@ export function useWhatsappSessions() {
 export function useWhatsappSessionsSuspense() {
   return useSuspenseQuery(
     orpc.whatsapp.listSessions.queryOptions({
-      staleTime: 30 * 1000,
+      staleTime: QUERY_CONFIG.SESSIONS_STALE_TIME_MS,
     }),
   );
 }
@@ -76,7 +80,7 @@ export function useWhatsappSession(id: string | undefined) {
       input: { id: id! },
     }),
     enabled: !!id,
-    staleTime: 30 * 1000,
+    staleTime: QUERY_CONFIG.SESSIONS_STALE_TIME_MS,
   });
 }
 
@@ -87,7 +91,7 @@ export function useWhatsappSessionSuspense(id: string) {
   return useSuspenseQuery(
     orpc.whatsapp.getSession.queryOptions({
       input: { id },
-      staleTime: 30 * 1000,
+      staleTime: QUERY_CONFIG.SESSIONS_STALE_TIME_MS,
     }),
   );
 }
@@ -563,24 +567,30 @@ export function useWhatsappEvents(options?: {
 
 /**
  * Check WhatsApp service health
+ *
+ * Feature: service-status-cleanup
+ * Requirements: 3.2, 3.3
  */
 export function useWhatsappHealth() {
   return useQuery(
     orpc.whatsapp.health.queryOptions({
-      staleTime: 10 * 1000,
-      refetchInterval: 30 * 1000,
+      staleTime: QUERY_CONFIG.HEALTH_STALE_TIME_MS,
+      refetchInterval: QUERY_CONFIG.HEALTH_REFETCH_INTERVAL_MS,
     }),
   );
 }
 
 /**
  * Check WhatsApp service readiness
+ *
+ * Feature: service-status-cleanup
+ * Requirements: 3.2, 3.3
  */
 export function useWhatsappReady() {
   return useQuery(
     orpc.whatsapp.ready.queryOptions({
-      staleTime: 10 * 1000,
-      refetchInterval: 30 * 1000,
+      staleTime: QUERY_CONFIG.HEALTH_STALE_TIME_MS,
+      refetchInterval: QUERY_CONFIG.HEALTH_REFETCH_INTERVAL_MS,
     }),
   );
 }

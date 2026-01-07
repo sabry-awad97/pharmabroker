@@ -115,10 +115,12 @@ export {
 export {
   healthStatus,
   readyStatus,
+  componentStatus,
   healthResponse,
   readyResponse,
   type HealthStatus,
   type ReadyStatus,
+  type ComponentStatus,
   type HealthResponse,
   type ReadyResponse,
 } from './health';

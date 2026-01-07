@@ -23,10 +23,18 @@ export const healthResponse = z.object({
   status: healthStatus,
 });
 
+/** Component health status from Go service */
+export const componentStatus = z.object({
+  healthy: z.boolean(),
+  name: z.string(),
+  message: z.string().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
 /** Readiness check response */
 export const readyResponse = z.object({
   status: readyStatus,
-  components: z.record(z.string(), z.unknown()).optional(),
+  components: z.array(componentStatus).optional(),
 });
 
 // ============================================================================
@@ -35,5 +43,6 @@ export const readyResponse = z.object({
 
 export type HealthStatus = z.infer<typeof healthStatus>;
 export type ReadyStatus = z.infer<typeof readyStatus>;
+export type ComponentStatus = z.infer<typeof componentStatus>;
 export type HealthResponse = z.infer<typeof healthResponse>;
 export type ReadyResponse = z.infer<typeof readyResponse>;

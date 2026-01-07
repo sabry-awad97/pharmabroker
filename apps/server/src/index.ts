@@ -9,11 +9,13 @@ import {
   initEventBridge,
   getEventBridge,
 } from '@pharmabroker/api/services/event-bridge.service';
+import { getWhatsAppWebSocketService } from '@pharmabroker/api/services/whatsapp-ws.service';
 import { auth } from '@pharmabroker/auth';
 import { env } from '@pharmabroker/env/server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { upgradeWebSocket, websocket } from 'hono/bun';
 
 const app = new Hono();
 
@@ -97,6 +99,39 @@ app.get('/health/event-bridge', c => {
   }
 });
 
+// Health check endpoint for Go service WebSocket connections
+app.get('/health/whatsapp-ws', c => {
+  const wsService = getWhatsAppWebSocketService();
+  const status = wsService.getStatus();
+  return c.json({
+    status: status.connected ? 'healthy' : 'waiting',
+    details: status,
+  });
+});
+
+// WebSocket endpoint for Go WhatsApp service to connect
+// This allows the Go service to push events to the API
+app.get(
+  '/ws/whatsapp',
+  upgradeWebSocket(() => {
+    const wsService = getWhatsAppWebSocketService();
+
+    return {
+      onOpen(_event, ws) {
+        wsService.handleOpen(ws as any);
+      },
+      onMessage(event, ws) {
+        const message =
+          typeof event.data === 'string' ? event.data : String(event.data);
+        wsService.handleMessage(ws as any, message);
+      },
+      onClose(_event, ws) {
+        wsService.handleClose(ws);
+      },
+    };
+  }),
+);
+
 // Initialize Event Bridge on server startup
 initEventBridge({
   wsUrl: env.WHATSAPP_WS_URL,
@@ -117,4 +152,12 @@ initEventBridge({
     // The EventBridgeService will automatically retry with exponential backoff
   });
 
-export default app;
+// Initialize WhatsApp WebSocket service
+getWhatsAppWebSocketService();
+console.log('[Server] WhatsApp WebSocket service initialized');
+
+// Export for Bun with WebSocket support
+export default {
+  fetch: app.fetch,
+  websocket,
+};
