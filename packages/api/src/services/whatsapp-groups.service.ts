@@ -58,6 +58,26 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return chunks;
 }
 
+/**
+ * Sanitize string for Prisma WASM query compiler
+ * Removes problematic Unicode characters that cause "Out of bounds memory access" errors
+ * This is a workaround for a known Prisma bug with the WASM-based query engine
+ */
+function sanitizeForPrisma(str: string | null | undefined): string | null {
+  if (str == null) return null;
+  // Normalize Unicode and remove zero-width characters that can cause issues
+  return (
+    str
+      .normalize('NFC')
+      // Remove zero-width characters
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      // Remove other problematic invisible characters
+      .replace(/[\u2060-\u206F]/g, '')
+      // Trim whitespace
+      .trim()
+  );
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -541,6 +561,10 @@ class WhatsAppGroupsService {
   ): Promise<void> {
     const now = new Date();
 
+    // Sanitize string fields to prevent Prisma WASM query compiler issues
+    const sanitizedName = sanitizeForPrisma(group.name) ?? 'Unnamed Group';
+    const sanitizedDescription = sanitizeForPrisma(group.description);
+
     // Upsert the group
     const dbGroup = await prisma.whatsAppGroup.upsert({
       where: {
@@ -551,8 +575,8 @@ class WhatsAppGroupsService {
       },
       create: {
         jid: group.jid,
-        name: group.name,
-        description: group.description ?? null,
+        name: sanitizedName,
+        description: sanitizedDescription,
         avatarUrl: group.avatar_url ?? null,
         isAnnounce: group.is_announce ?? false,
         isLocked: group.is_locked ?? false,
@@ -572,8 +596,8 @@ class WhatsAppGroupsService {
         sessionId,
       },
       update: {
-        name: group.name,
-        description: group.description ?? null,
+        name: sanitizedName,
+        description: sanitizedDescription,
         avatarUrl: group.avatar_url ?? null,
         isAnnounce: group.is_announce ?? false,
         isLocked: group.is_locked ?? false,
@@ -643,7 +667,7 @@ class WhatsAppGroupsService {
           data: batch.map(p => ({
             jid: p.jid,
             role: p.role ?? 'member',
-            displayName: p.display_name ?? null,
+            displayName: sanitizeForPrisma(p.display_name),
             avatarUrl: p.avatar_url ?? null,
             addedBy: p.added_by ?? null,
             groupId,
@@ -660,7 +684,7 @@ class WhatsAppGroupsService {
             },
             data: {
               role: p.role ?? 'member',
-              displayName: p.display_name ?? null,
+              displayName: sanitizeForPrisma(p.display_name),
               avatarUrl: p.avatar_url ?? null,
               addedBy: p.added_by ?? null,
               updatedAt: now,
