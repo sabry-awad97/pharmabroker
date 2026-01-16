@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
   { to: '/whatsapp/groups', icon: Users, label: 'Groups' },
   { to: '/search', icon: Search, label: 'Search' },
   { to: '/medications', icon: Pill, label: 'Medications' },
-  { to: '/messages', icon: MessageCircle, label: 'Messages' },
+  { to: '/whatsapp/messages', icon: MessageCircle, label: 'Messages' },
 ];
 
 export function Sidebar() {

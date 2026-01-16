@@ -95,10 +95,7 @@ export function GroupsDataTable({
           <div className="flex items-center gap-3">
             <div className="relative">
               <Avatar
-                className={cn(
-                  'h-9 w-9',
-                  isMutedOrArchived && 'grayscale-[30%]',
-                )}
+                className={cn('h-9 w-9', isMutedOrArchived && 'grayscale-30')}
               >
                 <AvatarImage
                   src={group.avatarUrl || getAvatarUrl(group.name)}

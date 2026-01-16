@@ -84,3 +84,29 @@ export {
   GroupCardErrorBoundary,
   withGroupCardErrorBoundary,
 } from './groups';
+
+// Messages components
+export {
+  // Data table
+  MessagesDataTable,
+  type WhatsAppMessage,
+  // Table actions
+  TableActions,
+  type TableAction,
+  type TableActionsProps,
+  // Empty state
+  MessagesEmptyState,
+  type MessagesEmptyStateProps,
+  type MessageEmptyStateVariant,
+  // Skeleton
+  MessagesSkeleton,
+  MessageRowSkeleton,
+  // Filter panel
+  MessagesFilterPanel,
+  // Message type badge
+  MessageTypeBadge,
+  // AI status badge
+  AIStatusBadge,
+  // Message preview
+  MessagePreview,
+} from './messages';

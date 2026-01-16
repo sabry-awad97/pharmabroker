@@ -14,7 +14,8 @@ model WhatsAppSession {
     updatedAt   DateTime              @updatedAt
 
     // Relations
-    groups WhatsAppGroup[]
+    groups   WhatsAppGroup[]
+    messages WhatsAppMessage[]
 
     @@index([userId])
     @@index([status])
@@ -65,6 +66,7 @@ model WhatsAppGroup {
 
     // Relations
     participants WhatsAppGroupParticipant[]
+    messages     WhatsAppMessage[]
 
     @@unique([sessionId, jid])
     @@index([sessionId])
@@ -91,6 +93,9 @@ model WhatsAppGroupParticipant {
     addedBy   String?  @map("added_by") // JID of who added this participant
     updatedAt DateTime @updatedAt @map("updated_at")
 
+    // Relations
+    messages WhatsAppMessage[]
+
     @@unique([groupId, jid])
     @@index([groupId])
     @@index([jid])
@@ -103,4 +108,185 @@ enum WhatsAppGroupParticipantRole {
     superadmin
 
     @@map("whatsapp_group_participant_role")
+}
+
+// ============================================================================
+// WhatsApp Message - raw message storage with AI processing support
+// ============================================================================
+
+model WhatsAppMessage {
+    id String @id @default(uuid())
+
+    // Core identifier from WhatsApp
+    messageId String @map("message_id") // WhatsApp message ID (e.g., "3EB0...")
+
+    // Session relation (required)
+    sessionId String          @map("session_id")
+    session   WhatsAppSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+    // Group context
+    groupId String        @map("group_id")
+    group   WhatsAppGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+    // Sender - for group messages, links to participant
+    senderJid      String                    @map("sender_jid") // Always store JID
+    senderPushName String?                   @map("sender_push_name") // Cached at message time
+    participantId  String?                   @map("participant_id")
+    participant    WhatsAppGroupParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+
+    // Message type & content
+    messageType WhatsAppMessageType @map("message_type")
+    text        String? // Text content
+    caption     String? // Media caption
+    filename    String? // Document filename
+    mimetype    String? // Media MIME type
+
+    // Media references
+    mediaUrl       String? @map("media_url")
+    mediaKey       Bytes?  @map("media_key") // Encryption key
+    mediaSha256    Bytes?  @map("media_sha256") // Hash for verification
+    mediaSize      Int?    @map("media_size") // File size in bytes
+    mediaLocalPath String? @map("media_local_path") // Local path if downloaded
+
+    // Message flags
+    isFromMe    Boolean @default(false) @map("is_from_me")
+    isForwarded Boolean @default(false) @map("is_forwarded")
+    isViewOnce  Boolean @default(false) @map("is_view_once")
+    isBroadcast Boolean @default(false) @map("is_broadcast")
+
+    // Reply context - self-referential for threading
+    quotedMessageId String?           @map("quoted_message_id")
+    quotedMessage   WhatsAppMessage?  @relation("MessageQuotes", fields: [quotedMessageId], references: [id], onDelete: SetNull)
+    replies         WhatsAppMessage[] @relation("MessageQuotes")
+
+    // Status tracking
+    status WhatsAppMessageStatus @default(received)
+
+    // Timestamps
+    messageTimestamp DateTime @map("message_timestamp") // Original WhatsApp timestamp
+    receivedAt       DateTime @default(now()) @map("received_at")
+
+    // Source tracking
+    source WhatsAppMessageSource @default(realtime)
+
+    // Raw data preservation
+    rawPayload Json? @map("raw_payload")
+
+    // -------------------------------------------------------------------------
+    // AI Processing Fields
+    // -------------------------------------------------------------------------
+    
+    // Processing status
+    aiStatus      WhatsAppAIStatus @default(pending) @map("ai_status")
+    aiProcessedAt DateTime?        @map("ai_processed_at")
+    aiModel       String?          @map("ai_model") // Model used (e.g., "gpt-4o", "claude-3")
+    aiError       String?          @map("ai_error") // Error message if failed
+    aiRetryCount  Int              @default(0) @map("ai_retry_count")
+
+    // Relations
+    extractedData WhatsAppExtractedData[]
+
+    @@unique([sessionId, messageId])
+    @@index([sessionId])
+    @@index([groupId])
+    @@index([participantId])
+    @@index([senderJid])
+    @@index([messageTimestamp])
+    @@index([source])
+    @@index([aiStatus])
+    @@map("whatsapp_message")
+}
+
+// ============================================================================
+// WhatsApp Extracted Data - AI-extracted structured data from messages
+// ============================================================================
+
+model WhatsAppExtractedData {
+    id String @id @default(uuid())
+
+    // Message relation
+    messageId String          @map("message_id")
+    message   WhatsAppMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+    // Extraction type (extensible for different use cases)
+    dataType WhatsAppExtractedDataType @map("data_type")
+
+    // Structured data (flexible JSON for different extraction types)
+    data Json // The extracted structured data
+
+    // AI metadata
+    confidence Float?  @default(0) // Confidence score 0-1
+    model      String? // Model that extracted this
+    promptHash String? @map("prompt_hash") // Hash of prompt used (for versioning)
+
+    // Metadata
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@index([messageId])
+    @@index([dataType])
+    @@index([confidence])
+    @@map("whatsapp_extracted_data")
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum WhatsAppMessageType {
+    text
+    image
+    video
+    audio
+    document
+    sticker
+    contact
+    location
+    poll
+    reaction
+    protocol // System messages (group changes, etc.)
+    unknown
+
+    @@map("whatsapp_message_type")
+}
+
+enum WhatsAppMessageStatus {
+    received
+    sent
+    delivered
+    read
+    failed
+
+    @@map("whatsapp_message_status")
+}
+
+enum WhatsAppMessageSource {
+    realtime
+    history
+
+    @@map("whatsapp_message_source")
+}
+
+enum WhatsAppAIStatus {
+    pending    // Not yet processed
+    processing // Currently being processed
+    completed  // Successfully processed
+    failed     // Processing failed
+    skipped    // Skipped (e.g., media-only, system message)
+
+    @@map("whatsapp_ai_status")
+}
+
+enum WhatsAppExtractedDataType {
+    intent       // User intent classification
+    entities     // Named entities (names, dates, products, etc.)
+    sentiment    // Sentiment analysis
+    order        // Order/purchase details
+    appointment  // Appointment/scheduling info
+    inquiry      // Product/service inquiry
+    complaint    // Complaint details
+    summary      // Message summary
+    custom       // Custom extraction type
+
+    @@map("whatsapp_extracted_data_type")
 }
