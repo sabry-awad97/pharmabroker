@@ -30,14 +30,18 @@ export * from './common';
 // Re-export all whatsapp schemas
 export * from './whatsapp';
 
+// Re-export all AI schemas
+export * from './ai';
+
 // ============================================================================
 // Namespace exports for organized access
 // ============================================================================
 
 import * as common from './common';
 import * as whatsapp from './whatsapp';
+import * as ai from './ai';
 
-export { common, whatsapp };
+export { common, whatsapp, ai };
 
 // ============================================================================
 // Schema utilities

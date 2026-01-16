@@ -75,6 +75,7 @@ export class AIClient {
 
   /**
    * Process a message with a custom schema and prompt
+   * Automatically chunks long messages to avoid context limits
    *
    * @example
    * ```ts
@@ -107,47 +108,15 @@ export class AIClient {
         };
       }
 
-      // Build context string
-      const contextParts: string[] = [];
-      if (message.senderName)
-        contextParts.push(`Sender: ${message.senderName}`);
-      if (message.groupName) contextParts.push(`Group: ${message.groupName}`);
-      if (message.context?.length)
-        contextParts.push(`Context: ${message.context.join(', ')}`);
-      const contextStr = contextParts.length > 0 ? contextParts.join('\n') : '';
+      // Check if message needs chunking (estimate based on line count)
+      const lines = message.text.split('\n').filter(l => l.trim());
+      const needsChunking = lines.length > 15; // Chunk if more than 15 lines
 
-      // Build prompt from template
-      const prompt = options.promptTemplate
-        .replace('{{message}}', message.text)
-        .replace('{{context}}', contextStr);
+      if (needsChunking) {
+        return this.processMessageInChunks(message, options, startTime);
+      }
 
-      // Generate structured output
-      const data = await this.generateObject({
-        schema: options.schema,
-        prompt,
-        system: options.systemPrompt,
-        temperature: 0.3,
-      });
-
-      // Convert to extraction result
-      const extractions: ExtractionResult[] = data
-        ? [
-            {
-              type: 'structured',
-              data,
-              confidence: 1.0,
-            },
-          ]
-        : [];
-
-      return {
-        messageId: message.id,
-        status: data ? 'completed' : 'failed',
-        model: this.modelName,
-        extractions,
-        data,
-        processingTimeMs: Date.now() - startTime,
-      };
+      return this.processMessageDirect(message, options, startTime);
     } catch (error) {
       return {
         messageId: message.id,
@@ -159,6 +128,216 @@ export class AIClient {
         processingTimeMs: Date.now() - startTime,
       };
     }
+  }
+
+  /**
+   * Process a message directly without chunking
+   */
+  private async processMessageDirect<T>(
+    message: MessageInput,
+    options: ProcessMessageOptions<T>,
+    startTime: number,
+  ): Promise<ProcessingResult & { data: T | null }> {
+    // Build context string
+    const contextParts: string[] = [];
+    if (message.senderName) contextParts.push(`Sender: ${message.senderName}`);
+    if (message.groupName) contextParts.push(`Group: ${message.groupName}`);
+    if (message.context?.length)
+      contextParts.push(`Context: ${message.context.join(', ')}`);
+    const contextStr = contextParts.length > 0 ? contextParts.join('\n') : '';
+
+    // Build prompt from template
+    const prompt = options.promptTemplate
+      .replace('{{message}}', message.text)
+      .replace('{{context}}', contextStr);
+
+    // Generate structured output
+    const data = await this.generateObject({
+      schema: options.schema,
+      prompt,
+      system: options.systemPrompt,
+      temperature: 0.3,
+    });
+
+    // Convert to extraction result
+    const extractions: ExtractionResult[] = data
+      ? [
+          {
+            type: 'structured',
+            data,
+            confidence: 1.0,
+          },
+        ]
+      : [];
+
+    return {
+      messageId: message.id,
+      status: data ? 'completed' : 'failed',
+      model: this.modelName,
+      extractions,
+      data,
+      processingTimeMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Process a long message in chunks and merge results
+   * Splits by lines, processes chunks in parallel, then merges medications arrays
+   */
+  private async processMessageInChunks<T>(
+    message: MessageInput,
+    options: ProcessMessageOptions<T>,
+    startTime: number,
+  ): Promise<ProcessingResult & { data: T | null }> {
+    const lines = message.text.split('\n').filter(l => l.trim());
+
+    // Smart chunking: group related lines together
+    const chunks = this.createSmartChunks(lines);
+
+    console.log(
+      `[AI Client] Processing ${lines.length} lines in ${chunks.length} chunks (parallel)`,
+    );
+
+    // Process ALL chunks in parallel
+    const chunkPromises = chunks.map((chunk, index) => {
+      const chunkMessage = {
+        ...message,
+        text: chunk,
+        id: index === 0 ? message.id : `${message.id}-chunk-${index}`,
+      };
+      return this.processMessageDirect(chunkMessage, options, startTime);
+    });
+
+    const results = await Promise.all(chunkPromises);
+
+    // Find first successful result for intent/urgency/reason
+    const firstSuccess = results.find(r => r.data);
+    if (!firstSuccess?.data) {
+      return {
+        messageId: message.id,
+        status: 'failed',
+        model: this.modelName,
+        extractions: [],
+        data: null,
+        error: 'All chunks failed to process',
+        processingTimeMs: Date.now() - startTime,
+      };
+    }
+
+    // Merge all medications from all chunks
+    const allMedications: unknown[] = [];
+    for (const result of results) {
+      if (result.data) {
+        const data = result.data as Record<string, unknown>;
+        if (Array.isArray(data.medications)) {
+          allMedications.push(...data.medications);
+        }
+      }
+    }
+
+    // Deduplicate medications by name+concentration
+    const uniqueMedications = this.deduplicateMedications(allMedications);
+
+    // Merge results
+    const firstData = firstSuccess.data as Record<string, unknown>;
+    const mergedData = {
+      ...firstData,
+      medications: uniqueMedications,
+      reason: `${firstData.reason} (${chunks.length} chunks, ${uniqueMedications.length} medications)`,
+    } as T;
+
+    return {
+      messageId: message.id,
+      status: 'completed',
+      model: this.modelName,
+      extractions: [
+        {
+          type: 'structured',
+          data: mergedData,
+          confidence: 1.0,
+        },
+      ],
+      data: mergedData,
+      processingTimeMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Create smart chunks that keep related content together
+   * - Respects natural groupings (headers, separators)
+   * - Keeps medication + form/concentration on same line together
+   * - Targets ~10-12 items per chunk for optimal processing
+   */
+  private createSmartChunks(lines: string[]): string[] {
+    const chunks: string[] = [];
+    const targetChunkSize = 10;
+    let currentChunk: string[] = [];
+
+    // Patterns that indicate section breaks
+    const sectionBreakPattern =
+      /^[.\-_=*]{3,}|^#{1,3}\s|متوفر|متوافر|مطلوب|Available|Required/;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+
+      // Check if this line is a section header/break
+      const isSectionBreak = sectionBreakPattern.test(line);
+
+      // Start new chunk on section break if current chunk has content
+      if (
+        isSectionBreak &&
+        currentChunk.length > 0 &&
+        currentChunk.length >= targetChunkSize / 2
+      ) {
+        chunks.push(currentChunk.join('\n'));
+        currentChunk = [];
+      }
+
+      currentChunk.push(line);
+
+      // Check if we've reached target size
+      if (currentChunk.length >= targetChunkSize) {
+        // Look ahead to avoid splitting in middle of related content
+        const nextLine = lines[i + 1];
+        const isNextRelated = nextLine && !sectionBreakPattern.test(nextLine);
+
+        // If next line looks like a continuation, include it
+        if (isNextRelated && currentChunk.length < targetChunkSize + 3) {
+          continue;
+        }
+
+        chunks.push(currentChunk.join('\n'));
+        currentChunk = [];
+      }
+    }
+
+    // Don't forget the last chunk
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk.join('\n'));
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Deduplicate medications by name + concentration
+   * Keeps the entry with highest confidence
+   */
+  private deduplicateMedications(medications: unknown[]): unknown[] {
+    const seen = new Map<string, { med: unknown; confidence: number }>();
+
+    for (const med of medications) {
+      const m = med as Record<string, unknown>;
+      const key = `${m.name}|${m.concentration || ''}|${m.form || ''}`;
+      const confidence = (m.confidence as number) || 0;
+
+      const existing = seen.get(key);
+      if (!existing || existing.confidence < confidence) {
+        seen.set(key, { med, confidence });
+      }
+    }
+
+    return Array.from(seen.values()).map(v => v.med);
   }
 
   /**
@@ -322,39 +501,38 @@ IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanat
    * Parse JSON response and validate against schema
    */
   private parseJsonResponse<T>(text: string, schema: z.ZodType<T>): T | null {
+    // Clean the response - remove markdown code blocks if present
+    let jsonText = text.trim();
+
+    // Remove markdown code blocks
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.slice(7);
+    } else if (jsonText.startsWith('```')) {
+      jsonText = jsonText.slice(3);
+    }
+    if (jsonText.endsWith('```')) {
+      jsonText = jsonText.slice(0, -3);
+    }
+    jsonText = jsonText.trim();
+
+    // Try to extract JSON if there's extra text
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonText = jsonMatch[0];
+    }
+
     try {
-      // Clean the response - remove markdown code blocks if present
-      let jsonText = text.trim();
-
-      // Remove markdown code blocks
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.slice(7);
-      } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.slice(3);
-      }
-      if (jsonText.endsWith('```')) {
-        jsonText = jsonText.slice(0, -3);
-      }
-      jsonText = jsonText.trim();
-
-      // Try to extract JSON if there's extra text
-      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        jsonText = jsonMatch[0];
-      }
-
       const parsed = JSON.parse(jsonText);
       return schema.parse(parsed);
     } catch (error) {
-      // Log parsing errors for debugging
       console.error(
         '[AI Client] JSON parsing failed:',
         error instanceof Error ? error.message : error,
       );
       console.error('[AI Client] Raw text length:', text.length);
       console.error(
-        '[AI Client] Raw text (first 1000 chars):',
-        text.substring(0, 1000),
+        '[AI Client] Raw text (first 500 chars):',
+        text.substring(0, 500),
       );
       return null;
     }

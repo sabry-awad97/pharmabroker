@@ -1,48 +1,10 @@
-#!/usr/bin/env bun
 /**
- * Test Intent Extraction
+ * Medication Extraction Prompts
  *
- * Simple test to extract intent (offer or request) from messages
+ * Professional prompts for extracting medication data from pharmaceutical WhatsApp messages.
  */
 
-import pc from 'picocolors';
-import { z } from 'zod';
-import { createAIClient, type AIEnvConfig } from '@pharmabroker/ai';
-import { env } from './env';
-import testMessages from './test-messages.json';
-
-// Env config
-const envConfig: AIEnvConfig = {
-  AI_PROVIDER: env.AI_PROVIDER,
-  GEMINI_API_KEY: env.GEMINI_API_KEY,
-  GEMINI_MODEL: env.GEMINI_MODEL,
-  OLLAMA_BASE_URL: env.OLLAMA_BASE_URL,
-  OLLAMA_MODEL: env.OLLAMA_MODEL,
-  OPENAI_API_KEY: env.OPENAI_API_KEY,
-  OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-  OPENAI_MODEL: env.OPENAI_MODEL,
-  DOCKER_MODEL_BASE_URL: env.DOCKER_MODEL_BASE_URL,
-  DOCKER_MODEL_NAME: env.DOCKER_MODEL_NAME,
-};
-
-// Intent + medications schema with confidence
-const medicationSchema = z.object({
-  name: z.string(),
-  concentration: z.string().nullable(),
-  form: z.string().nullable(),
-  expiry: z.string().nullable(),
-  confidence: z.number(),
-  reason: z.string(),
-});
-
-const intentSchema = z.object({
-  intent: z.enum(['offer', 'request']),
-  urgency: z.enum(['critical', 'urgent', 'soon', 'normal']),
-  reason: z.string(),
-  medications: z.array(medicationSchema),
-});
-
-const systemPrompt = `You are a Senior Pharmaceutical Data Extraction Specialist with 10+ years of experience in Arabic/English pharmaceutical messaging analysis and NLP.
+export const medicationSystemPrompt = `You are a Senior Pharmaceutical Data Extraction Specialist with 10+ years of experience in Arabic/English pharmaceutical messaging analysis and NLP.
 
 Your task: Extract medication information and assess urgency from WhatsApp messages in pharmaceutical distribution networks.
 
@@ -55,7 +17,7 @@ Constraints:
 6. ALWAYS preserve original language (Arabic stays Arabic, English stays English)
 7. ALWAYS assess urgency level based on keywords and context
 
-Output format: JSON object with intent, reason, and medications array
+Output format: JSON object with intent, urgency, reason, and medications array
 
 [UNDERSTAND]
 - Messages are from pharmaceutical WhatsApp groups
@@ -144,7 +106,7 @@ NORMAL (default, no urgency):
 
 IMPORTANT: Respond with ONLY a valid JSON object, no markdown, no explanations.`;
 
-const promptTemplate = `[TASK] Analyze this pharmaceutical WhatsApp message:
+export const medicationPromptTemplate = `[TASK] Analyze this pharmaceutical WhatsApp message:
 
 {{context}}
 
@@ -177,123 +139,3 @@ Message:
     }
   ]
 }`;
-
-async function main() {
-  const provider = (process.argv[2] || 'docker') as
-    | 'docker'
-    | 'ollama'
-    | 'gemini'
-    | 'openai';
-
-  console.log(pc.bold(pc.magenta('\n🔍 Intent Extraction Test\n')));
-  console.log(pc.gray(`Provider: ${provider}\n`));
-
-  const client = createAIClient({ provider, envConfig });
-
-  for (const msg of testMessages.messages) {
-    console.log(pc.bold(pc.cyan(`\n📝 ${msg.name}`)));
-    console.log(pc.gray(`ID: ${msg.id}`));
-    console.log(pc.gray(`Text: ${msg.input.text.substring(0, 80)}...`));
-    console.log();
-
-    const startTime = Date.now();
-
-    try {
-      const result = await client.processMessage(
-        {
-          id: msg.id,
-          text: msg.input.text,
-          senderName: msg.input.senderName,
-          groupName: msg.input.groupName,
-          timestamp: new Date(),
-        },
-        {
-          schema: intentSchema,
-          systemPrompt,
-          promptTemplate,
-        },
-      );
-
-      const latency = Date.now() - startTime;
-
-      if (result.data) {
-        const intentColor =
-          result.data.intent === 'offer' ? pc.green : pc.yellow;
-        const urgencyColors: Record<string, (s: string) => string> = {
-          critical: pc.red,
-          urgent: pc.yellow,
-          soon: pc.cyan,
-          normal: pc.gray,
-        };
-        const urgencyColor = urgencyColors[result.data.urgency] || pc.gray;
-        const urgencyEmoji: Record<string, string> = {
-          critical: '🚨',
-          urgent: '⚡',
-          soon: '⏰',
-          normal: '📋',
-        };
-        console.log(
-          pc.bold('Intent:'),
-          intentColor(result.data.intent.toUpperCase()),
-        );
-        console.log(
-          pc.bold('Urgency:'),
-          urgencyColor(
-            `${urgencyEmoji[result.data.urgency] || ''} ${result.data.urgency.toUpperCase()}`,
-          ),
-        );
-        console.log(pc.bold('Reason:'), result.data.reason);
-        console.log(pc.bold('Medications:'));
-        if (result.data.medications.length > 0) {
-          for (const med of result.data.medications) {
-            const confColor =
-              med.confidence >= 0.8
-                ? pc.green
-                : med.confidence >= 0.5
-                  ? pc.yellow
-                  : pc.red;
-            const confBar =
-              '█'.repeat(Math.round(med.confidence * 10)) +
-              '░'.repeat(10 - Math.round(med.confidence * 10));
-            const concStr = med.concentration
-              ? pc.cyan(`[${med.concentration}]`)
-              : pc.gray('[--]');
-            const formStr = med.form ? pc.magenta(`(${med.form})`) : '';
-            const expStr = med.expiry ? pc.yellow(`exp:${med.expiry}`) : '';
-            console.log(
-              `  ${confColor(confBar)} ${(med.confidence * 100).toFixed(0).padStart(3)}% ${med.name} ${concStr} ${formStr} ${expStr}`.trim(),
-            );
-            console.log(`       ${pc.gray(med.reason)}`);
-          }
-        } else {
-          console.log(pc.gray('  (none)'));
-        }
-      } else {
-        console.log(pc.red('Failed to extract intent'));
-        if (result.error) {
-          console.log(pc.red('Error:'), result.error);
-        }
-        // Debug: show raw extractions
-        if (result.extractions.length > 0) {
-          console.log(
-            pc.yellow('Raw extractions:'),
-            JSON.stringify(result.extractions, null, 2),
-          );
-        }
-        // Debug: show status
-        console.log(pc.gray('Status:'), result.status);
-      }
-
-      console.log(pc.gray(`Latency: ${latency}ms`));
-    } catch (error) {
-      console.log(
-        pc.red('Error:'),
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-
-    console.log(pc.dim('─'.repeat(60)));
-  }
-}
-
-main().catch(console.error);

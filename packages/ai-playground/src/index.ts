@@ -1,23 +1,31 @@
 /**
  * @pharmabroker/ai-playground
  *
- * AI testing, evaluation, and benchmarking tools.
+ * AI testing, evaluation, and benchmarking tools for pharmaceutical message extraction.
  *
  * @example
  * ```bash
  * # Interactive playground
- * bun run --filter @pharmabroker/ai-playground play
+ * bun run src/cli.ts
  *
- * # Run benchmarks
- * bun run --filter @pharmabroker/ai-playground bench
+ * # Extract from test messages
+ * bun run src/cli.ts extract docker
  *
- * # Evaluate accuracy
- * bun run --filter @pharmabroker/ai-playground eval
- *
- * # Compare providers
- * bun run --filter @pharmabroker/ai-playground compare
+ * # Interactive chat
+ * bun run src/cli.ts chat docker
  * ```
  */
+
+// Re-export schemas from @pharmabroker/schemas
+export {
+  medicationSchema,
+  messageExtractionSchema,
+  type Medication,
+  type MessageExtraction,
+} from '@pharmabroker/schemas/ai';
+
+// Prompts
+export { medicationSystemPrompt, medicationPromptTemplate } from './prompts';
 
 // Types
 export type {
