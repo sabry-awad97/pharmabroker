@@ -44,6 +44,7 @@ export {
   getAIClient,
   type AIClientConfig,
   type ProcessMessageOptions,
+  type ProcessingDebugInfo,
 } from './client';
 
 // Providers

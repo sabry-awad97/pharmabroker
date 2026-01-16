@@ -17,6 +17,7 @@ import {
   createAIClient,
   type AIProviderName,
   type AIEnvConfig,
+  type ProcessingDebugInfo,
 } from '@pharmabroker/ai';
 import {
   messageExtractionSchema,
@@ -50,7 +51,30 @@ process.on('SIGINT', () => {
 // Display Helpers
 // ============================================================================
 
-function displayExtraction(data: MessageExtraction, latency: number) {
+function displayDebugInfo(debug: ProcessingDebugInfo) {
+  console.log(pc.dim('┌─ Debug Info ─────────────────────────────'));
+  console.log(
+    pc.dim(
+      `│ Message: ${debug.messageChars} chars, ${debug.messageLines} lines, ${debug.messageTokens} tokens`,
+    ),
+  );
+  console.log(pc.dim(`│ Prompt: ${debug.promptTokens} tokens`));
+  console.log(pc.dim(`│ Total Input: ${debug.totalInputTokens} tokens`));
+  if (debug.chunksUsed > 1) {
+    console.log(
+      pc.dim(
+        `│ Chunks: ${debug.chunksUsed} (~${debug.tokensPerChunk} tokens/chunk)`,
+      ),
+    );
+  }
+  console.log(pc.dim('└──────────────────────────────────────────'));
+}
+
+function displayExtraction(
+  data: MessageExtraction,
+  latency: number,
+  debug?: ProcessingDebugInfo,
+) {
   const intentColor = data.intent === 'offer' ? pc.green : pc.yellow;
   const urgencyColors: Record<string, (s: string) => string> = {
     critical: pc.red,
@@ -102,6 +126,9 @@ function displayExtraction(data: MessageExtraction, latency: number) {
   }
 
   console.log(pc.gray(`Latency: ${latency}ms`));
+  if (debug) {
+    displayDebugInfo(debug);
+  }
 }
 
 // ============================================================================
@@ -141,11 +168,14 @@ async function extractFromTestMessages(provider: AIProviderName) {
       const latency = Date.now() - startTime;
 
       if (result.data) {
-        displayExtraction(result.data, latency);
+        displayExtraction(result.data, latency, result.debug);
       } else {
         console.log(pc.red('Failed to extract'));
         if (result.error) {
           console.log(pc.red('Error:'), result.error);
+        }
+        if (result.debug) {
+          displayDebugInfo(result.debug);
         }
         console.log(pc.gray('Status:'), result.status);
         console.log(pc.gray(`Latency: ${latency}ms`));
@@ -187,11 +217,14 @@ async function extractSingleMessage(provider: AIProviderName, text: string) {
     const latency = Date.now() - startTime;
 
     if (result.data) {
-      displayExtraction(result.data, latency);
+      displayExtraction(result.data, latency, result.debug);
     } else {
       console.log(pc.red('Failed to extract'));
       if (result.error) {
         console.log(pc.red('Error:'), result.error);
+      }
+      if (result.debug) {
+        displayDebugInfo(result.debug);
       }
     }
   } catch (error) {

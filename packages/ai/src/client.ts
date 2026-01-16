@@ -7,6 +7,7 @@
 import { generateText, streamText, Output } from 'ai';
 import type { LanguageModel } from 'ai';
 import { z } from 'zod';
+import { encodingForModel, type TiktokenModel } from 'js-tiktoken';
 import type {
   AIProvider,
   AIProviderName,
@@ -39,64 +40,100 @@ export interface ProcessMessageOptions<T> {
   promptTemplate: string;
 }
 
+/** Debug info for message processing */
+export interface ProcessingDebugInfo {
+  messageChars: number;
+  messageLines: number;
+  messageTokens: number;
+  promptTokens: number;
+  totalInputTokens: number;
+  chunksUsed: number;
+  tokensPerChunk?: number;
+}
+
 /**
  * AI Client for message processing and text generation
  */
 export class AIClient {
   private provider: AIProvider;
   private extractorRegistry: ExtractorRegistry;
+  private tokenEncoder: ReturnType<typeof encodingForModel> | null = null;
 
   constructor(config: AIClientConfig = {}) {
     this.provider = config.provider
       ? createProvider(config.provider, config.envConfig)
       : getDefaultProvider(config.envConfig);
     this.extractorRegistry = createExtractorRegistry(this.provider.model);
+
+    // Initialize tiktoken encoder (use gpt-4 as baseline)
+    try {
+      this.tokenEncoder = encodingForModel('gpt-4' as TiktokenModel);
+    } catch {
+      this.tokenEncoder = null;
+    }
   }
 
-  /** Get the current provider name */
   get providerName(): AIProviderName {
     return this.provider.name;
   }
 
-  /** Get the current model name */
   get modelName(): string {
     return this.provider.config.model;
   }
 
-  /** Get the underlying language model */
   get model(): LanguageModel {
     return this.provider.model;
   }
 
-  /** Check if provider supports structured output */
   get supportsStructuredOutput(): boolean {
     return this.provider.supportsStructuredOutput;
+  }
+
+  /** Count tokens using tiktoken, with fallback estimation */
+  private countTokens(text: string): number {
+    if (this.tokenEncoder) {
+      try {
+        return this.tokenEncoder.encode(text).length;
+      } catch {
+        // Fallback on encoding error
+      }
+    }
+    const hasArabic = /[\u0600-\u06FF]/.test(text);
+    return Math.ceil(text.length / (hasArabic ? 2 : 4));
+  }
+
+  /** Build debug info for a message */
+  private buildDebugInfo(
+    message: string,
+    promptTokens: number,
+    chunksUsed = 1,
+    tokensPerChunk?: number,
+  ): ProcessingDebugInfo {
+    const messageTokens = this.countTokens(message);
+    return {
+      messageChars: message.length,
+      messageLines: message.split('\n').length,
+      messageTokens,
+      promptTokens,
+      totalInputTokens: messageTokens + promptTokens,
+      chunksUsed,
+      tokensPerChunk,
+    };
   }
 
   /**
    * Process a message with a custom schema and prompt
    * Automatically chunks long messages to avoid context limits
-   *
-   * @example
-   * ```ts
-   * const result = await client.processMessage(message, {
-   *   schema: z.object({
-   *     intent: z.string(),
-   *     sentiment: z.enum(['positive', 'negative', 'neutral']),
-   *   }),
-   *   systemPrompt: 'You are an AI assistant...',
-   *   promptTemplate: 'Analyze this message: {{message}}',
-   * });
-   * ```
    */
   async processMessage<T>(
     message: MessageInput,
     options: ProcessMessageOptions<T>,
-  ): Promise<ProcessingResult & { data: T | null }> {
+  ): Promise<
+    ProcessingResult & { data: T | null; debug?: ProcessingDebugInfo }
+  > {
     const startTime = Date.now();
 
     try {
-      // Skip empty messages
       if (!message.text || message.text.trim().length === 0) {
         return {
           messageId: message.id,
@@ -108,16 +145,41 @@ export class AIClient {
         };
       }
 
-      // Check if message needs chunking (estimate based on line count)
-      const lines = message.text.split('\n').filter(l => l.trim());
-      const needsChunking = lines.length > 15; // Chunk if more than 15 lines
+      const messageTokens = this.countTokens(message.text);
+      const messageLines = message.text
+        .split('\n')
+        .filter(l => l.trim()).length;
+      const promptTokens = this.countTokens(
+        options.systemPrompt + options.promptTemplate,
+      );
 
-      if (needsChunking) {
-        return this.processMessageInChunks(message, options, startTime);
+      const maxInputTokens = 4000;
+      const availableTokens = maxInputTokens - promptTokens;
+      const maxLines = 15;
+
+      // Chunk if exceeds token budget OR exceeds 15 lines
+      if (messageTokens > availableTokens || messageLines > maxLines) {
+        return this.processMessageInChunks(
+          message,
+          options,
+          startTime,
+          availableTokens,
+          promptTokens,
+        );
       }
 
-      return this.processMessageDirect(message, options, startTime);
+      return this.processMessageDirect(
+        message,
+        options,
+        startTime,
+        promptTokens,
+      );
     } catch (error) {
+      const promptTokens = this.countTokens(
+        options.systemPrompt + options.promptTemplate,
+      );
+      const debugInfo = this.buildDebugInfo(message.text, promptTokens);
+
       return {
         messageId: message.id,
         status: 'failed',
@@ -126,19 +188,20 @@ export class AIClient {
         data: null,
         error: error instanceof Error ? error.message : 'Unknown error',
         processingTimeMs: Date.now() - startTime,
+        debug: debugInfo,
       };
     }
   }
 
-  /**
-   * Process a message directly without chunking
-   */
+  /** Process a message directly without chunking */
   private async processMessageDirect<T>(
     message: MessageInput,
     options: ProcessMessageOptions<T>,
     startTime: number,
-  ): Promise<ProcessingResult & { data: T | null }> {
-    // Build context string
+    promptTokens: number,
+  ): Promise<
+    ProcessingResult & { data: T | null; debug?: ProcessingDebugInfo }
+  > {
     const contextParts: string[] = [];
     if (message.senderName) contextParts.push(`Sender: ${message.senderName}`);
     if (message.groupName) contextParts.push(`Group: ${message.groupName}`);
@@ -146,12 +209,12 @@ export class AIClient {
       contextParts.push(`Context: ${message.context.join(', ')}`);
     const contextStr = contextParts.length > 0 ? contextParts.join('\n') : '';
 
-    // Build prompt from template
     const prompt = options.promptTemplate
       .replace('{{message}}', message.text)
       .replace('{{context}}', contextStr);
 
-    // Generate structured output
+    const debugInfo = this.buildDebugInfo(message.text, promptTokens);
+
     const data = await this.generateObject({
       schema: options.schema,
       prompt,
@@ -159,15 +222,8 @@ export class AIClient {
       temperature: 0.3,
     });
 
-    // Convert to extraction result
     const extractions: ExtractionResult[] = data
-      ? [
-          {
-            type: 'structured',
-            data,
-            confidence: 1.0,
-          },
-        ]
+      ? [{ type: 'structured', data, confidence: 1.0 }]
       : [];
 
     return {
@@ -177,54 +233,102 @@ export class AIClient {
       extractions,
       data,
       processingTimeMs: Date.now() - startTime,
+      debug: debugInfo,
     };
   }
 
-  /**
-   * Process a long message in chunks and merge results
-   * Splits by lines, processes chunks in parallel, then merges medications arrays
-   */
+  /** Process a long message in chunks based on token budget and line limit */
   private async processMessageInChunks<T>(
     message: MessageInput,
     options: ProcessMessageOptions<T>,
     startTime: number,
-  ): Promise<ProcessingResult & { data: T | null }> {
-    const lines = message.text.split('\n').filter(l => l.trim());
+    tokenBudget: number,
+    promptTokens: number,
+  ): Promise<
+    ProcessingResult & { data: T | null; debug?: ProcessingDebugInfo }
+  > {
+    const lines = message.text.split('\n');
+    const chunks: string[] = [];
+    let currentChunk: string[] = [];
+    let currentTokens = 0;
+    const maxLinesPerChunk = 12;
 
-    // Smart chunking: group related lines together
-    const chunks = this.createSmartChunks(lines);
+    // Cap token budget per chunk to avoid context overflow
+    const effectiveTokenBudget = Math.min(tokenBudget, 500);
 
-    console.log(
-      `[AI Client] Processing ${lines.length} lines in ${chunks.length} chunks (parallel)`,
+    for (const line of lines) {
+      const lineTokens = this.countTokens(line + '\n');
+
+      // Start new chunk if exceeds token budget OR exceeds line limit
+      const exceedsTokens =
+        currentTokens + lineTokens > effectiveTokenBudget &&
+        currentChunk.length > 0;
+      const exceedsLines = currentChunk.length >= maxLinesPerChunk;
+
+      if (exceedsTokens || exceedsLines) {
+        chunks.push(currentChunk.join('\n'));
+        currentChunk = [];
+        currentTokens = 0;
+      }
+
+      currentChunk.push(line);
+      currentTokens += lineTokens;
+    }
+
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk.join('\n'));
+    }
+
+    const debugInfo = this.buildDebugInfo(
+      message.text,
+      promptTokens,
+      chunks.length,
+      effectiveTokenBudget,
     );
 
-    // Process ALL chunks in parallel
-    const chunkPromises = chunks.map((chunk, index) => {
-      const chunkMessage = {
-        ...message,
-        text: chunk,
-        id: index === 0 ? message.id : `${message.id}-chunk-${index}`,
-      };
-      return this.processMessageDirect(chunkMessage, options, startTime);
-    });
+    console.log(
+      `[AI Client] Chunking: ${debugInfo.messageTokens} tokens, ${debugInfo.messageLines} lines → ${chunks.length} chunks (max ${maxLinesPerChunk} lines, ~${effectiveTokenBudget} tokens/chunk)`,
+    );
 
-    const results = await Promise.all(chunkPromises);
+    // Process chunks sequentially to avoid overwhelming the model
+    const results: (ProcessingResult & {
+      data: T | null;
+      debug?: ProcessingDebugInfo;
+    })[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]!;
+      console.log(`[AI Client] Processing chunk ${i + 1}/${chunks.length}...`);
+      const result = await this.processMessageDirect(
+        {
+          ...message,
+          text: chunk,
+          id: i === 0 ? message.id : `${message.id}-${i}`,
+        },
+        options,
+        startTime,
+        promptTokens,
+      );
+      results.push(result);
+    }
 
-    // Find first successful result for intent/urgency/reason
     const firstSuccess = results.find(r => r.data);
     if (!firstSuccess?.data) {
+      const errors = results
+        .filter(r => r.error)
+        .map(r => r.error)
+        .join('; ');
       return {
         messageId: message.id,
         status: 'failed',
         model: this.modelName,
         extractions: [],
         data: null,
-        error: 'All chunks failed to process',
+        error: `All ${chunks.length} chunks failed: ${errors}`,
         processingTimeMs: Date.now() - startTime,
+        debug: debugInfo,
       };
     }
 
-    // Merge all medications from all chunks
     const allMedications: unknown[] = [];
     for (const result of results) {
       if (result.data) {
@@ -235,114 +339,41 @@ export class AIClient {
       }
     }
 
-    // Deduplicate medications by name+concentration
     const uniqueMedications = this.deduplicateMedications(allMedications);
-
-    // Merge results
     const firstData = firstSuccess.data as Record<string, unknown>;
     const mergedData = {
       ...firstData,
       medications: uniqueMedications,
-      reason: `${firstData.reason} (${chunks.length} chunks, ${uniqueMedications.length} medications)`,
+      reason: `${firstData.reason} (${chunks.length} chunks, ${uniqueMedications.length} meds)`,
     } as T;
 
     return {
       messageId: message.id,
       status: 'completed',
       model: this.modelName,
-      extractions: [
-        {
-          type: 'structured',
-          data: mergedData,
-          confidence: 1.0,
-        },
-      ],
+      extractions: [{ type: 'structured', data: mergedData, confidence: 1.0 }],
       data: mergedData,
       processingTimeMs: Date.now() - startTime,
+      debug: debugInfo,
     };
   }
 
-  /**
-   * Create smart chunks that keep related content together
-   * - Respects natural groupings (headers, separators)
-   * - Keeps medication + form/concentration on same line together
-   * - Targets ~10-12 items per chunk for optimal processing
-   */
-  private createSmartChunks(lines: string[]): string[] {
-    const chunks: string[] = [];
-    const targetChunkSize = 10;
-    let currentChunk: string[] = [];
-
-    // Patterns that indicate section breaks
-    const sectionBreakPattern =
-      /^[.\-_=*]{3,}|^#{1,3}\s|متوفر|متوافر|مطلوب|Available|Required/;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]!;
-
-      // Check if this line is a section header/break
-      const isSectionBreak = sectionBreakPattern.test(line);
-
-      // Start new chunk on section break if current chunk has content
-      if (
-        isSectionBreak &&
-        currentChunk.length > 0 &&
-        currentChunk.length >= targetChunkSize / 2
-      ) {
-        chunks.push(currentChunk.join('\n'));
-        currentChunk = [];
-      }
-
-      currentChunk.push(line);
-
-      // Check if we've reached target size
-      if (currentChunk.length >= targetChunkSize) {
-        // Look ahead to avoid splitting in middle of related content
-        const nextLine = lines[i + 1];
-        const isNextRelated = nextLine && !sectionBreakPattern.test(nextLine);
-
-        // If next line looks like a continuation, include it
-        if (isNextRelated && currentChunk.length < targetChunkSize + 3) {
-          continue;
-        }
-
-        chunks.push(currentChunk.join('\n'));
-        currentChunk = [];
-      }
-    }
-
-    // Don't forget the last chunk
-    if (currentChunk.length > 0) {
-      chunks.push(currentChunk.join('\n'));
-    }
-
-    return chunks;
-  }
-
-  /**
-   * Deduplicate medications by name + concentration
-   * Keeps the entry with highest confidence
-   */
+  /** Deduplicate medications by name+concentration+form */
   private deduplicateMedications(medications: unknown[]): unknown[] {
     const seen = new Map<string, { med: unknown; confidence: number }>();
-
     for (const med of medications) {
       const m = med as Record<string, unknown>;
       const key = `${m.name}|${m.concentration || ''}|${m.form || ''}`;
       const confidence = (m.confidence as number) || 0;
-
       const existing = seen.get(key);
       if (!existing || existing.confidence < confidence) {
         seen.set(key, { med, confidence });
       }
     }
-
     return Array.from(seen.values()).map(v => v.med);
   }
 
-  /**
-   * Process multiple messages in batch
-   */
+  /** Process multiple messages in batch */
   async processMessages<T>(
     messages: MessageInput[],
     options: ProcessMessageOptions<T> & BatchOptions,
@@ -376,9 +407,7 @@ export class AIClient {
     return results;
   }
 
-  /**
-   * Generate text using the AI model
-   */
+  /** Generate text using the AI model */
   async generateText(
     prompt: string,
     options?: { system?: string; temperature?: number },
@@ -391,12 +420,7 @@ export class AIClient {
     });
   }
 
-  /**
-   * Generate structured output using the AI model
-   *
-   * Uses native structured output for providers that support it,
-   * falls back to JSON parsing for providers that don't.
-   */
+  /** Generate structured output using the AI model */
   async generateObject<T>(options: {
     schema: z.ZodType<T>;
     prompt: string;
@@ -413,21 +437,16 @@ export class AIClient {
       });
       return result.experimental_output ?? null;
     }
-
-    // Fallback: JSON parsing for providers without structured output
     return this.generateObjectWithJsonParsing(options);
   }
 
-  /**
-   * Generate structured output using JSON parsing
-   */
+  /** Generate structured output using JSON parsing */
   private async generateObjectWithJsonParsing<T>(options: {
     schema: z.ZodType<T>;
     prompt: string;
     system?: string;
     temperature?: number;
   }): Promise<T | null> {
-    // Generate schema description from Zod schema
     const schemaExample = this.generateSchemaExample(options.schema);
 
     const jsonPrompt = `${options.prompt}
@@ -447,9 +466,7 @@ IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanat
     return this.parseJsonResponse(result.text, options.schema);
   }
 
-  /**
-   * Generate a JSON example from a Zod schema using proper Zod v4 APIs
-   */
+  /** Generate a JSON example from a Zod schema */
   private generateSchemaExample(schema: z.ZodType<unknown>): string {
     try {
       if (schema instanceof z.ZodObject) {
@@ -465,22 +482,12 @@ IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanat
     }
   }
 
-  /**
-   * Get an example value for a Zod type using instanceof checks (Zod v4)
-   */
+  /** Get an example value for a Zod type */
   private getExampleValue(type: z.ZodType<unknown>): unknown {
-    if (type instanceof z.ZodString) {
-      return 'string';
-    }
-    if (type instanceof z.ZodNumber) {
-      return 0;
-    }
-    if (type instanceof z.ZodBoolean) {
-      return true;
-    }
-    if (type instanceof z.ZodEnum) {
-      return type.options.join(' | ');
-    }
+    if (type instanceof z.ZodString) return 'string';
+    if (type instanceof z.ZodNumber) return 0;
+    if (type instanceof z.ZodBoolean) return true;
+    if (type instanceof z.ZodEnum) return type.options.join(' | ');
     if (type instanceof z.ZodArray) {
       return [this.getExampleValue(type.element as z.ZodType<unknown>)];
     }
@@ -497,29 +504,17 @@ IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanat
     return null;
   }
 
-  /**
-   * Parse JSON response and validate against schema
-   */
+  /** Parse JSON response and validate against schema */
   private parseJsonResponse<T>(text: string, schema: z.ZodType<T>): T | null {
-    // Clean the response - remove markdown code blocks if present
     let jsonText = text.trim();
 
-    // Remove markdown code blocks
-    if (jsonText.startsWith('```json')) {
-      jsonText = jsonText.slice(7);
-    } else if (jsonText.startsWith('```')) {
-      jsonText = jsonText.slice(3);
-    }
-    if (jsonText.endsWith('```')) {
-      jsonText = jsonText.slice(0, -3);
-    }
+    if (jsonText.startsWith('```json')) jsonText = jsonText.slice(7);
+    else if (jsonText.startsWith('```')) jsonText = jsonText.slice(3);
+    if (jsonText.endsWith('```')) jsonText = jsonText.slice(0, -3);
     jsonText = jsonText.trim();
 
-    // Try to extract JSON if there's extra text
     const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[0];
-    }
+    if (jsonMatch) jsonText = jsonMatch[0];
 
     try {
       const parsed = JSON.parse(jsonText);
@@ -538,9 +533,7 @@ IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanat
     }
   }
 
-  /**
-   * Stream text generation
-   */
+  /** Stream text generation */
   streamText(
     prompt: string,
     options?: { system?: string; temperature?: number },
@@ -553,34 +546,25 @@ IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanat
     });
   }
 
-  /**
-   * Run a specific extraction on a message (placeholder)
-   */
+  /** Run a specific extraction on a message */
   async extract(type: ExtractionType, message: MessageInput) {
     return this.extractorRegistry.extract(type, message);
   }
 
-  /**
-   * Get the extractor registry for custom configuration
-   */
+  /** Get the extractor registry */
   getExtractorRegistry(): ExtractorRegistry {
     return this.extractorRegistry;
   }
 }
 
-/**
- * Create an AI client with default configuration
- */
+/** Create an AI client with default configuration */
 export function createAIClient(config?: AIClientConfig): AIClient {
   return new AIClient(config);
 }
 
-// Singleton instance
 let defaultClient: AIClient | null = null;
 
-/**
- * Get the default AI client (singleton)
- */
+/** Get the default AI client (singleton) */
 export function getAIClient(): AIClient {
   if (!defaultClient) {
     defaultClient = createAIClient();
