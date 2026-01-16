@@ -14,6 +14,7 @@
 import pc from 'picocolors';
 import ora from 'ora';
 import prompts from 'prompts';
+import { z } from 'zod';
 import {
   createAIClient,
   type AIProviderName,
@@ -36,6 +37,54 @@ const envConfig: AIEnvConfig = {
   OPENAI_MODEL: env.OPENAI_MODEL,
   DOCKER_MODEL_BASE_URL: env.DOCKER_MODEL_BASE_URL,
   DOCKER_MODEL_NAME: env.DOCKER_MODEL_NAME,
+};
+
+// Default schema for message analysis
+const messageAnalysisSchema = z.object({
+  intent: z.object({
+    type: z
+      .string()
+      .describe(
+        'The primary intent: order, inquiry, complaint, greeting, support, other',
+      ),
+    confidence: z.number().min(0).max(1).describe('Confidence score 0-1'),
+  }),
+  sentiment: z.object({
+    label: z
+      .enum(['positive', 'negative', 'neutral'])
+      .describe('Overall sentiment'),
+    score: z.number().min(-1).max(1).describe('Sentiment score from -1 to 1'),
+  }),
+  entities: z
+    .array(
+      z.object({
+        type: z
+          .string()
+          .describe(
+            'Entity type: product, quantity, price, date, person, location, phone, email',
+          ),
+        value: z.string().describe('The extracted value'),
+        confidence: z.number().min(0).max(1).describe('Confidence score 0-1'),
+      }),
+    )
+    .describe('Extracted entities from the message'),
+  summary: z
+    .string()
+    .nullable()
+    .describe('Brief summary if message is complex'),
+});
+
+const defaultProcessOptions = {
+  schema: messageAnalysisSchema,
+  systemPrompt: `You are an AI assistant specialized in analyzing WhatsApp messages for a pharmaceutical distribution company.
+Extract structured information including intent, sentiment, and entities.
+For confidence scores: 0.9+ for clear cases, 0.7-0.9 for likely cases, below 0.7 for uncertain.`,
+  promptTemplate: `Analyze this WhatsApp message:
+{{context}}
+
+Message: "{{message}}"
+
+Extract the intent, sentiment, and any relevant entities.`,
 };
 
 // Configure prompts to not exit on cancel
@@ -167,19 +216,26 @@ async function processMessage(provider: AIProviderName, text: string) {
   const spinner = ora('Processing...').start();
 
   try {
-    const result = await client.processMessage({
-      id: 'playground-' + Date.now(),
-      text,
-      timestamp: new Date(),
-    });
+    const result = await client.processMessage(
+      {
+        id: 'playground-' + Date.now(),
+        text,
+        timestamp: new Date(),
+      },
+      defaultProcessOptions,
+    );
 
     spinner.stop();
 
     console.log(pc.bold('Status:'), result.status);
     console.log(pc.bold('Latency:'), `${result.processingTimeMs}ms`);
-    console.log(pc.bold('Extractions:'), result.extractions.length);
 
-    if (result.extractions.length > 0) {
+    // Show structured data if available
+    if (result.data) {
+      console.log(pc.bold('\nExtracted Data:'));
+      console.log(pc.cyan(JSON.stringify(result.data, null, 2)));
+    } else if (result.extractions.length > 0) {
+      console.log(pc.bold('Extractions:'), result.extractions.length);
       console.log();
       for (const extraction of result.extractions) {
         console.log(

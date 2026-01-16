@@ -25,49 +25,19 @@ import { ExtractorRegistry, createExtractorRegistry } from './extractors';
 
 export interface AIClientConfig {
   provider?: AIProviderName;
-  extractionTypes?: ExtractionType[];
   /** Optional environment config. If not provided, uses @pharmabroker/env/server */
   envConfig?: AIEnvConfig;
 }
 
-// Schema for AI message analysis
-const messageAnalysisSchema = z.object({
-  intent: z.object({
-    type: z
-      .string()
-      .describe(
-        'The primary intent: order, inquiry, complaint, greeting, support, other',
-      ),
-    confidence: z.number().min(0).max(1).describe('Confidence score 0-1'),
-  }),
-  sentiment: z.object({
-    label: z
-      .enum(['positive', 'negative', 'neutral'])
-      .describe('Overall sentiment'),
-    score: z
-      .number()
-      .min(-1)
-      .max(1)
-      .describe('Sentiment score from -1 (negative) to 1 (positive)'),
-  }),
-  entities: z
-    .array(
-      z.object({
-        type: z
-          .string()
-          .describe(
-            'Entity type: product, quantity, price, date, person, location, phone, email',
-          ),
-        value: z.string().describe('The extracted value'),
-        confidence: z.number().min(0).max(1).describe('Confidence score 0-1'),
-      }),
-    )
-    .describe('Extracted entities from the message'),
-  summary: z
-    .string()
-    .optional()
-    .describe('Brief summary of the message if complex'),
-});
+/** Options for processing messages with custom schema */
+export interface ProcessMessageOptions<T> {
+  /** Zod schema for the expected output */
+  schema: z.ZodType<T>;
+  /** System prompt for the AI */
+  systemPrompt: string;
+  /** User prompt template - use {{message}} for the message text, {{context}} for context */
+  promptTemplate: string;
+}
 
 /**
  * AI Client for message processing and text generation
@@ -75,14 +45,12 @@ const messageAnalysisSchema = z.object({
 export class AIClient {
   private provider: AIProvider;
   private extractorRegistry: ExtractorRegistry;
-  private extractionTypes: ExtractionType[];
 
   constructor(config: AIClientConfig = {}) {
     this.provider = config.provider
       ? createProvider(config.provider, config.envConfig)
       : getDefaultProvider(config.envConfig);
     this.extractorRegistry = createExtractorRegistry(this.provider.model);
-    this.extractionTypes = config.extractionTypes ?? [];
   }
 
   /** Get the current provider name */
@@ -100,10 +68,30 @@ export class AIClient {
     return this.provider.model;
   }
 
+  /** Check if provider supports structured output */
+  get supportsStructuredOutput(): boolean {
+    return this.provider.supportsStructuredOutput;
+  }
+
   /**
-   * Process a message and extract structured data using AI
+   * Process a message with a custom schema and prompt
+   *
+   * @example
+   * ```ts
+   * const result = await client.processMessage(message, {
+   *   schema: z.object({
+   *     intent: z.string(),
+   *     sentiment: z.enum(['positive', 'negative', 'neutral']),
+   *   }),
+   *   systemPrompt: 'You are an AI assistant...',
+   *   promptTemplate: 'Analyze this message: {{message}}',
+   * });
+   * ```
    */
-  async processMessage(message: MessageInput): Promise<ProcessingResult> {
+  async processMessage<T>(
+    message: MessageInput,
+    options: ProcessMessageOptions<T>,
+  ): Promise<ProcessingResult & { data: T | null }> {
     const startTime = Date.now();
 
     try {
@@ -114,91 +102,50 @@ export class AIClient {
           status: 'skipped',
           model: this.modelName,
           extractions: [],
+          data: null,
           processingTimeMs: Date.now() - startTime,
         };
       }
 
-      // Build context for the AI
+      // Build context string
       const contextParts: string[] = [];
       if (message.senderName)
         contextParts.push(`Sender: ${message.senderName}`);
       if (message.groupName) contextParts.push(`Group: ${message.groupName}`);
       if (message.context?.length)
         contextParts.push(`Context: ${message.context.join(', ')}`);
+      const contextStr = contextParts.length > 0 ? contextParts.join('\n') : '';
 
-      const contextStr =
-        contextParts.length > 0 ? `\n${contextParts.join('\n')}` : '';
+      // Build prompt from template
+      const prompt = options.promptTemplate
+        .replace('{{message}}', message.text)
+        .replace('{{context}}', contextStr);
 
-      const prompt = `Analyze this WhatsApp message from a pharmaceutical distribution business context.${contextStr}
-
-Message: "${message.text}"
-
-Extract the intent, sentiment, and any relevant entities (products, quantities, prices, dates, contacts, etc.).`;
-
-      const systemPrompt = `You are an AI assistant specialized in analyzing WhatsApp messages for a pharmaceutical distribution company. 
-Your task is to extract structured information from messages including:
-- Intent classification (order, inquiry, complaint, greeting, support, other)
-- Sentiment analysis (positive, negative, neutral)
-- Entity extraction (products, quantities, prices, dates, people, locations, phone numbers, emails)
-
-Be precise and only extract information that is clearly present in the message.
-For confidence scores, use 0.9+ for very clear cases, 0.7-0.9 for likely cases, and below 0.7 for uncertain cases.`;
-
-      // Call the AI model with structured output
-      const result = await generateText({
-        model: this.provider.model,
+      // Generate structured output
+      const data = await this.generateObject({
+        schema: options.schema,
         prompt,
-        system: systemPrompt,
+        system: options.systemPrompt,
         temperature: 0.3,
-        experimental_output: Output.object({ schema: messageAnalysisSchema }),
       });
 
-      // Convert AI response to extraction results
-      const extractions: ExtractionResult[] = [];
-      const analysis = result.experimental_output;
-
-      if (analysis) {
-        // Add intent extraction
-        extractions.push({
-          type: 'intent',
-          data: { type: analysis.intent.type },
-          confidence: analysis.intent.confidence,
-        });
-
-        // Add sentiment extraction
-        extractions.push({
-          type: 'sentiment',
-          data: {
-            label: analysis.sentiment.label,
-            score: analysis.sentiment.score,
-          },
-          confidence: Math.abs(analysis.sentiment.score) > 0.5 ? 0.9 : 0.7,
-        });
-
-        // Add entity extractions
-        for (const entity of analysis.entities) {
-          extractions.push({
-            type: `entity:${entity.type}`,
-            data: { value: entity.value },
-            confidence: entity.confidence,
-          });
-        }
-
-        // Add summary if present
-        if (analysis.summary) {
-          extractions.push({
-            type: 'summary',
-            data: { text: analysis.summary },
-            confidence: 0.9,
-          });
-        }
-      }
+      // Convert to extraction result
+      const extractions: ExtractionResult[] = data
+        ? [
+            {
+              type: 'structured',
+              data,
+              confidence: 1.0,
+            },
+          ]
+        : [];
 
       return {
         messageId: message.id,
-        status: 'completed',
+        status: data ? 'completed' : 'failed',
         model: this.modelName,
         extractions,
+        data,
         processingTimeMs: Date.now() - startTime,
       };
     } catch (error) {
@@ -207,6 +154,7 @@ For confidence scores, use 0.9+ for very clear cases, 0.7-0.9 for likely cases, 
         status: 'failed',
         model: this.modelName,
         extractions: [],
+        data: null,
         error: error instanceof Error ? error.message : 'Unknown error',
         processingTimeMs: Date.now() - startTime,
       };
@@ -216,20 +164,19 @@ For confidence scores, use 0.9+ for very clear cases, 0.7-0.9 for likely cases, 
   /**
    * Process multiple messages in batch
    */
-  async processMessages(
+  async processMessages<T>(
     messages: MessageInput[],
-    options: BatchOptions = {},
-  ): Promise<ProcessingResult[]> {
-    const { concurrency = 3, skipOnError = true } = options;
-    const results: ProcessingResult[] = [];
+    options: ProcessMessageOptions<T> & BatchOptions,
+  ): Promise<(ProcessingResult & { data: T | null })[]> {
+    const { concurrency = 5, skipOnError = true, ...processOptions } = options;
+    const results: (ProcessingResult & { data: T | null })[] = [];
 
-    // Process in batches for concurrency control
     for (let i = 0; i < messages.length; i += concurrency) {
       const batch = messages.slice(i, i + concurrency);
       const batchResults = await Promise.all(
         batch.map(async message => {
           try {
-            return await this.processMessage(message);
+            return await this.processMessage(message, processOptions);
           } catch (error) {
             if (!skipOnError) throw error;
             return {
@@ -237,6 +184,7 @@ For confidence scores, use 0.9+ for very clear cases, 0.7-0.9 for likely cases, 
               status: 'failed' as const,
               model: this.modelName,
               extractions: [],
+              data: null,
               error: error instanceof Error ? error.message : 'Unknown error',
               processingTimeMs: 0,
             };
@@ -266,20 +214,150 @@ For confidence scores, use 0.9+ for very clear cases, 0.7-0.9 for likely cases, 
 
   /**
    * Generate structured output using the AI model
+   *
+   * Uses native structured output for providers that support it,
+   * falls back to JSON parsing for providers that don't.
    */
   async generateObject<T>(options: {
     schema: z.ZodType<T>;
     prompt: string;
     system?: string;
     temperature?: number;
-  }) {
-    return generateText({
+  }): Promise<T | null> {
+    if (this.provider.supportsStructuredOutput) {
+      const result = await generateText({
+        model: this.provider.model,
+        prompt: options.prompt,
+        system: options.system,
+        temperature: options.temperature ?? 0.3,
+        experimental_output: Output.object({ schema: options.schema }),
+      });
+      return result.experimental_output ?? null;
+    }
+
+    // Fallback: JSON parsing for providers without structured output
+    return this.generateObjectWithJsonParsing(options);
+  }
+
+  /**
+   * Generate structured output using JSON parsing
+   */
+  private async generateObjectWithJsonParsing<T>(options: {
+    schema: z.ZodType<T>;
+    prompt: string;
+    system?: string;
+    temperature?: number;
+  }): Promise<T | null> {
+    // Generate schema description from Zod schema
+    const schemaExample = this.generateSchemaExample(options.schema);
+
+    const jsonPrompt = `${options.prompt}
+
+You MUST respond with ONLY a valid JSON object in this exact format:
+${schemaExample}
+
+IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanations.`;
+
+    const result = await generateText({
       model: this.provider.model,
-      prompt: options.prompt,
+      prompt: jsonPrompt,
       system: options.system,
       temperature: options.temperature ?? 0.3,
-      experimental_output: Output.object({ schema: options.schema }),
     });
+
+    return this.parseJsonResponse(result.text, options.schema);
+  }
+
+  /**
+   * Generate a JSON example from a Zod schema using proper Zod v4 APIs
+   */
+  private generateSchemaExample(schema: z.ZodType<unknown>): string {
+    try {
+      if (schema instanceof z.ZodObject) {
+        const example: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(schema.shape)) {
+          example[key] = this.getExampleValue(value as z.ZodType<unknown>);
+        }
+        return JSON.stringify(example, null, 2);
+      }
+      return '{ }';
+    } catch {
+      return '{ }';
+    }
+  }
+
+  /**
+   * Get an example value for a Zod type using instanceof checks (Zod v4)
+   */
+  private getExampleValue(type: z.ZodType<unknown>): unknown {
+    if (type instanceof z.ZodString) {
+      return 'string';
+    }
+    if (type instanceof z.ZodNumber) {
+      return 0;
+    }
+    if (type instanceof z.ZodBoolean) {
+      return true;
+    }
+    if (type instanceof z.ZodEnum) {
+      return type.options.join(' | ');
+    }
+    if (type instanceof z.ZodArray) {
+      return [this.getExampleValue(type.element as z.ZodType<unknown>)];
+    }
+    if (type instanceof z.ZodObject) {
+      const obj: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(type.shape)) {
+        obj[k] = this.getExampleValue(v as z.ZodType<unknown>);
+      }
+      return obj;
+    }
+    if (type instanceof z.ZodOptional || type instanceof z.ZodNullable) {
+      return this.getExampleValue(type.unwrap() as z.ZodType<unknown>);
+    }
+    return null;
+  }
+
+  /**
+   * Parse JSON response and validate against schema
+   */
+  private parseJsonResponse<T>(text: string, schema: z.ZodType<T>): T | null {
+    try {
+      // Clean the response - remove markdown code blocks if present
+      let jsonText = text.trim();
+
+      // Remove markdown code blocks
+      if (jsonText.startsWith('```json')) {
+        jsonText = jsonText.slice(7);
+      } else if (jsonText.startsWith('```')) {
+        jsonText = jsonText.slice(3);
+      }
+      if (jsonText.endsWith('```')) {
+        jsonText = jsonText.slice(0, -3);
+      }
+      jsonText = jsonText.trim();
+
+      // Try to extract JSON if there's extra text
+      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[0];
+      }
+
+      const parsed = JSON.parse(jsonText);
+      return schema.parse(parsed);
+    } catch (error) {
+      // Log parsing errors for debugging
+      console.error(
+        '[AI Client] JSON parsing failed:',
+        error instanceof Error ? error.message : error,
+      );
+      console.error('[AI Client] Raw text length:', text.length);
+      console.error(
+        '[AI Client] Raw text (first 1000 chars):',
+        text.substring(0, 1000),
+      );
+      return null;
+    }
   }
 
   /**
@@ -298,8 +376,7 @@ For confidence scores, use 0.9+ for very clear cases, 0.7-0.9 for likely cases, 
   }
 
   /**
-   * Run a specific extraction on a message
-   * Note: Placeholder until extraction types are defined
+   * Run a specific extraction on a message (placeholder)
    */
   async extract(type: ExtractionType, message: MessageInput) {
     return this.extractorRegistry.extract(type, message);

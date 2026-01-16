@@ -34,5 +34,6 @@ export function createGeminiProvider(config: GeminiConfig): AIProvider {
     name: 'gemini',
     model: google(model) as LanguageModelV1,
     config: providerConfig,
+    supportsStructuredOutput: true,
   };
 }

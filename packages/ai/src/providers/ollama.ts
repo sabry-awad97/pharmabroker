@@ -33,5 +33,6 @@ export function createOllamaProvider(config: OllamaConfig = {}): AIProvider {
     name: 'ollama',
     model: ollama(model),
     config: providerConfig,
+    supportsStructuredOutput: true,
   };
 }

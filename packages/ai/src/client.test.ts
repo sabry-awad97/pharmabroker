@@ -5,7 +5,7 @@
  * Tests provider creation, client configuration, and basic operations.
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type { MessageInput, ProcessingResult } from './types';
 
@@ -23,13 +23,6 @@ const messageInputArb = fc.record({
   groupName: fc.option(fc.string({ minLength: 1, maxLength: 100 }), {
     nil: undefined,
   }),
-  timestamp: fc.date(),
-});
-
-/** Generate an empty message input */
-const emptyMessageInputArb = fc.record({
-  id: fc.uuid(),
-  text: fc.constantFrom('', '   ', '\n\t'),
   timestamp: fc.date(),
 });
 

@@ -1,0 +1,124 @@
+{
+  "messages": [
+    {
+      "id": "pharma-stock-arabic-1",
+      "name": "Arabic Pharmaceutical Stock Announcement",
+      "description": "Stock availability announcement for fertility and weight loss medications",
+      "input": {
+        "text": "متوفرر🚨رررمريوفيرت 150فوستيمون 150جونابيور 150جونابيور 75جونال 900أورجالوترانسيتروتايد ربعأوفتريل 250كوريومون 5000ابيفاسي 5000تريبتوفيم ديكابيبتايللوفيرس 75ابيجونال 75برولوتكس_______اوزمبك واحد و نصسكسنداريبلسس 14ريبلسس 7ريبلسس 3جوناتستون حقنبنتازا لبوسانفانززولادكس كبيرزولادكس صغير",
+        "senderName": "Pharmacy Supplier",
+        "groupName": "Pharma Stock Updates"
+      },
+      "language": "arabic",
+      "tags": ["arabic", "stock", "fertility", "weight-loss", "pharmaceutical"]
+    },
+    {
+      "id": "pharma-order-arabic-1",
+      "name": "Arabic Pharmaceutical Order",
+      "description": "Order request for specific medications",
+      "input": {
+        "text": "محتاج 5 علب اوزمبك و 3 علب ريبلسس 14 ضروري اليوم",
+        "senderName": "صيدلية النور",
+        "groupName": "طلبات الأدوية"
+      },
+      "language": "arabic",
+      "tags": ["arabic", "order", "urgent"]
+    },
+    {
+      "id": "pharma-inquiry-arabic-1",
+      "name": "Arabic Price Inquiry",
+      "description": "Price inquiry for medications",
+      "input": {
+        "text": "كم سعر اوزمبك واحد ونص؟ وهل متوفر؟",
+        "senderName": "عميل",
+        "groupName": "استفسارات"
+      },
+      "language": "arabic",
+      "tags": ["arabic", "inquiry", "price"]
+    },
+    {
+      "id": "pharma-stock-english-1",
+      "name": "English Stock Announcement",
+      "description": "Stock availability in English",
+      "input": {
+        "text": "Available now: Ozempic 1mg, Wegovy 2.4mg, Mounjaro 5mg, Saxenda pens, Rybelsus 7mg tablets. DM for prices.",
+        "senderName": "MedSupply Co",
+        "groupName": "Pharma Wholesale"
+      },
+      "language": "english",
+      "tags": ["english", "stock", "weight-loss"]
+    },
+    {
+      "id": "pharma-mixed-1",
+      "name": "Mixed Arabic/English Message",
+      "description": "Message with both Arabic and English medication names",
+      "input": {
+        "text": "متوفر Ozempic و Wegovy وكمان اوزمبك عربي وريبلسس",
+        "senderName": "Supplier",
+        "groupName": "Mixed Group"
+      },
+      "language": "mixed",
+      "tags": ["mixed", "stock"]
+    },
+    {
+      "id": "pharma-stock-arabic-2",
+      "name": "Arabic Stock with Serums and Controlled Substances",
+      "description": "Stock announcement with serums, controlled substances, and various medication forms",
+      "input": {
+        "text": "متوافر والتوصيل لجميع المحافظات\nعام مبارك٢٠٢٦\nمصل تيتانوس امبول\nمصل التعبان\nكونسرتا ٣٦ و١٨\nديورجيسك لاصقه\nنالوفين امبول\nمصل العقرب\nزولام اقراص\nريفوتريل  نقط\nمصل الكلب\nلاريكا ١٥٠ و٣٠٠\nمصل الحمي الشوكيه\nفالسيت ٤٥٠ تركي\nبيثادين امبول\nفنتانيل امبول\nكيتامين فايل\nطقم علاج فيرس سي\nكينريت ١٠٠ تركي\nطقم فوسوفي لعلاج فيرس سي\nهيومان البيومان\nبريجافليكس ١٥٠\nبوتاسيوم امبول\nثيوبتال فايل\nماغنسيوم امبول\nهيفي ماركين امبول\nهيفي ماركين فايل\nابيستجمين فايل\nسيكلوبروجنوفا\nتوسكان شراب\nبوتكس الليرجان",
+        "senderName": "موزع أدوية",
+        "groupName": "توزيع الأدوية"
+      },
+      "language": "arabic",
+      "tags": ["arabic", "stock", "serums", "controlled", "various-forms"]
+    },
+    {
+      "id": "pharma-request-arabic-1",
+      "name": "Arabic Request for Controlled Medications",
+      "description": "Request for controlled substances and various medications with multiple concentrations",
+      "input": {
+        "text": "......................................\nمطلوب مطلوب مطلوب مطلوب\nعام مبارك٢٠٢٦\nسولوميدرول فايزر /١٠٠٠ و٥٠٠\nزناكس ٥٠٠\nريمكيد ٢٠٠\nاوكسيكونتين\nانبريل ٥٠\nرواكيوتان ٢٠\nميدياثتك امبول\nنالوفين امبول\nامر ك حقن\nنوبين امبول\nنيوريل امبول\nزولام نص وربع\nهيدروكورتيزون حقن\nكونترااكتوبكس جل\nميدزولام ١٥ و٥\nكالميبام\n......................................",
+        "senderName": "صيدلية طلبات",
+        "groupName": "طلبات الأدوية المستعجلة"
+      },
+      "language": "arabic",
+      "tags": ["arabic", "request", "controlled", "multiple-concentrations"]
+    },
+    {
+      "id": "pharma-stock-with-expiry",
+      "name": "Arabic Stock with Expiry Dates",
+      "description": "Stock announcement with expiry dates that should not be confused with concentrations",
+      "input": {
+        "text": "متوفر الان\nاوزمبك واحد 10/27\nاوزمبك واحد ونص ٣/٢٦\nريبلسس ١٤ صلاحية ٥/٢٧\nOzempic 1mg exp 12/2027\nويجوفي 2.4mg 6/27\nساكسندا 11/26",
+        "senderName": "موزع",
+        "groupName": "عروض الأدوية"
+      },
+      "language": "mixed",
+      "tags": ["mixed", "stock", "expiry-dates"]
+    },
+    {
+      "id": "pharma-urgent-request",
+      "name": "Urgent Arabic Request",
+      "description": "Urgent request with time pressure keywords",
+      "input": {
+        "text": "ضروري جدا اليوم!!!\nمحتاج فورا:\nنالوفين امبول ٥ علب\nكيتامين فايل ٣ علب\nفنتانيل امبول علبتين\nالموضوع مستعجل جدا حالة طوارئ",
+        "senderName": "مستشفى الطوارئ",
+        "groupName": "طلبات عاجلة"
+      },
+      "language": "arabic",
+      "tags": ["arabic", "request", "urgent", "emergency"]
+    },
+    {
+      "id": "pharma-critical-request",
+      "name": "Critical Emergency Request",
+      "description": "Life-threatening emergency request",
+      "input": {
+        "text": "🚨🚨🚨 EMERGENCY 🚨🚨🚨\nحالة طوارئ حياة او موت\nمحتاج فوري:\nمصل العقرب ٢ امبول\nمصل التعبان امبول\nSTAT IMMEDIATELY",
+        "senderName": "ICU Doctor",
+        "groupName": "Emergency Requests"
+      },
+      "language": "mixed",
+      "tags": ["mixed", "request", "critical", "life-threatening"]
+    }
+  ]
+}

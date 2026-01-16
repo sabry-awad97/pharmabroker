@@ -30,6 +30,24 @@ export class Reporter {
       `  Extractions: ${result.processingResult.extractions.length}`,
     ];
 
+    // Show extraction data in formatted JSON
+    if (result.processingResult.extractions.length > 0) {
+      lines.push(pc.cyan('  Extracted Data:'));
+      for (const extraction of result.processingResult.extractions) {
+        lines.push(
+          pc.dim(
+            `    ┌─ ${pc.bold(extraction.type)} (confidence: ${(extraction.confidence * 100).toFixed(0)}%)`,
+          ),
+        );
+        const dataStr = JSON.stringify(extraction.data, null, 2);
+        const dataLines = dataStr.split('\n');
+        for (let i = 0; i < dataLines.length; i++) {
+          const prefix = i === dataLines.length - 1 ? '    └─ ' : '    │  ';
+          lines.push(pc.dim(prefix) + pc.white(dataLines[i]));
+        }
+      }
+    }
+
     if (result.testCase.expected && result.testCase.expected.length > 0) {
       lines.push(
         `  Expected: ${result.metrics.expectedCount}, Matched: ${result.metrics.matchedCount}`,

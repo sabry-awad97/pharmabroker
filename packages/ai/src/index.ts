@@ -43,6 +43,7 @@ export {
   createAIClient,
   getAIClient,
   type AIClientConfig,
+  type ProcessMessageOptions,
 } from './client';
 
 // Providers

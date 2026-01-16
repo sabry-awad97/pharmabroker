@@ -20,7 +20,7 @@ const envSchema = z.object({
 
   // Ollama
   OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
-  OLLAMA_MODEL: z.string().default('llama3.2'),
+  OLLAMA_MODEL: z.string().default('ii-medical-8b:latest'),
 
   // OpenAI
   OPENAI_API_KEY: z.string().optional(),

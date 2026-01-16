@@ -4,6 +4,7 @@
  * Runs test suites against AI providers and collects results.
  */
 
+import { z } from 'zod';
 import {
   createAIClient,
   type AIClient,
@@ -37,6 +38,54 @@ const envConfig: AIEnvConfig = {
   DOCKER_MODEL_BASE_URL: env.DOCKER_MODEL_BASE_URL,
   DOCKER_MODEL_NAME: env.DOCKER_MODEL_NAME,
 };
+
+// Default schema for message analysis
+const messageAnalysisSchema = z.object({
+  intent: z.object({
+    type: z
+      .string()
+      .describe(
+        'The primary intent: order, inquiry, complaint, greeting, support, other',
+      ),
+    confidence: z.number().min(0).max(1).describe('Confidence score 0-1'),
+  }),
+  sentiment: z.object({
+    label: z
+      .enum(['positive', 'negative', 'neutral'])
+      .describe('Overall sentiment'),
+    score: z.number().min(-1).max(1).describe('Sentiment score from -1 to 1'),
+  }),
+  entities: z
+    .array(
+      z.object({
+        type: z
+          .string()
+          .describe(
+            'Entity type: product, quantity, price, date, person, location, phone, email',
+          ),
+        value: z.string().describe('The extracted value'),
+        confidence: z.number().min(0).max(1).describe('Confidence score 0-1'),
+      }),
+    )
+    .describe('Extracted entities from the message'),
+  summary: z
+    .string()
+    .nullable()
+    .describe('Brief summary if message is complex'),
+});
+
+type MessageAnalysis = z.infer<typeof messageAnalysisSchema>;
+
+const defaultSystemPrompt = `You are an AI assistant specialized in analyzing WhatsApp messages for a pharmaceutical distribution company.
+Extract structured information including intent, sentiment, and entities.
+For confidence scores: 0.9+ for clear cases, 0.7-0.9 for likely cases, below 0.7 for uncertain.`;
+
+const defaultPromptTemplate = `Analyze this WhatsApp message:
+{{context}}
+
+Message: "{{message}}"
+
+Extract the intent, sentiment, and any relevant entities.`;
 
 // ============================================================================
 // Test Runner
@@ -73,8 +122,66 @@ export class TestRunner {
       context: testCase.input.context,
     };
 
-    const result = await this.client.processMessage(input);
-    return evaluator.evaluateCase(testCase, result);
+    const result = await this.client.processMessage(input, {
+      schema: messageAnalysisSchema,
+      systemPrompt: defaultSystemPrompt,
+      promptTemplate: defaultPromptTemplate,
+    });
+
+    // Convert structured data to extractions for evaluation
+    const processingResult: ProcessingResult = {
+      messageId: result.messageId,
+      status: result.status,
+      model: result.model,
+      extractions: result.data ? this.convertToExtractions(result.data) : [],
+      error: result.error,
+      processingTimeMs: result.processingTimeMs,
+    };
+
+    return evaluator.evaluateCase(testCase, processingResult);
+  }
+
+  /**
+   * Convert structured analysis to extraction results
+   */
+  private convertToExtractions(
+    data: MessageAnalysis,
+  ): ProcessingResult['extractions'] {
+    const extractions: ProcessingResult['extractions'] = [];
+
+    // Add intent
+    extractions.push({
+      type: 'intent',
+      data: { intent: data.intent.type },
+      confidence: data.intent.confidence,
+    });
+
+    // Add sentiment
+    extractions.push({
+      type: 'sentiment',
+      data: { sentiment: data.sentiment.label, score: data.sentiment.score },
+      confidence: Math.abs(data.sentiment.score) > 0.5 ? 0.9 : 0.7,
+    });
+
+    // Add entities
+    for (const entity of data.entities) {
+      extractions.push({
+        type: `entity:${entity.type}`,
+        data: { value: entity.value },
+        confidence: entity.confidence,
+      });
+    }
+
+    // Add summary if present
+    if (data.summary) {
+      extractions.push({
+        type: 'summary',
+        data: { text: data.summary },
+        confidence: 0.9,
+      });
+    }
+
+    return extractions;
   }
 
   /**
@@ -245,7 +352,20 @@ export class BenchmarkRunner {
       timestamp: new Date(),
     };
 
-    return client.processMessage(input);
+    const result = await client.processMessage(input, {
+      schema: messageAnalysisSchema,
+      systemPrompt: defaultSystemPrompt,
+      promptTemplate: defaultPromptTemplate,
+    });
+
+    return {
+      messageId: result.messageId,
+      status: result.status,
+      model: result.model,
+      extractions: result.extractions,
+      error: result.error,
+      processingTimeMs: result.processingTimeMs,
+    };
   }
 }
 

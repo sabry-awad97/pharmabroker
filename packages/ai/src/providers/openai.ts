@@ -44,5 +44,6 @@ export function createOpenAIProvider(config: OpenAIConfig): AIProvider {
     name: 'openai',
     model: openai(model),
     config: providerConfig,
+    supportsStructuredOutput: true,
   };
 }

@@ -26,6 +26,8 @@ export interface AIProvider {
   name: AIProviderName;
   model: LanguageModel;
   config: AIProviderConfig;
+  /** Whether the provider supports structured output (JSON schema) */
+  supportsStructuredOutput: boolean;
 }
 
 // ============================================================================

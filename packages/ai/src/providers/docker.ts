@@ -75,6 +75,7 @@ export function createDockerModelProvider(
     name: 'docker',
     model: docker.chatModel(model),
     config: providerConfig,
+    supportsStructuredOutput: false,
   };
 }
 
