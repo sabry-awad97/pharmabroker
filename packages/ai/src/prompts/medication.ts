@@ -46,34 +46,56 @@ CONCENTRATION patterns (NOT expiry):
 - Multiple with و: ٣٦ و١٨, ١٥٠ و٣٠٠
 - With units: 1mg, 2.4mg, 500mcg
 
-How to distinguish:
-- If format is XX/XX or XX/XXXX or XX-XX → EXPIRY DATE
-- If number is 20-30 range with / or - → likely EXPIRY (month/year)
+How to distinguish XX/YY format - DYNAMIC YEAR DETECTION:
+Current year is {{currentYear}}. Use this to determine valid year ranges.
+
+For format A/B (like 3/26, 10/27, ٣/٢٦):
+1. If A ≤ 12 AND B is a valid year (current year's last 2 digits to +10 years):
+   → This is EXPIRY DATE (month/year), e.g., 3/26 = March 2026
+2. If A > 12 OR B < current year's last 2 digits OR B > current year's last 2 digits + 10:
+   → Likely NOT an expiry date
+
+Valid year range for 2-digit years: {{currentYearShort}} to {{maxYearShort}} ({{currentYear}} to {{maxYear}})
+
+Examples with current year {{currentYear}}:
+- 3/26 → A=3 (≤12), B=26 (valid year range) → EXPIRY: March 2026
+- 10/27 → A=10 (≤12), B=27 (valid year range) → EXPIRY: October 2027
+- 15/26 → A=15 (>12) → NOT a valid month, likely concentration or other
+- 3/35 → B=35 (outside valid range) → NOT likely expiry
+- 150/300 → Neither is valid month/year → CONCENTRATION values
+
+Other rules:
+- If format is XX/XXXX (4-digit year) → EXPIRY DATE
 - If single number or number with mg/mcg → CONCENTRATION
 - If preceded by صلاحية, exp, تاريخ → EXPIRY DATE
 
 [GOOD EXAMPLES]
 ✓ "مصل تيتانوس امبول" → name: "مصل تيتانوس", concentration: null, form: "امبول", expiry: null
-✓ "كونسرتا ٣٦ و١٨" → TWO entries: {name: "كونسرتا", concentration: "٣٦"} AND {name: "كونسرتا", concentration: "١٨"}
+✓ "كونسرتا ٣٦ و١٨" → TWO entries: {name: "كونسرتا", concentration: "36"} AND {name: "كونسرتا", concentration: "18"}
 ✓ "اوزمبك 10/27" → name: "اوزمبك", concentration: null, expiry: "10/27"
-✓ "ريبلسس ١٤ صلاحية ٣/٢٦" → name: "ريبلسس", concentration: "١٤", expiry: "٣/٢٦"
+✓ "ريبلسس ١٤ صلاحية ٣/٢٦" → name: "ريبلسس", concentration: "14", expiry: "3/26"
 ✓ "Ozempic 1mg exp 10/2027" → name: "Ozempic", concentration: "1mg", expiry: "10/2027"
+✓ "ديبوكسنت ٣٠٠" → name: "ديبوكسنت", concentration: "300" (Arabic ٣٠٠ converted to English 300)
 
 [BAD EXAMPLES - AVOID THESE]
 ✗ "اوزمبك 10/27" with concentration: "10/27" - Why bad: 10/27 is EXPIRY DATE (Oct 2027), not concentration
 ✗ Treating "٣/٢٦" as concentration - Why bad: This is March 2026 expiry date
 ✗ Merging "جوناتستون حقنبنتازا" as one medication - Why bad: These are TWO drugs
 ✗ Putting "امبول" in concentration field - Why bad: امبول is a FORM, not concentration
+✗ "ديبوكسنت ٣٠٠" with concentration: "٣٠٠" - Why bad: Arabic numerals must be converted to English "300"
 
 [COMMON FORMS - NOT CONCENTRATIONS]
 امبول/أمبول (ampoule), فايل (vial), اقراص/أقراص (tablets), نقط (drops), لاصقه/لاصقة (patch), شراب (syrup), لبوس (suppository), حقن (injection), طقم (kit), جل (gel)
 
 [CONCENTRATION PATTERNS]
-- Arabic numerals: ٣٦، ١٨، ١٥٠، ٣٠٠، ٤٥٠
+- Arabic numerals: ٣٦، ١٨، ١٥٠، ٣٠٠، ٤٥٠ → CONVERT to English: 36, 18, 150, 300, 450
 - Western numerals: 36, 150, 1mg, 2.4mg
-- Arabic fractions: واحد ونص (1.5), ربع (0.25)
+- Arabic fractions: واحد ونص (1.5), ربع (0.25) → CONVERT to English: 1.5, 0.25
 - Sizes: كبير (large), صغير (small)
-- Multiple: "٣٦ و١٨" = TWO concentrations, create TWO entries
+- Multiple: "٣٦ و١٨" = TWO concentrations, create TWO entries with English numerals (36, 18)
+
+IMPORTANT: Always output concentration values using English/Western numerals (0-9), never Arabic numerals (٠-٩).
+Arabic numeral conversion: ٠=0, ١=1, ٢=2, ٣=3, ٤=4, ٥=5, ٦=6, ٧=7, ٨=8, ٩=9
 
 [URGENCY LEVEL DETECTION]
 Assess urgency based on keywords and context. Default to "normal" for offers.

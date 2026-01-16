@@ -257,6 +257,28 @@ export function useRetryAI() {
 }
 
 /**
+ * Reprocess AI for completed message (re-run extraction)
+ */
+export function useReprocessAI() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (messageId: string): Promise<ProcessMessageResponse> => {
+      const response = await client.whatsapp.messages.reprocessAI({
+        messageId,
+      });
+      return response;
+    },
+    onSuccess: (_, messageId) => {
+      queryClient.invalidateQueries({
+        queryKey: messageKeys.detail(messageId),
+      });
+      queryClient.invalidateQueries({ queryKey: messageKeys.lists() });
+    },
+  });
+}
+
+/**
  * Delete single message
  */
 export function useDeleteMessage() {

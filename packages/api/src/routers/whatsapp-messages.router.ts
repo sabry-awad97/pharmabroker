@@ -248,4 +248,30 @@ export const whatsappMessagesRouter = o.router({
         error: result.error,
       };
     }),
+
+  reprocessAI: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/messages/{messageId}/reprocess',
+        tags: ['WhatsApp Messages'],
+        summary: 'Reprocess completed AI extraction',
+        description:
+          'Re-runs AI processing for a completed message, replacing existing extracted data.',
+      },
+    })
+    .input(processMessageInput)
+    .output(processMessageResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      const result = await aiProcessorService.reprocessMessage(
+        userId,
+        input.messageId,
+      );
+      return {
+        status: result.status,
+        model: result.model,
+        error: result.error,
+      };
+    }),
 });

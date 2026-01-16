@@ -19,12 +19,13 @@ import {
   type AIProviderName,
   type AIEnvConfig,
   type ProcessingDebugInfo,
+  medicationSystemPrompt,
+  medicationPromptTemplate,
 } from '@pharmabroker/ai';
 import {
   messageExtractionSchema,
   type MessageExtraction,
 } from '@pharmabroker/schemas/ai';
-import { medicationSystemPrompt, medicationPromptTemplate } from './prompts';
 import { env } from './env';
 import testMessages from './test-messages.json';
 

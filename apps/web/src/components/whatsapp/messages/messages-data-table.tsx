@@ -29,10 +29,12 @@ import {
   Copy,
   Sparkles,
   RotateCcw,
+  RefreshCw,
   Trash2,
   Reply,
   Forward,
   Users,
+  Loader2,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -71,11 +73,13 @@ interface MessagesDataTableProps {
   onView?: (message: WhatsAppMessageWithGroup) => void;
   onProcessAI?: (message: WhatsAppMessageWithGroup) => void;
   onRetryAI?: (message: WhatsAppMessageWithGroup) => void;
+  onReprocessAI?: (message: WhatsAppMessageWithGroup) => void;
   onDelete?: (message: WhatsAppMessageWithGroup) => void;
   onBulkProcess?: (messages: WhatsAppMessageWithGroup[]) => void;
   onBulkDelete?: (messages: WhatsAppMessageWithGroup[]) => void;
   pageSize?: number;
   isProcessing?: boolean;
+  processingMessageId?: string | null;
 }
 
 export function MessagesDataTable({
@@ -83,11 +87,13 @@ export function MessagesDataTable({
   onView,
   onProcessAI,
   onRetryAI,
+  onReprocessAI,
   onDelete,
   onBulkProcess,
   onBulkDelete,
   pageSize = 20,
   isProcessing = false,
+  processingMessageId = null,
 }: MessagesDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'messageTimestamp', desc: true },
@@ -125,6 +131,7 @@ export function MessagesDataTable({
       icon: Sparkles,
       hidden: row =>
         row.aiStatus === 'completed' || row.aiStatus === 'processing',
+      disabled: isProcessing,
       onClick: row => onProcessAI?.(row),
     },
     {
@@ -132,7 +139,16 @@ export function MessagesDataTable({
       label: 'Retry AI Processing',
       icon: RotateCcw,
       hidden: row => row.aiStatus !== 'failed',
+      disabled: isProcessing,
       onClick: row => onRetryAI?.(row),
+    },
+    {
+      id: 'reprocess',
+      label: 'Reprocess with AI',
+      icon: RefreshCw,
+      hidden: row => row.aiStatus !== 'completed',
+      disabled: isProcessing,
+      onClick: row => onReprocessAI?.(row),
     },
     {
       id: 'delete',
@@ -435,21 +451,33 @@ export function MessagesDataTable({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map(row => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
-                >
-                  {row.getVisibleCells().map(cell => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map(row => {
+                const isRowProcessing = processingMessageId === row.original.id;
+                return (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && 'selected'}
+                    className={cn(isRowProcessing && 'relative')}
+                  >
+                    {isRowProcessing && (
+                      <td className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[1px]">
+                        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                          <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                          <span>Processing with AI...</span>
+                        </div>
+                      </td>
+                    )}
+                    {row.getVisibleCells().map(cell => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell

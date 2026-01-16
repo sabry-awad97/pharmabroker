@@ -164,6 +164,10 @@ export class EventBridgeService {
    * Emit sync status event to frontend clients
    */
   private emitSyncStatusEvent(event: SyncStatusEvent): void {
+    console.log(
+      `[EventBridge] Emitting sync event: ${event.type} for session ${event.session_id}`,
+      event.data,
+    );
     whatsappEventPublisher.publish('whatsapp-event', {
       type: event.type as any,
       session_id: event.session_id,

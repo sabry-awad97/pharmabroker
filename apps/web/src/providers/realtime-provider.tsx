@@ -3,6 +3,7 @@
  *
  * React context provider that manages the SSE connection state
  * and provides real-time synchronization capabilities to the app.
+ * Also handles global sync status tracking for all sessions.
  *
  * Feature: frontend-realtime-sync
  * Requirements: 3.1, 3.2, 3.3, 6.1, 6.2, 6.3
@@ -10,7 +11,10 @@
 
 import * as React from 'react';
 
+import type { WhatsAppEvent } from '@pharmabroker/schemas/whatsapp';
+
 import { useRealtimeSync } from '../hooks/use-realtime-sync';
+import { useSyncStatusActions } from '../stores/sync-status.store';
 
 // ============================================================================
 // Types
@@ -73,9 +77,89 @@ export function RealtimeProvider({
   children,
   enabled = true,
 }: RealtimeProviderProps) {
+  // Get sync status actions for global sync tracking
+  const { setSyncStarted, setSyncProgress, setSyncCompleted, setSyncFailed } =
+    useSyncStatusActions();
+
+  // Handle sync events globally
+  const handleSyncEvent = React.useCallback(
+    (event: WhatsAppEvent) => {
+      const sessionId = event.session_id;
+      if (!sessionId) return;
+
+      // Log sync events for debugging
+      if (event.type.startsWith('sync.')) {
+        console.log(
+          '[RealtimeProvider] Received sync event:',
+          event.type,
+          event,
+        );
+      }
+
+      switch (event.type) {
+        case 'sync.started': {
+          const data = (event as { data?: { phase?: 'groups' | 'messages' } })
+            .data;
+          setSyncStarted(sessionId, data?.phase ?? 'groups');
+          break;
+        }
+
+        case 'sync.progress': {
+          const data = (
+            event as {
+              data?: {
+                phase?: 'groups' | 'messages';
+                current?: number;
+                total?: number;
+                groupsSynced?: number;
+                messagesProcessed?: number;
+              };
+            }
+          ).data;
+          if (data) {
+            setSyncProgress(sessionId, {
+              phase: data.phase,
+              current: data.current,
+              total: data.total,
+              groupsSynced: data.groupsSynced,
+              messagesProcessed: data.messagesProcessed,
+            });
+          }
+          break;
+        }
+
+        case 'sync.completed': {
+          const data = (
+            event as {
+              data?: {
+                groupsSynced?: number;
+                messagesProcessed?: number;
+                messagesDropped?: number;
+              };
+            }
+          ).data;
+          setSyncCompleted(sessionId, {
+            groupsSynced: data?.groupsSynced,
+            messagesProcessed: data?.messagesProcessed,
+            messagesDropped: data?.messagesDropped,
+          });
+          break;
+        }
+
+        case 'sync.failed': {
+          const data = (event as { data?: { error?: string } }).data;
+          setSyncFailed(sessionId, data?.error ?? 'Sync failed');
+          break;
+        }
+      }
+    },
+    [setSyncStarted, setSyncProgress, setSyncCompleted, setSyncFailed],
+  );
+
   // Use the realtime sync hook with auto-connect based on enabled prop
   const { status, isConnected, reconnect } = useRealtimeSync({
     enabled,
+    onEvent: handleSyncEvent,
   });
 
   // Memoize context value to prevent unnecessary re-renders

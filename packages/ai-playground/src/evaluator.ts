@@ -4,14 +4,9 @@
  * Evaluates AI extraction results against expected outputs.
  */
 
-import type {
-  MessageInput,
-  ProcessingResult,
-  ExtractionResult,
-} from '@pharmabroker/ai';
+import type { ProcessingResult, ExtractionResult } from '@pharmabroker/ai';
 import type {
   TestCase,
-  TestSuite,
   EvaluationResult,
   EvaluationMetrics,
   ExtractionComparison,

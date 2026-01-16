@@ -11,38 +11,14 @@ import {
   getAIClient,
   type AIClient,
   type MessageInput,
+  medicationSystemPrompt,
+  medicationPromptTemplate,
 } from '@pharmabroker/ai';
 import {
   messageExtractionSchema,
   type MessageExtraction,
 } from '@pharmabroker/schemas/ai';
 import type { AIStatus } from '@pharmabroker/schemas/whatsapp';
-
-// ============================================================================
-// Prompts for Medication Extraction
-// ============================================================================
-
-const MEDICATION_SYSTEM_PROMPT = `You are an AI assistant specialized in extracting pharmaceutical information from WhatsApp messages in a pharmaceutical distribution context.
-
-Your task is to:
-1. Determine the message intent (offer = announcing available stock, request = asking for products)
-2. Assess urgency based on keywords like "ضروري", "فوري", "طوارئ", "urgent", "STAT", "emergency"
-3. Extract all medications mentioned with their details
-
-Rules:
-- Preserve medication names exactly as written (Arabic or English)
-- Concentration is dosage/strength (e.g., "150", "1mg", "واحد ونص")
-- Form is physical form (e.g., "امبول", "فايل", "اقراص", "tablets", "pens")
-- Expiry dates are in XX/XX or XX/XXXX format (e.g., "10/27", "٣/٢٦")
-- Do NOT translate medication names
-- Do NOT merge or split medications unless clearly indicated by "و" (and)`;
-
-const MEDICATION_PROMPT_TEMPLATE = `Analyze this WhatsApp message from a pharmaceutical group:
-{{context}}
-
-Message: "{{message}}"
-
-Extract the intent, urgency, and all medications with their details.`;
 
 // ============================================================================
 // Types
@@ -141,8 +117,8 @@ class AIProcessorService {
       // Process with AI using medication extraction schema
       const result = await this.client.processMessage(input, {
         schema: messageExtractionSchema,
-        systemPrompt: MEDICATION_SYSTEM_PROMPT,
-        promptTemplate: MEDICATION_PROMPT_TEMPLATE,
+        systemPrompt: medicationSystemPrompt,
+        promptTemplate: medicationPromptTemplate,
       });
 
       if (result.status === 'failed' || !result.data) {
@@ -158,22 +134,28 @@ class AIProcessorService {
         };
       }
 
-      // Store extracted data
-      const extractedCount = await this.storeExtractionData(
-        messageId,
-        result.data,
-        result.model,
-      );
+      // Store extracted data and update status in a transaction
+      const extractedCount = await prisma.$transaction(async tx => {
+        // Store extracted data (result.data is guaranteed non-null here due to check above)
+        const count = await this.storeExtractionDataImpl(
+          tx,
+          messageId,
+          result.data!,
+          result.model,
+        );
 
-      // Update message status
-      await prisma.whatsAppMessage.update({
-        where: { id: messageId },
-        data: {
-          aiStatus: 'completed',
-          aiModel: result.model,
-          aiProcessedAt: new Date(),
-          aiError: null,
-        },
+        // Update message status
+        await tx.whatsAppMessage.update({
+          where: { id: messageId },
+          data: {
+            aiStatus: 'completed',
+            aiModel: result.model,
+            aiProcessedAt: new Date(),
+            aiError: null,
+          },
+        });
+
+        return count;
       });
 
       return {
@@ -184,8 +166,7 @@ class AIProcessorService {
         data: result.data,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = this.formatErrorWithStack(error);
       await this.handleProcessingFailure(messageId, errorMessage);
 
       return {
@@ -317,6 +298,60 @@ class AIProcessorService {
   }
 
   /**
+   * Reprocess a completed message (re-run AI extraction)
+   */
+  async reprocessMessage(
+    userId: string,
+    messageId: string,
+  ): Promise<ProcessMessageResult> {
+    // Get message and verify ownership
+    const message = await prisma.whatsAppMessage.findFirst({
+      where: {
+        id: messageId,
+        session: { userId },
+      },
+      include: {
+        group: { select: { name: true } },
+      },
+    });
+
+    if (!message) {
+      throw new ORPCError('MESSAGE_NOT_FOUND', {
+        message: 'Message not found',
+      });
+    }
+
+    // Only reprocess completed messages
+    if (message.aiStatus !== 'completed') {
+      throw new ORPCError('INVALID_STATUS', {
+        message: 'Only completed messages can be reprocessed',
+      });
+    }
+
+    // Delete existing extracted data and reset status in a transaction
+    await prisma.$transaction(async tx => {
+      // Delete existing extracted data
+      await tx.whatsAppExtractedData.deleteMany({
+        where: { messageId },
+      });
+
+      // Reset status to pending
+      await tx.whatsAppMessage.update({
+        where: { id: messageId },
+        data: {
+          aiStatus: 'pending',
+          aiModel: null,
+          aiProcessedAt: null,
+          aiError: null,
+        },
+      });
+    });
+
+    // Process the message
+    return this.processMessage(userId, messageId);
+  }
+
+  /**
    * Get pending messages for processing
    */
   async getPendingMessages(
@@ -341,6 +376,47 @@ class AIProcessorService {
   // Private Methods
   // ─────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Format error with full stack trace for debugging
+   */
+  private formatErrorWithStack(error: unknown): string {
+    if (error instanceof Error) {
+      const parts: string[] = [error.message];
+
+      // Include the stack trace
+      if (error.stack) {
+        parts.push('\n\nStack trace:\n' + error.stack);
+      }
+
+      // Include cause if present (for chained errors)
+      if (error.cause) {
+        parts.push('\n\nCaused by: ' + this.formatErrorWithStack(error.cause));
+      }
+
+      // Include any additional properties from AI SDK errors
+      const anyError = error as unknown as Record<string, unknown>;
+      if (anyError.code) {
+        parts.push(`\nError code: ${anyError.code}`);
+      }
+      if (anyError.status) {
+        parts.push(`\nHTTP status: ${anyError.status}`);
+      }
+      if (anyError.responseBody) {
+        parts.push(
+          `\nResponse body: ${JSON.stringify(anyError.responseBody, null, 2)}`,
+        );
+      }
+
+      return parts.join('');
+    }
+
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    return JSON.stringify(error, null, 2);
+  }
+
   private async handleProcessingFailure(
     messageId: string,
     error: string,
@@ -356,12 +432,10 @@ class AIProcessorService {
   }
 
   /**
-   * Store extraction data in the database
-   * Creates separate records for:
-   * - message_extraction: intent, urgency, reason
-   * - medication: each medication with its details
+   * Store extraction data (works with both prisma client and transaction)
    */
-  private async storeExtractionData(
+  private async storeExtractionDataImpl(
+    db: { whatsAppExtractedData: typeof prisma.whatsAppExtractedData },
     messageId: string,
     data: MessageExtraction,
     model: string,
@@ -400,7 +474,7 @@ class AIProcessorService {
     }
 
     if (extractedRecords.length > 0) {
-      await prisma.whatsAppExtractedData.createMany({
+      await db.whatsAppExtractedData.createMany({
         data: extractedRecords,
       });
     }

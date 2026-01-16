@@ -36,9 +36,6 @@ export { AIStatusBadge, type AIStatus } from './ai-status-badge';
 // Message preview component
 export { MessagePreview } from './message-preview';
 
-// Message detail sheet component
-export { MessageDetailSheet } from './message-detail-sheet';
-
 // Message detail dialog component
 export { MessageDetailDialog } from './message-detail-dialog';
 

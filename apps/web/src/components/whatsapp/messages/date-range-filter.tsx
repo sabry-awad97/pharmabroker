@@ -9,7 +9,6 @@ import { format } from 'date-fns';
 import { Calendar as CalendarIcon, X } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
-import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
@@ -50,32 +49,29 @@ export function DateRangeFilter({
   return (
     <div className={cn('flex items-center gap-2', className)}>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              'justify-start text-left font-normal',
-              !hasValue && 'text-muted-foreground',
-            )}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {dateFrom ? (
-              dateTo ? (
-                <>
-                  {format(dateFrom, 'LLL dd')} - {format(dateTo, 'LLL dd')}
-                </>
-              ) : (
-                format(dateFrom, 'LLL dd, y')
-              )
+        <PopoverTrigger
+          className={cn(
+            'focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-8 items-center justify-start gap-2 rounded-md border px-3 text-sm font-normal transition-[color,box-shadow] outline-none focus-visible:ring-[3px]',
+            'border-input bg-background hover:bg-accent hover:text-accent-foreground',
+            !hasValue && 'text-muted-foreground',
+          )}
+        >
+          <CalendarIcon className="h-4 w-4" />
+          {dateFrom ? (
+            dateTo ? (
+              <>
+                {format(dateFrom, 'LLL dd')} - {format(dateTo, 'LLL dd')}
+              </>
             ) : (
-              'Date range'
-            )}
-          </Button>
+              format(dateFrom, 'LLL dd, y')
+            )
+          ) : (
+            'Date range'
+          )}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
-            initialFocus
+            autoFocus
             mode="range"
             defaultMonth={dateFrom}
             selected={dateRange}
@@ -83,9 +79,9 @@ export function DateRangeFilter({
             numberOfMonths={2}
           />
           <div className="flex justify-between border-t p-3">
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground px-2 py-1 text-sm"
               onClick={() => {
                 const today = new Date();
                 const weekAgo = new Date(today);
@@ -94,10 +90,10 @@ export function DateRangeFilter({
               }}
             >
               Last 7 days
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground px-2 py-1 text-sm"
               onClick={() => {
                 const today = new Date();
                 const monthAgo = new Date(today);
@@ -106,19 +102,18 @@ export function DateRangeFilter({
               }}
             >
               Last 30 days
-            </Button>
+            </button>
           </div>
         </PopoverContent>
       </Popover>
       {hasValue && (
-        <Button
-          variant="ghost"
-          size="icon-xs"
+        <button
+          type="button"
           onClick={handleClear}
-          className="text-muted-foreground"
+          className="text-muted-foreground hover:text-foreground p-1"
         >
           <X className="h-3.5 w-3.5" />
-        </Button>
+        </button>
       )}
     </div>
   );

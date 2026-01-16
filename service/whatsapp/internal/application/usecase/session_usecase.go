@@ -121,6 +121,8 @@ func (uc *SessionUseCase) ReconnectSession(ctx context.Context, sessionID string
 func (uc *SessionUseCase) ReconnectSessionWithJID(ctx context.Context, sessionID, jid string) error {
 	// Check if already connected
 	if uc.waClient != nil && uc.waClient.IsConnected(sessionID) {
+		// Still emit connected event so API can update status
+		uc.publishConnectionEvent(ctx, sessionID, entity.EventTypeConnected)
 		return nil // Already connected
 	}
 
@@ -150,6 +152,9 @@ func (uc *SessionUseCase) ReconnectSessionWithJID(ctx context.Context, sessionID
 
 	// Update status to connected
 	_ = uc.UpdateSessionStatus(ctx, sessionID, entity.StatusConnected)
+
+	// Publish connection.connected event
+	uc.publishConnectionEvent(ctx, sessionID, entity.EventTypeConnected)
 
 	// Get JID if available
 	if newJID, err := uc.waClient.GetSessionJID(sessionID); err == nil && newJID != "" {

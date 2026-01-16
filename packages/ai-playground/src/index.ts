@@ -24,9 +24,6 @@ export {
   type MessageExtraction,
 } from '@pharmabroker/schemas/ai';
 
-// Prompts
-export { medicationSystemPrompt, medicationPromptTemplate } from './prompts';
-
 // Types
 export type {
   TestCase,

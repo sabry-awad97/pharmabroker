@@ -266,40 +266,43 @@ export function MessageDetailDialog({
             </div>
 
             {/* Tabs Content */}
-            <Tabs defaultValue="content" className="flex-1">
-              <div className="border-b px-6">
-                <TabsList className="h-12 w-full justify-start gap-4 bg-transparent p-0">
+            <Tabs defaultValue="content" className="flex-1 overflow-hidden">
+              <div className="overflow-x-auto border-b px-6">
+                <TabsList
+                  variant="line"
+                  className="h-12 w-full min-w-max justify-start gap-4 bg-transparent p-0"
+                >
                   <TabsTrigger
                     value="content"
-                    className="rounded-none border-b-2 border-transparent px-1 pt-2 pb-3 data-[state=active]:border-violet-500 data-[state=active]:text-violet-600"
+                    className="h-12 shrink-0 rounded-none px-2 text-sm"
                   >
-                    <MessageSquare className="mr-2 h-4 w-4" />
+                    <MessageSquare className="mr-1.5 h-4 w-4" />
                     Content
                   </TabsTrigger>
                   <TabsTrigger
                     value="metadata"
-                    className="rounded-none border-b-2 border-transparent px-1 pt-2 pb-3 data-[state=active]:border-violet-500 data-[state=active]:text-violet-600"
+                    className="h-12 shrink-0 rounded-none px-2 text-sm"
                   >
-                    <Database className="mr-2 h-4 w-4" />
+                    <Database className="mr-1.5 h-4 w-4" />
                     Metadata
                   </TabsTrigger>
                   <TabsTrigger
                     value="ai"
-                    className="rounded-none border-b-2 border-transparent px-1 pt-2 pb-3 data-[state=active]:border-violet-500 data-[state=active]:text-violet-600"
+                    className="h-12 shrink-0 rounded-none px-2 text-sm"
                   >
-                    <Brain className="mr-2 h-4 w-4" />
+                    <Brain className="mr-1.5 h-4 w-4" />
                     AI Insights
                     {extractedData.length > 0 && (
-                      <Badge variant="secondary" className="ml-2 h-5 px-1.5">
+                      <Badge variant="secondary" className="ml-1.5 h-5 px-1.5">
                         {extractedData.length}
                       </Badge>
                     )}
                   </TabsTrigger>
                   <TabsTrigger
                     value="raw"
-                    className="rounded-none border-b-2 border-transparent px-1 pt-2 pb-3 data-[state=active]:border-violet-500 data-[state=active]:text-violet-600"
+                    className="h-12 shrink-0 rounded-none px-2 text-sm"
                   >
-                    <FileJson className="mr-2 h-4 w-4" />
+                    <FileJson className="mr-1.5 h-4 w-4" />
                     Raw
                   </TabsTrigger>
                 </TabsList>
@@ -466,17 +469,37 @@ export function MessageDetailDialog({
                         </Button>
                       )}
                       {message.aiStatus === 'failed' && (
-                        <div className="space-y-2">
+                        <div className="w-full max-w-md space-y-3">
                           {message.aiError && (
-                            <p className="text-destructive bg-destructive/10 rounded-lg px-3 py-2 text-xs">
-                              {message.aiError}
-                            </p>
+                            <div className="bg-destructive/10 rounded-lg p-3">
+                              <p className="text-destructive mb-2 text-xs font-medium">
+                                AI Processing Error
+                              </p>
+                              <pre className="text-destructive/90 max-h-48 overflow-y-auto font-mono text-[10px] wrap-break-word whitespace-pre-wrap">
+                                {message.aiError}
+                              </pre>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="mt-2 h-6 text-[10px]"
+                                onClick={() =>
+                                  handleCopy(
+                                    message.aiError || '',
+                                    'Error details',
+                                  )
+                                }
+                              >
+                                <Copy className="mr-1 h-3 w-3" />
+                                Copy error
+                              </Button>
+                            </div>
                           )}
                           {onRetryAI && (
                             <Button
                               variant="outline"
                               onClick={onRetryAI}
                               disabled={isProcessing}
+                              className="w-full"
                             >
                               <RotateCcw
                                 className={cn(

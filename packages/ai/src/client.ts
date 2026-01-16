@@ -189,13 +189,42 @@ export class AIClient {
       );
       const debugInfo = this.buildDebugInfo(message.text, promptTokens);
 
+      // Format error with full details for debugging
+      let errorMessage: string;
+      if (error instanceof Error) {
+        const parts: string[] = [error.message];
+        if (error.stack) {
+          parts.push('\n\nStack trace:\n' + error.stack);
+        }
+        if (error.cause) {
+          parts.push(
+            '\n\nCaused by: ' +
+              (error.cause instanceof Error
+                ? error.cause.message
+                : String(error.cause)),
+          );
+        }
+        // Include any additional properties from AI SDK errors
+        const anyError = error as unknown as Record<string, unknown>;
+        if (anyError.code) parts.push(`\nError code: ${anyError.code}`);
+        if (anyError.status) parts.push(`\nHTTP status: ${anyError.status}`);
+        if (anyError.responseBody) {
+          parts.push(
+            `\nResponse body: ${JSON.stringify(anyError.responseBody, null, 2)}`,
+          );
+        }
+        errorMessage = parts.join('');
+      } else {
+        errorMessage = String(error);
+      }
+
       return {
         messageId: message.id,
         status: 'failed',
         model: this.modelName,
         extractions: [],
         data: null,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         processingTimeMs: Date.now() - startTime,
         debug: debugInfo,
       };
@@ -218,14 +247,27 @@ export class AIClient {
       contextParts.push(`Context: ${message.context.join(', ')}`);
     const contextStr = contextParts.length > 0 ? contextParts.join('\n') : '';
 
+    // Calculate dynamic year values for expiry detection
+    const currentYear = new Date().getFullYear();
+    const currentYearShort = currentYear % 100;
+    const maxYear = currentYear + 10;
+    const maxYearShort = maxYear % 100;
+
     const prompt = options.promptTemplate
       .replace('{{message}}', message.text)
       .replace('{{context}}', contextStr);
 
+    // Replace year placeholders in system prompt
+    const systemPrompt = options.systemPrompt
+      .replace(/\{\{currentYear\}\}/g, String(currentYear))
+      .replace(/\{\{currentYearShort\}\}/g, String(currentYearShort))
+      .replace(/\{\{maxYear\}\}/g, String(maxYear))
+      .replace(/\{\{maxYearShort\}\}/g, String(maxYearShort));
+
     const result = await this.generateObject({
       schema: options.schema,
       prompt,
-      system: options.systemPrompt,
+      system: systemPrompt,
       temperature: 0.3,
     });
 

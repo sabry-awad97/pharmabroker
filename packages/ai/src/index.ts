@@ -62,3 +62,6 @@ export {
 
 // Extractors
 export { ExtractorRegistry, createExtractorRegistry } from './extractors';
+
+// Prompts
+export { medicationSystemPrompt, medicationPromptTemplate } from './prompts';

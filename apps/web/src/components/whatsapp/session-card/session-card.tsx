@@ -23,11 +23,13 @@ import {
   useDisconnectWhatsappSession,
 } from '@/hooks/whatsapp';
 import { useDialogActions } from '@/stores/whatsapp-session.store';
+import { useSyncStatus } from '@/hooks/use-sync-status';
 
 import { SessionAvatar } from './session-avatar';
 import { SessionStatusBadge, type SessionStatus } from './session-status-badge';
 import { SessionActionsMenu } from './session-actions-menu';
 import { SessionStatusIndicator } from './session-status-indicator';
+import { SessionSyncIndicator } from './session-sync-indicator';
 
 const cardVariants = cva(
   'group relative border-l-4 transition-all duration-200 hover:shadow-md hover:shadow-black/5',
@@ -62,6 +64,7 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
 
   const reconnectSession = useReconnectWhatsappSession();
   const disconnectSession = useDisconnectWhatsappSession();
+  const syncStatus = useSyncStatus(session.id);
 
   const status = (session.status as SessionStatus) || 'disconnected';
   const hasJid = Boolean(session.jid);
@@ -128,13 +131,27 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
       </CardHeader>
 
       <CardContent className="pb-3">
-        <SessionStatusIndicator
-          status={status}
-          hasJid={hasJid}
-          isReconnecting={reconnectSession.isPending}
-          onScanQR={() => openQRDialog(sessionData)}
-          onConnect={handleReconnect}
-        />
+        {/* Show sync progress when syncing */}
+        {syncStatus.status !== 'idle' && (
+          <SessionSyncIndicator
+            status={syncStatus.status}
+            progress={syncStatus.progress}
+            error={syncStatus.error}
+            groupsSynced={syncStatus.groupsSynced}
+            messagesProcessed={syncStatus.messagesProcessed}
+          />
+        )}
+
+        {/* Show session status indicator when not syncing */}
+        {syncStatus.status === 'idle' && (
+          <SessionStatusIndicator
+            status={status}
+            hasJid={hasJid}
+            isReconnecting={reconnectSession.isPending}
+            onScanQR={() => openQRDialog(sessionData)}
+            onConnect={handleReconnect}
+          />
+        )}
       </CardContent>
 
       <CardFooter className="bg-muted/30 py-2.5">

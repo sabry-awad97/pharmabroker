@@ -1,4 +1,5 @@
 import { ConnectionStatusIndicator } from '../components/connection-status-indicator';
+import { useAutoSelectSession } from '../hooks/use-auto-select-session';
 import { DevtoolsProvider } from './devtools-provider';
 import { RealtimeProvider } from './realtime-provider';
 import { ThemeProvider } from './theme-provider';
@@ -11,12 +12,22 @@ interface ProvidersProps {
 }
 
 /**
+ * Auto-select session component
+ * Runs the auto-select hook within the provider tree
+ */
+function AutoSelectSession({ children }: { children: React.ReactNode }) {
+  useAutoSelectSession();
+  return <>{children}</>;
+}
+
+/**
  * Root providers component that wraps the entire application.
  *
  * Provider order (outer to inner):
  * 1. ThemeProvider - Theme management
  * 2. RealtimeProvider - Real-time SSE connection (requires QueryClientProvider)
- * 3. Children (app content)
+ * 3. AutoSelectSession - Auto-selects session if only one exists
+ * 4. Children (app content)
  */
 export function Providers({ children }: ProvidersProps) {
   return (
@@ -27,8 +38,10 @@ export function Providers({ children }: ProvidersProps) {
       storageKey="vite-ui-theme"
     >
       <RealtimeProvider>
-        {children}
-        <ConnectionStatusIndicator />
+        <AutoSelectSession>
+          {children}
+          <ConnectionStatusIndicator />
+        </AutoSelectSession>
       </RealtimeProvider>
       <DevtoolsProvider />
     </ThemeProvider>

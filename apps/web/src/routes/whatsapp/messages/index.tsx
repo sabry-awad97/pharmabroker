@@ -43,6 +43,7 @@ import {
   useProcessMessageAI,
   useBulkProcessAI,
   useRetryAI,
+  useReprocessAI,
   useDeleteMessage,
   useBulkDeleteMessages,
   useExportMessages,
@@ -88,6 +89,9 @@ function WhatsappMessagesPage() {
   const [messagesToProcess, setMessagesToProcess] = useState<
     WhatsAppMessageWithGroup[]
   >([]);
+  const [processingMessageId, setProcessingMessageId] = useState<string | null>(
+    null,
+  );
 
   // Data fetching
   const {
@@ -113,6 +117,7 @@ function WhatsappMessagesPage() {
   const processAI = useProcessMessageAI();
   const bulkProcessAI = useBulkProcessAI();
   const retryAI = useRetryAI();
+  const reprocessAI = useReprocessAI();
   const deleteMessage = useDeleteMessage();
   const bulkDeleteMessages = useBulkDeleteMessages();
   const exportMessages = useExportMessages();
@@ -131,7 +136,10 @@ function WhatsappMessagesPage() {
   const hasNoResults = !hasMessages && hasFiltersApplied;
   const hasNoMessages = !hasMessages && !hasFiltersApplied && !isLoading;
   const isProcessing =
-    processAI.isPending || bulkProcessAI.isPending || retryAI.isPending;
+    processAI.isPending ||
+    bulkProcessAI.isPending ||
+    retryAI.isPending ||
+    reprocessAI.isPending;
   const isDeleting = deleteMessage.isPending || bulkDeleteMessages.isPending;
 
   // Keyboard shortcuts
@@ -194,11 +202,14 @@ function WhatsappMessagesPage() {
 
   const handleProcessAI = useCallback(
     async (message: WhatsAppMessageWithGroup) => {
+      setProcessingMessageId(message.id);
       try {
         await processAI.mutateAsync(message.id);
         toast.success('AI processing started');
       } catch {
         toast.error('Failed to start AI processing');
+      } finally {
+        setProcessingMessageId(null);
       }
     },
     [processAI],
@@ -206,14 +217,32 @@ function WhatsappMessagesPage() {
 
   const handleRetryAI = useCallback(
     async (message: WhatsAppMessageWithGroup) => {
+      setProcessingMessageId(message.id);
       try {
         await retryAI.mutateAsync(message.id);
         toast.success('AI processing retried');
       } catch {
         toast.error('Failed to retry AI processing');
+      } finally {
+        setProcessingMessageId(null);
       }
     },
     [retryAI],
+  );
+
+  const handleReprocessAI = useCallback(
+    async (message: WhatsAppMessageWithGroup) => {
+      setProcessingMessageId(message.id);
+      try {
+        await reprocessAI.mutateAsync(message.id);
+        toast.success('AI reprocessing started');
+      } catch {
+        toast.error('Failed to reprocess with AI');
+      } finally {
+        setProcessingMessageId(null);
+      }
+    },
+    [reprocessAI],
   );
 
   const handleDeleteMessage = useCallback(
@@ -518,10 +547,12 @@ function WhatsappMessagesPage() {
             onView={handleViewMessage}
             onProcessAI={handleProcessAI}
             onRetryAI={handleRetryAI}
+            onReprocessAI={handleReprocessAI}
             onDelete={handleDeleteMessage}
             onBulkProcess={handleBulkProcess}
             onBulkDelete={handleBulkDelete}
             isProcessing={isProcessing}
+            processingMessageId={processingMessageId}
             pageSize={pageSize}
           />
         </LoadingOverlay>
