@@ -461,8 +461,6 @@ export function MessagesDataTable({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
-                  className="cursor-pointer"
-                  onClick={() => onView?.(row.original)}
                 >
                   {row.getVisibleCells().map(cell => (
                     <TableCell key={cell.id}>

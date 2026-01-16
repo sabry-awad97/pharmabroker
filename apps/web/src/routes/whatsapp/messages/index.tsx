@@ -6,9 +6,10 @@
  */
 
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { RefreshCw, Sparkles, Download } from 'lucide-react';
-import { useState, useCallback, useMemo } from 'react';
+import { RefreshCw, Sparkles, Download, Keyboard } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
+import { useHotkeys } from 'react-hotkeys-hook';
 
 import { Button } from '@/components/ui/button';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
@@ -22,6 +23,11 @@ import {
   MessagesEmptyState,
   MessagesSkeleton,
   MessagesFilterPanel,
+  MessageDetailDialog,
+  DeleteMessageDialog,
+  BulkProcessDialog,
+  ExportDialog,
+  DateRangeFilter,
   type WhatsAppMessage,
 } from '@/components/whatsapp/messages';
 import type { MessageType } from '@/components/whatsapp/messages/message-type-badge';
@@ -31,6 +37,18 @@ import { SessionRequiredState } from '@/components/session-picker';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
 import { useActiveSession } from '@/stores/active-session.store';
+import {
+  useWhatsappMessages,
+  useWhatsappMessage,
+  useSyncMessages,
+  useProcessMessageAI,
+  useBulkProcessAI,
+  useRetryAI,
+  useDeleteMessage,
+  useBulkDeleteMessages,
+  useExportMessages,
+  useInvalidateMessages,
+} from '@/hooks/whatsapp-messages';
 
 export const Route = createFileRoute('/whatsapp/messages/')({
   component: WhatsappMessagesPage,
@@ -43,222 +61,269 @@ export const Route = createFileRoute('/whatsapp/messages/')({
   },
 });
 
-// Placeholder data generator for demo
-function generatePlaceholderMessages(count: number): WhatsAppMessage[] {
-  const messageTypes: MessageType[] = [
-    'text',
-    'image',
-    'video',
-    'audio',
-    'document',
-    'sticker',
-    'location',
-  ];
-  const aiStatuses: AIStatus[] = [
-    'pending',
-    'processing',
-    'completed',
-    'failed',
-    'skipped',
-  ];
-  const sources: ('realtime' | 'history')[] = ['realtime', 'history'];
-  const senders = [
-    { name: 'Ahmed Hassan', jid: '201012345678@s.whatsapp.net' },
-    { name: 'Sarah Mohamed', jid: '201098765432@s.whatsapp.net' },
-    { name: 'Omar Ali', jid: '201055544433@s.whatsapp.net' },
-    { name: 'Fatima Ibrahim', jid: '201077788899@s.whatsapp.net' },
-    { name: null, jid: '201033322211@s.whatsapp.net' },
-  ];
-  const groups = [
-    { id: 'g1', name: 'Pharmacy Orders' },
-    { id: 'g2', name: 'Customer Support' },
-    { id: 'g3', name: 'Team Updates' },
-    { id: 'g4', name: 'Suppliers Network' },
-  ];
-  const sampleTexts = [
-    'Hello, I need to order some medications for my pharmacy.',
-    'Can you check the availability of Paracetamol 500mg?',
-    'The delivery was successful, thank you!',
-    'Please send me the invoice for the last order.',
-    'When will the next shipment arrive?',
-    'I have a question about the pricing.',
-    'The order #12345 has been confirmed.',
-    'Please update the stock levels.',
-    null,
-  ];
-
-  return Array.from({ length: count }, (_, i) => {
-    const sender = senders[Math.floor(Math.random() * senders.length)];
-    const group = groups[Math.floor(Math.random() * groups.length)];
-    const type = messageTypes[Math.floor(Math.random() * messageTypes.length)];
-    const aiStatus = aiStatuses[Math.floor(Math.random() * aiStatuses.length)];
-    const source = sources[Math.floor(Math.random() * sources.length)];
-    const text =
-      type === 'text'
-        ? sampleTexts[Math.floor(Math.random() * sampleTexts.length)]
-        : null;
-    const caption =
-      type !== 'text' && Math.random() > 0.5
-        ? sampleTexts[Math.floor(Math.random() * (sampleTexts.length - 1))]
-        : null;
-
-    return {
-      id: `msg-${i + 1}`,
-      messageId: `3EB0${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-      sessionId: 'session-1',
-      groupId: group.id,
-      groupName: group.name,
-      senderJid: sender.jid,
-      senderPushName: sender.name,
-      participantId: `participant-${i}`,
-      messageType: type,
-      text,
-      caption,
-      filename: type === 'document' ? 'invoice.pdf' : null,
-      isFromMe: Math.random() > 0.8,
-      isForwarded: Math.random() > 0.9,
-      quotedMessageId: Math.random() > 0.85 ? `msg-${i - 1}` : null,
-      status: 'received' as const,
-      messageTimestamp: new Date(
-        Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000),
-      ),
-      source,
-      aiStatus,
-      aiModel: aiStatus === 'completed' ? 'gpt-4o' : null,
-      aiError:
-        aiStatus === 'failed' ? 'Rate limit exceeded. Please retry.' : null,
-    };
-  });
-}
-
 function WhatsappMessagesPage() {
   const navigate = useNavigate();
   const activeSession = useActiveSession();
+  const invalidateMessages = useInvalidateMessages();
 
   // Filter state
   const [search, setSearch] = useState('');
   const [messageType, setMessageType] = useState<MessageType | 'all'>('all');
   const [aiStatus, setAIStatus] = useState<AIStatus | 'all'>('all');
   const [source, setSource] = useState<MessageSource>('all');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
-  // Loading states (placeholders for future hooks)
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRefetching, setIsRefetching] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  // UI state
+  const [selectedMessage, setSelectedMessage] =
+    useState<WhatsAppMessage | null>(null);
+  const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [bulkProcessDialogOpen, setBulkProcessDialogOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [messagesToDelete, setMessagesToDelete] = useState<WhatsAppMessage[]>(
+    [],
+  );
+  const [messagesToProcess, setMessagesToProcess] = useState<WhatsAppMessage[]>(
+    [],
+  );
 
-  // Placeholder data
-  const allMessages = useMemo(() => generatePlaceholderMessages(50), []);
+  // Data fetching
+  const {
+    data: messagesData,
+    isLoading,
+    isFetching,
+  } = useWhatsappMessages({
+    sessionId: activeSession?.id,
+    search: search || undefined,
+    messageType,
+    aiStatus,
+    source,
+    dateFrom,
+    dateTo,
+    page,
+    pageSize,
+  });
 
-  // Filter messages
-  const filteredMessages = useMemo(() => {
-    return allMessages.filter(msg => {
-      // Search filter
-      if (search) {
-        const searchLower = search.toLowerCase();
-        const matchesText = msg.text?.toLowerCase().includes(searchLower);
-        const matchesCaption = msg.caption?.toLowerCase().includes(searchLower);
-        const matchesSender = msg.senderPushName
-          ?.toLowerCase()
-          .includes(searchLower);
-        const matchesGroup = msg.groupName.toLowerCase().includes(searchLower);
-        if (
-          !matchesText &&
-          !matchesCaption &&
-          !matchesSender &&
-          !matchesGroup
-        ) {
-          return false;
-        }
-      }
+  const { data: messageDetail, isLoading: isLoadingDetail } =
+    useWhatsappMessage(selectedMessage?.id);
 
-      // Type filter
-      if (messageType !== 'all' && msg.messageType !== messageType) {
-        return false;
-      }
-
-      // AI status filter
-      if (aiStatus !== 'all' && msg.aiStatus !== aiStatus) {
-        return false;
-      }
-
-      // Source filter
-      if (source !== 'all' && msg.source !== source) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [allMessages, search, messageType, aiStatus, source]);
+  // Mutations
+  const syncMessages = useSyncMessages();
+  const processAI = useProcessMessageAI();
+  const bulkProcessAI = useBulkProcessAI();
+  const retryAI = useRetryAI();
+  const deleteMessage = useDeleteMessage();
+  const bulkDeleteMessages = useBulkDeleteMessages();
+  const exportMessages = useExportMessages();
 
   // Derived state
+  const messages = messagesData?.messages || [];
+  const totalCount = messagesData?.total || 0;
   const hasFiltersApplied =
     search.length > 0 ||
     messageType !== 'all' ||
     aiStatus !== 'all' ||
-    source !== 'all';
-  const hasMessages = filteredMessages.length > 0;
+    source !== 'all' ||
+    dateFrom !== undefined ||
+    dateTo !== undefined;
+  const hasMessages = messages.length > 0;
   const hasNoResults = !hasMessages && hasFiltersApplied;
-  const hasNoMessages = !hasMessages && !hasFiltersApplied;
+  const hasNoMessages = !hasMessages && !hasFiltersApplied && !isLoading;
+  const isProcessing =
+    processAI.isPending || bulkProcessAI.isPending || retryAI.isPending;
+  const isDeleting = deleteMessage.isPending || bulkDeleteMessages.isPending;
+
+  // Keyboard shortcuts
+  useHotkeys(
+    'mod+a',
+    (e: KeyboardEvent) => {
+      e.preventDefault();
+      // Select all is handled by the table
+    },
+    { enableOnFormTags: false },
+  );
+
+  useHotkeys(
+    'mod+e',
+    (e: KeyboardEvent) => {
+      e.preventDefault();
+      setExportDialogOpen(true);
+    },
+    { enableOnFormTags: false },
+  );
+
+  useHotkeys(
+    'mod+r',
+    (e: KeyboardEvent) => {
+      e.preventDefault();
+      invalidateMessages();
+    },
+    { enableOnFormTags: false },
+  );
+
+  useHotkeys('escape', () => {
+    setDetailSheetOpen(false);
+    setDeleteDialogOpen(false);
+    setBulkProcessDialogOpen(false);
+    setExportDialogOpen(false);
+  });
 
   // Handlers
-  const handleRefresh = useCallback(async () => {
-    setIsRefetching(true);
-    // TODO: Replace with actual query invalidation
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsRefetching(false);
-    toast.success('Messages refreshed');
-  }, []);
-
   const handleClearFilters = useCallback(() => {
     setSearch('');
     setMessageType('all');
     setAIStatus('all');
     setSource('all');
+    setDateFrom(undefined);
+    setDateTo(undefined);
+    setPage(1);
   }, []);
+
+  const handleDateChange = useCallback(
+    (from: Date | undefined, to: Date | undefined) => {
+      setDateFrom(from);
+      setDateTo(to);
+      setPage(1);
+    },
+    [],
+  );
 
   const handleViewMessage = useCallback((message: WhatsAppMessage) => {
-    // TODO: Navigate to message detail or open modal
-    toast.info(`Viewing message: ${message.messageId}`);
+    setSelectedMessage(message);
+    setDetailSheetOpen(true);
   }, []);
 
-  const handleProcessAI = useCallback(async (message: WhatsAppMessage) => {
-    setIsProcessing(true);
-    // TODO: Replace with actual AI processing mutation
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsProcessing(false);
-    toast.success('AI processing started');
+  const handleProcessAI = useCallback(
+    async (message: WhatsAppMessage) => {
+      try {
+        await processAI.mutateAsync(message.id);
+        toast.success('AI processing started');
+      } catch {
+        toast.error('Failed to start AI processing');
+      }
+    },
+    [processAI],
+  );
+
+  const handleRetryAI = useCallback(
+    async (message: WhatsAppMessage) => {
+      try {
+        await retryAI.mutateAsync(message.id);
+        toast.success('AI processing retried');
+      } catch {
+        toast.error('Failed to retry AI processing');
+      }
+    },
+    [retryAI],
+  );
+
+  const handleDeleteMessage = useCallback((message: WhatsAppMessage) => {
+    setMessagesToDelete([message]);
+    setDeleteDialogOpen(true);
   }, []);
 
-  const handleRetryAI = useCallback(async (message: WhatsAppMessage) => {
-    setIsProcessing(true);
-    // TODO: Replace with actual retry mutation
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsProcessing(false);
-    toast.success('AI processing retried');
+  const handleConfirmDelete = useCallback(async () => {
+    try {
+      if (messagesToDelete.length === 1) {
+        await deleteMessage.mutateAsync(messagesToDelete[0].id);
+        toast.success('Message deleted');
+      } else {
+        await bulkDeleteMessages.mutateAsync(messagesToDelete.map(m => m.id));
+        toast.success(`${messagesToDelete.length} messages deleted`);
+      }
+      setDeleteDialogOpen(false);
+      setMessagesToDelete([]);
+    } catch {
+      toast.error('Failed to delete messages');
+    }
+  }, [messagesToDelete, deleteMessage, bulkDeleteMessages]);
+
+  const handleBulkProcess = useCallback((messages: WhatsAppMessage[]) => {
+    const pendingMessages = messages.filter(
+      m => m.aiStatus === 'pending' || m.aiStatus === 'failed',
+    );
+    if (pendingMessages.length === 0) {
+      toast.info('No messages to process');
+      return;
+    }
+    setMessagesToProcess(pendingMessages);
+    setBulkProcessDialogOpen(true);
   }, []);
 
-  const handleDeleteMessage = useCallback(async (message: WhatsAppMessage) => {
-    // TODO: Replace with actual delete mutation
-    toast.success('Message deleted');
+  const handleConfirmBulkProcess = useCallback(async () => {
+    try {
+      await bulkProcessAI.mutateAsync(messagesToProcess.map(m => m.id));
+      toast.success(`Processing ${messagesToProcess.length} messages with AI`);
+      setBulkProcessDialogOpen(false);
+      setMessagesToProcess([]);
+    } catch {
+      toast.error('Failed to start bulk processing');
+    }
+  }, [messagesToProcess, bulkProcessAI]);
+
+  const handleBulkDelete = useCallback((messages: WhatsAppMessage[]) => {
+    setMessagesToDelete(messages);
+    setDeleteDialogOpen(true);
   }, []);
 
-  const handleBulkProcess = useCallback(async (messages: WhatsAppMessage[]) => {
-    setIsProcessing(true);
-    // TODO: Replace with actual bulk processing mutation
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsProcessing(false);
-    toast.success(`Processing ${messages.length} messages with AI`);
-  }, []);
+  const handleExport = useCallback(
+    async (format: 'csv' | 'json') => {
+      try {
+        const blob = await exportMessages.mutateAsync({
+          format,
+          filters: {
+            sessionId: activeSession?.id,
+            search,
+            messageType,
+            aiStatus,
+            source,
+            dateFrom,
+            dateTo,
+          },
+        });
 
-  const handleBulkDelete = useCallback(async (messages: WhatsAppMessage[]) => {
-    // TODO: Replace with actual bulk delete mutation
-    toast.success(`Deleted ${messages.length} messages`);
-  }, []);
+        // Download the file
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `messages-${new Date().toISOString().split('T')[0]}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
 
-  const handleExport = useCallback(() => {
-    // TODO: Implement export functionality
-    toast.info('Export feature coming soon');
-  }, []);
+        toast.success(
+          `Exported ${totalCount} messages as ${format.toUpperCase()}`,
+        );
+        setExportDialogOpen(false);
+      } catch {
+        toast.error('Failed to export messages');
+      }
+    },
+    [
+      exportMessages,
+      activeSession?.id,
+      search,
+      messageType,
+      aiStatus,
+      source,
+      dateFrom,
+      dateTo,
+      totalCount,
+    ],
+  );
+
+  const handleProcessAllPending = useCallback(() => {
+    const pendingMessages = messages.filter(m => m.aiStatus === 'pending');
+    if (pendingMessages.length === 0) {
+      toast.info('No pending messages to process');
+      return;
+    }
+    handleBulkProcess(pendingMessages);
+  }, [messages, handleBulkProcess]);
 
   // Show session required state if no active session
   if (!activeSession) {
@@ -267,6 +332,43 @@ function WhatsappMessagesPage() {
 
   return (
     <div className="p-6">
+      {/* Dialogs */}
+      <MessageDetailDialog
+        open={detailSheetOpen}
+        onOpenChange={setDetailSheetOpen}
+        message={selectedMessage}
+        extractedData={messageDetail?.extractedData}
+        rawPayload={messageDetail?.rawPayload}
+        isLoading={isLoadingDetail}
+        onProcessAI={() => selectedMessage && handleProcessAI(selectedMessage)}
+        onRetryAI={() => selectedMessage && handleRetryAI(selectedMessage)}
+        isProcessing={isProcessing}
+      />
+
+      <DeleteMessageDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        count={messagesToDelete.length}
+      />
+
+      <BulkProcessDialog
+        open={bulkProcessDialogOpen}
+        onOpenChange={setBulkProcessDialogOpen}
+        onConfirm={handleConfirmBulkProcess}
+        isLoading={bulkProcessAI.isPending}
+        count={messagesToProcess.length}
+      />
+
+      <ExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        onConfirm={handleExport}
+        isLoading={exportMessages.isPending}
+        count={totalCount}
+      />
+
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
@@ -284,41 +386,41 @@ function WhatsappMessagesPage() {
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={handleExport}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setExportDialogOpen(true)}
+                >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
                   Export
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Export messages to CSV</TooltipContent>
+              <TooltipContent>Export messages (Ctrl+E)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  onClick={handleRefresh}
-                  disabled={isRefetching}
+                  onClick={invalidateMessages}
+                  disabled={isFetching}
                   aria-label="Refresh messages"
                 >
                   <RefreshCw
                     className={cn(
                       'h-4 w-4 transition-transform duration-500',
-                      isRefetching && 'animate-spin',
+                      isFetching && 'animate-spin',
                     )}
                   />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh messages</TooltipContent>
+              <TooltipContent>Refresh (Ctrl+R)</TooltipContent>
             </Tooltip>
             <Button
               size="sm"
               disabled={isProcessing}
               className="bg-linear-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600"
-              onClick={() =>
-                handleBulkProcess(
-                  filteredMessages.filter(m => m.aiStatus === 'pending'),
-                )
-              }
+              onClick={handleProcessAllPending}
             >
               <Sparkles
                 className={cn(
@@ -326,36 +428,84 @@ function WhatsappMessagesPage() {
                   isProcessing && 'animate-pulse',
                 )}
               />
-              {isProcessing ? 'Processing...' : 'Process All Pending'}
+              {isProcessing ? 'Processing...' : 'Process Pending'}
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Filter Panel */}
-      <MessagesFilterPanel
-        search={search}
-        messageType={messageType}
-        aiStatus={aiStatus}
-        source={source}
-        onSearchChange={setSearch}
-        onMessageTypeChange={setMessageType}
-        onAIStatusChange={setAIStatus}
-        onSourceChange={setSource}
-        onClear={handleClearFilters}
-        totalCount={allMessages.length}
-        filteredCount={filteredMessages.length}
-        className="mb-6"
-      />
+      {/* Filters */}
+      <div className="mb-6 space-y-3">
+        <MessagesFilterPanel
+          search={search}
+          messageType={messageType}
+          aiStatus={aiStatus}
+          source={source}
+          onSearchChange={v => {
+            setSearch(v);
+            setPage(1);
+          }}
+          onMessageTypeChange={v => {
+            setMessageType(v);
+            setPage(1);
+          }}
+          onAIStatusChange={v => {
+            setAIStatus(v);
+            setPage(1);
+          }}
+          onSourceChange={v => {
+            setSource(v);
+            setPage(1);
+          }}
+          onClear={handleClearFilters}
+          totalCount={totalCount}
+          filteredCount={messages.length}
+        />
+        <div className="flex items-center gap-3">
+          <DateRangeFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateChange={handleDateChange}
+          />
+          <div className="flex-1" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-muted-foreground"
+              >
+                <Keyboard className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs">
+              <div className="space-y-1 text-xs">
+                <p>
+                  <kbd className="bg-muted rounded px-1">Ctrl+A</kbd> Select all
+                </p>
+                <p>
+                  <kbd className="bg-muted rounded px-1">Ctrl+E</kbd> Export
+                </p>
+                <p>
+                  <kbd className="bg-muted rounded px-1">Ctrl+R</kbd> Refresh
+                </p>
+                <p>
+                  <kbd className="bg-muted rounded px-1">Esc</kbd> Close dialogs
+                </p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
 
       {/* Content */}
-      {isLoading ? (
+      {isLoading && !messages.length ? (
         <MessagesSkeleton count={10} />
       ) : hasNoMessages ? (
         <MessagesEmptyState
           variant="no-messages"
-          onSync={handleRefresh}
-          isSyncing={isRefetching}
+          onSync={() => syncMessages.mutate(activeSession.id)}
+          isSyncing={syncMessages.isPending}
         />
       ) : hasNoResults ? (
         <MessagesEmptyState
@@ -364,9 +514,9 @@ function WhatsappMessagesPage() {
           searchQuery={search}
         />
       ) : (
-        <LoadingOverlay isLoading={isRefetching}>
+        <LoadingOverlay isLoading={isFetching && messages.length > 0}>
           <MessagesDataTable
-            data={filteredMessages}
+            data={messages}
             onView={handleViewMessage}
             onProcessAI={handleProcessAI}
             onRetryAI={handleRetryAI}
@@ -374,7 +524,7 @@ function WhatsappMessagesPage() {
             onBulkProcess={handleBulkProcess}
             onBulkDelete={handleBulkDelete}
             isProcessing={isProcessing}
-            pageSize={20}
+            pageSize={pageSize}
           />
         </LoadingOverlay>
       )}
