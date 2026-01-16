@@ -47,8 +47,15 @@ export interface ProcessingDebugInfo {
   messageTokens: number;
   promptTokens: number;
   totalInputTokens: number;
+  outputTokens?: number;
   chunksUsed: number;
   tokensPerChunk?: number;
+}
+
+/** Result from generateObject with usage info */
+interface GenerateObjectResult<T> {
+  data: T | null;
+  outputTokens?: number;
 }
 
 /**
@@ -108,6 +115,7 @@ export class AIClient {
     promptTokens: number,
     chunksUsed = 1,
     tokensPerChunk?: number,
+    outputTokens?: number,
   ): ProcessingDebugInfo {
     const messageTokens = this.countTokens(message);
     return {
@@ -116,6 +124,7 @@ export class AIClient {
       messageTokens,
       promptTokens,
       totalInputTokens: messageTokens + promptTokens,
+      outputTokens,
       chunksUsed,
       tokensPerChunk,
     };
@@ -213,25 +222,31 @@ export class AIClient {
       .replace('{{message}}', message.text)
       .replace('{{context}}', contextStr);
 
-    const debugInfo = this.buildDebugInfo(message.text, promptTokens);
-
-    const data = await this.generateObject({
+    const result = await this.generateObject({
       schema: options.schema,
       prompt,
       system: options.systemPrompt,
       temperature: 0.3,
     });
 
-    const extractions: ExtractionResult[] = data
-      ? [{ type: 'structured', data, confidence: 1.0 }]
+    const debugInfo = this.buildDebugInfo(
+      message.text,
+      promptTokens,
+      1,
+      undefined,
+      result.outputTokens,
+    );
+
+    const extractions: ExtractionResult[] = result.data
+      ? [{ type: 'structured', data: result.data, confidence: 1.0 }]
       : [];
 
     return {
       messageId: message.id,
-      status: data ? 'completed' : 'failed',
+      status: result.data ? 'completed' : 'failed',
       model: this.modelName,
       extractions,
-      data,
+      data: result.data,
       processingTimeMs: Date.now() - startTime,
       debug: debugInfo,
     };
@@ -248,20 +263,41 @@ export class AIClient {
     ProcessingResult & { data: T | null; debug?: ProcessingDebugInfo }
   > {
     const lines = message.text.split('\n');
+
+    // Extract header lines (first 2-3 non-empty lines that establish context/intent)
+    const headerLines: string[] = [];
+    let headerTokens = 0;
+    const maxHeaderLines = 3;
+
+    for (const line of lines) {
+      if (headerLines.length >= maxHeaderLines) break;
+      const trimmed = line.trim();
+      if (trimmed) {
+        headerLines.push(line);
+        headerTokens += this.countTokens(line + '\n');
+      }
+    }
+
+    const headerText =
+      headerLines.length > 0 ? headerLines.join('\n') + '\n' : '';
+
+    // Build chunks, prepending header to each chunk (except first which already has it)
     const chunks: string[] = [];
     let currentChunk: string[] = [];
     let currentTokens = 0;
     const maxLinesPerChunk = 12;
 
-    // Cap token budget per chunk to avoid context overflow
+    // Cap token budget per chunk, accounting for header in subsequent chunks
     const effectiveTokenBudget = Math.min(tokenBudget, 500);
+    const budgetForContent = effectiveTokenBudget - headerTokens;
 
     for (const line of lines) {
       const lineTokens = this.countTokens(line + '\n');
 
       // Start new chunk if exceeds token budget OR exceeds line limit
       const exceedsTokens =
-        currentTokens + lineTokens > effectiveTokenBudget &&
+        currentTokens + lineTokens >
+          (chunks.length === 0 ? effectiveTokenBudget : budgetForContent) &&
         currentChunk.length > 0;
       const exceedsLines = currentChunk.length >= maxLinesPerChunk;
 
@@ -279,6 +315,14 @@ export class AIClient {
       chunks.push(currentChunk.join('\n'));
     }
 
+    // Prepend header to chunks after the first one to preserve context
+    const chunksWithHeader = chunks.map((chunk, index) => {
+      if (index === 0) return chunk; // First chunk already has header
+      // Check if chunk already starts with header content
+      if (chunk.startsWith(headerLines[0] || '')) return chunk;
+      return `[CONTEXT - DO NOT EXTRACT MEDICATIONS FROM THIS SECTION, ONLY USE FOR INTENT:]\n${headerText}\n[EXTRACT MEDICATIONS FROM THIS SECTION:]\n${chunk}`;
+    });
+
     const debugInfo = this.buildDebugInfo(
       message.text,
       promptTokens,
@@ -287,7 +331,7 @@ export class AIClient {
     );
 
     console.log(
-      `[AI Client] Chunking: ${debugInfo.messageTokens} tokens, ${debugInfo.messageLines} lines → ${chunks.length} chunks (max ${maxLinesPerChunk} lines, ~${effectiveTokenBudget} tokens/chunk)`,
+      `[AI Client] Chunking: ${debugInfo.messageTokens} tokens, ${debugInfo.messageLines} lines → ${chunks.length} chunks (max ${maxLinesPerChunk} lines, ~${effectiveTokenBudget} tokens/chunk, header: ${headerLines.length} lines)`,
     );
 
     // Process chunks sequentially to avoid overwhelming the model
@@ -295,9 +339,11 @@ export class AIClient {
       data: T | null;
       debug?: ProcessingDebugInfo;
     })[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]!;
-      console.log(`[AI Client] Processing chunk ${i + 1}/${chunks.length}...`);
+    for (let i = 0; i < chunksWithHeader.length; i++) {
+      const chunk = chunksWithHeader[i]!;
+      console.log(
+        `[AI Client] Processing chunk ${i + 1}/${chunksWithHeader.length}...`,
+      );
       const result = await this.processMessageDirect(
         {
           ...message,
@@ -317,6 +363,12 @@ export class AIClient {
         .filter(r => r.error)
         .map(r => r.error)
         .join('; ');
+      // Sum output tokens from all chunks
+      const totalOutputTokens = results.reduce(
+        (sum, r) => sum + (r.debug?.outputTokens ?? 0),
+        0,
+      );
+      debugInfo.outputTokens = totalOutputTokens;
       return {
         messageId: message.id,
         status: 'failed',
@@ -338,6 +390,13 @@ export class AIClient {
         }
       }
     }
+
+    // Sum output tokens from all chunks
+    const totalOutputTokens = results.reduce(
+      (sum, r) => sum + (r.debug?.outputTokens ?? 0),
+      0,
+    );
+    debugInfo.outputTokens = totalOutputTokens;
 
     const uniqueMedications = this.deduplicateMedications(allMedications);
     const firstData = firstSuccess.data as Record<string, unknown>;
@@ -426,16 +485,19 @@ export class AIClient {
     prompt: string;
     system?: string;
     temperature?: number;
-  }): Promise<T | null> {
+  }): Promise<GenerateObjectResult<T>> {
     if (this.provider.supportsStructuredOutput) {
       const result = await generateText({
         model: this.provider.model,
         prompt: options.prompt,
         system: options.system,
         temperature: options.temperature ?? 0.3,
-        experimental_output: Output.object({ schema: options.schema }),
+        output: Output.object({ schema: options.schema }),
       });
-      return result.experimental_output ?? null;
+      return {
+        data: result.output ?? null,
+        outputTokens: result.usage?.outputTokens,
+      };
     }
     return this.generateObjectWithJsonParsing(options);
   }
@@ -446,7 +508,7 @@ export class AIClient {
     prompt: string;
     system?: string;
     temperature?: number;
-  }): Promise<T | null> {
+  }): Promise<GenerateObjectResult<T>> {
     const schemaExample = this.generateSchemaExample(options.schema);
 
     const jsonPrompt = `${options.prompt}
@@ -463,7 +525,10 @@ IMPORTANT: Output ONLY the JSON object. No markdown, no code blocks, no explanat
       temperature: options.temperature ?? 0.3,
     });
 
-    return this.parseJsonResponse(result.text, options.schema);
+    return {
+      data: this.parseJsonResponse(result.text, options.schema),
+      outputTokens: result.usage?.outputTokens,
+    };
   }
 
   /** Generate a JSON example from a Zod schema */
