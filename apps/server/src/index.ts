@@ -8,6 +8,7 @@ import { appRouter } from '@pharmabroker/api/routers/index';
 import { getEventBridge } from '@pharmabroker/api/services/event-bridge.service';
 import { getWhatsAppWebSocketService } from '@pharmabroker/api/services/whatsapp-ws.service';
 import { syncSessionsOnStartup } from '@pharmabroker/api/services/session-sync.service';
+import { requestFilterMiddleware } from '@pharmabroker/api/middleware/request-filter';
 import { auth } from '@pharmabroker/auth';
 import { env } from '@pharmabroker/env/server';
 import { Hono } from 'hono';
@@ -18,6 +19,11 @@ import { upgradeWebSocket, websocket } from 'hono/bun';
 const app = new Hono();
 
 app.use(logger());
+
+// Request filter middleware - blocks suspicious scanner requests
+// Feature: websocket-architecture-refactor, Requirements: 7.1
+app.use('/*', requestFilterMiddleware);
+
 app.use(
   '/*',
   cors({

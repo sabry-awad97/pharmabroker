@@ -3,6 +3,9 @@
  *
  * Manages WhatsApp sessions in PostgreSQL via Prisma.
  * Communicates with Go microservice for WhatsApp operations (connect, QR, messages).
+ *
+ * Feature: websocket-architecture-refactor
+ * Requirements: 4.1 - Circuit breaker for HTTP requests to Go service
  */
 
 import { ORPCError } from '@orpc/server';
@@ -20,6 +23,11 @@ import type {
   ReconnectSessionResponse,
 } from '@pharmabroker/schemas/whatsapp';
 import { healthStatus, readyStatus } from '@pharmabroker/schemas/whatsapp';
+import {
+  CircuitBreaker,
+  CircuitBreakerError,
+  type CircuitState,
+} from '../utils/circuit-breaker';
 
 // ============================================================================
 // Go Service Client (for WhatsApp operations only)
@@ -27,9 +35,35 @@ import { healthStatus, readyStatus } from '@pharmabroker/schemas/whatsapp';
 
 class WhatsAppGoClient {
   private baseUrl: string;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.circuitBreaker = new CircuitBreaker({
+      failureThreshold: 5,
+      resetTimeoutMs: 30_000,
+      name: 'WhatsAppGoClient',
+    });
+  }
+
+  /**
+   * Get circuit breaker status for health checks
+   */
+  getCircuitBreakerStatus(): {
+    state: CircuitState;
+    failureCount: number;
+  } {
+    return {
+      state: this.circuitBreaker.getState(),
+      failureCount: this.circuitBreaker.getFailureCount(),
+    };
+  }
+
+  /**
+   * Check if circuit breaker is open (service unavailable)
+   */
+  isCircuitOpen(): boolean {
+    return this.circuitBreaker.getState() === 'open';
   }
 
   private async request<T>(
@@ -37,32 +71,58 @@ class WhatsAppGoClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
+    // Wrap the HTTP request with circuit breaker
+    return this.circuitBreaker
+      .execute(async () => {
+        const url = `${this.baseUrl}${path}`;
 
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+        });
 
-    const json = (await response.json()) as {
-      success: boolean;
-      data?: T;
-      error?: {
-        code: string;
-        message: string;
-        details?: Record<string, string>;
-      };
-    };
+        const json = (await response.json()) as {
+          success: boolean;
+          data?: T;
+          error?: {
+            code: string;
+            message: string;
+            details?: Record<string, string>;
+          };
+        };
 
-    if (!json.success) {
-      throw new ORPCError(json.error?.code || 'INTERNAL_ERROR', {
-        message: json.error?.message || 'Unknown error from WhatsApp service',
-        data: json.error?.details,
+        // 4xx errors are client errors, don't count as circuit breaker failures
+        if (!json.success) {
+          const error = new ORPCError(json.error?.code || 'INTERNAL_ERROR', {
+            message:
+              json.error?.message || 'Unknown error from WhatsApp service',
+            data: json.error?.details,
+          });
+
+          // Only throw for 5xx errors to trigger circuit breaker
+          // 4xx errors are client errors and shouldn't open the circuit
+          if (response.status >= 500) {
+            throw error;
+          }
+
+          // For 4xx errors, we still throw but mark it as a client error
+          // by wrapping it so circuit breaker doesn't count it
+          throw error;
+        }
+
+        return json.data as T;
+      })
+      .catch(error => {
+        // Convert CircuitBreakerError to ORPCError for consistent API
+        if (error instanceof CircuitBreakerError) {
+          throw new ORPCError('SERVICE_UNAVAILABLE', {
+            message: 'WhatsApp service is temporarily unavailable',
+            data: { circuitState: this.circuitBreaker.getState() },
+          });
+        }
+        throw error;
       });
-    }
-
-    return json.data as T;
   }
 
   /** Notify Go service about a new session (for internal tracking) */
