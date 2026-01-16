@@ -162,6 +162,67 @@ export {
   type FilterCountsResponse,
 } from './groups';
 
+// Messages schemas (stored messages with AI processing)
+export {
+  // Enums
+  storedMessageType,
+  storedMessageStatus,
+  messageSource,
+  aiStatus,
+  extractedDataType,
+  // Output schemas
+  whatsAppMessage,
+  whatsAppMessageWithGroup,
+  whatsAppExtractedData,
+  whatsAppMessageDetail,
+  // Input schemas
+  messageFilterInput,
+  messageIdInput,
+  bulkDeleteInput,
+  syncMessagesInput,
+  exportMessagesInput,
+  processMessageInput,
+  bulkProcessInput,
+  messageStatsInput,
+  // Response schemas
+  messagesListResponse,
+  messageDetailResponse,
+  messageStatsResponse,
+  deleteMessageResponse,
+  bulkDeleteResponse,
+  syncMessagesResponse,
+  processMessageResponse,
+  bulkProcessResponse,
+  exportMessagesResponse,
+  // Types
+  type StoredMessageType,
+  type StoredMessageStatus,
+  type MessageSource,
+  type AIStatus,
+  type ExtractedDataType,
+  type WhatsAppMessage as StoredWhatsAppMessage,
+  type WhatsAppMessageWithGroup,
+  type WhatsAppExtractedData,
+  type WhatsAppMessageDetail,
+  type MessageFilterInput,
+  type MessageIdInput,
+  type BulkDeleteInput,
+  type SyncMessagesInput,
+  type ExportMessagesInput,
+  type ProcessMessageInput,
+  type BulkProcessInput,
+  type MessageStatsInput,
+  type MessagesListResponse,
+  type MessageDetailResponse,
+  type MessageStatsResponse,
+  type DeleteMessageResponse,
+  type BulkDeleteResponse,
+  type SyncMessagesResponse,
+  type ProcessMessageResponse,
+  type BulkProcessResponse,
+  type ExportMessagesResponse,
+} from './messages';
+
 // Re-export branded types from common for convenience
 export {
   sessionId,
@@ -183,6 +244,7 @@ import * as message from './message';
 import * as events from './events';
 import * as health from './health';
 import * as groups from './groups';
+import * as messages from './messages';
 
 export const whatsapp = {
   session,
@@ -190,4 +252,5 @@ export const whatsapp = {
   events,
   health,
   groups,
+  messages,
 } as const;

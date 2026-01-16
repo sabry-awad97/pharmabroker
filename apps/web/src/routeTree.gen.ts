@@ -8,90 +8,90 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root';
-import { Route as LoginRouteImport } from './routes/login';
-import { Route as DashboardRouteImport } from './routes/dashboard';
-import { Route as IndexRouteImport } from './routes/index';
-import { Route as SessionsPickRouteImport } from './routes/sessions/pick';
-import { Route as WhatsappSessionsIndexRouteImport } from './routes/whatsapp/sessions/index';
-import { Route as WhatsappMessagesIndexRouteImport } from './routes/whatsapp/messages/index';
-import { Route as WhatsappGroupsIndexRouteImport } from './routes/whatsapp/groups/index';
-import { Route as WhatsappGroupsGroupIdRouteImport } from './routes/whatsapp/groups/$groupId';
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as SessionsPickRouteImport } from './routes/sessions/pick'
+import { Route as WhatsappSessionsIndexRouteImport } from './routes/whatsapp/sessions/index'
+import { Route as WhatsappMessagesIndexRouteImport } from './routes/whatsapp/messages/index'
+import { Route as WhatsappGroupsIndexRouteImport } from './routes/whatsapp/groups/index'
+import { Route as WhatsappGroupsGroupIdRouteImport } from './routes/whatsapp/groups/$groupId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const SessionsPickRoute = SessionsPickRouteImport.update({
   id: '/sessions/pick',
   path: '/sessions/pick',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const WhatsappSessionsIndexRoute = WhatsappSessionsIndexRouteImport.update({
   id: '/whatsapp/sessions/',
   path: '/whatsapp/sessions/',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const WhatsappMessagesIndexRoute = WhatsappMessagesIndexRouteImport.update({
   id: '/whatsapp/messages/',
   path: '/whatsapp/messages/',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const WhatsappGroupsIndexRoute = WhatsappGroupsIndexRouteImport.update({
   id: '/whatsapp/groups/',
   path: '/whatsapp/groups/',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const WhatsappGroupsGroupIdRoute = WhatsappGroupsGroupIdRouteImport.update({
   id: '/whatsapp/groups/$groupId',
   path: '/whatsapp/groups/$groupId',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute;
-  '/dashboard': typeof DashboardRoute;
-  '/login': typeof LoginRoute;
-  '/sessions/pick': typeof SessionsPickRoute;
-  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute;
-  '/whatsapp/groups': typeof WhatsappGroupsIndexRoute;
-  '/whatsapp/messages': typeof WhatsappMessagesIndexRoute;
-  '/whatsapp/sessions': typeof WhatsappSessionsIndexRoute;
+  '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/sessions/pick': typeof SessionsPickRoute
+  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute
+  '/whatsapp/groups': typeof WhatsappGroupsIndexRoute
+  '/whatsapp/messages': typeof WhatsappMessagesIndexRoute
+  '/whatsapp/sessions': typeof WhatsappSessionsIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute;
-  '/dashboard': typeof DashboardRoute;
-  '/login': typeof LoginRoute;
-  '/sessions/pick': typeof SessionsPickRoute;
-  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute;
-  '/whatsapp/groups': typeof WhatsappGroupsIndexRoute;
-  '/whatsapp/messages': typeof WhatsappMessagesIndexRoute;
-  '/whatsapp/sessions': typeof WhatsappSessionsIndexRoute;
+  '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/sessions/pick': typeof SessionsPickRoute
+  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute
+  '/whatsapp/groups': typeof WhatsappGroupsIndexRoute
+  '/whatsapp/messages': typeof WhatsappMessagesIndexRoute
+  '/whatsapp/sessions': typeof WhatsappSessionsIndexRoute
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport;
-  '/': typeof IndexRoute;
-  '/dashboard': typeof DashboardRoute;
-  '/login': typeof LoginRoute;
-  '/sessions/pick': typeof SessionsPickRoute;
-  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute;
-  '/whatsapp/groups/': typeof WhatsappGroupsIndexRoute;
-  '/whatsapp/messages/': typeof WhatsappMessagesIndexRoute;
-  '/whatsapp/sessions/': typeof WhatsappSessionsIndexRoute;
+  __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/sessions/pick': typeof SessionsPickRoute
+  '/whatsapp/groups/$groupId': typeof WhatsappGroupsGroupIdRoute
+  '/whatsapp/groups/': typeof WhatsappGroupsIndexRoute
+  '/whatsapp/messages/': typeof WhatsappMessagesIndexRoute
+  '/whatsapp/sessions/': typeof WhatsappSessionsIndexRoute
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath;
+  fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/dashboard'
@@ -100,8 +100,8 @@ export interface FileRouteTypes {
     | '/whatsapp/groups/$groupId'
     | '/whatsapp/groups'
     | '/whatsapp/messages'
-    | '/whatsapp/sessions';
-  fileRoutesByTo: FileRoutesByTo;
+    | '/whatsapp/sessions'
+  fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/dashboard'
@@ -110,7 +110,7 @@ export interface FileRouteTypes {
     | '/whatsapp/groups/$groupId'
     | '/whatsapp/groups'
     | '/whatsapp/messages'
-    | '/whatsapp/sessions';
+    | '/whatsapp/sessions'
   id:
     | '__root__'
     | '/'
@@ -120,78 +120,78 @@ export interface FileRouteTypes {
     | '/whatsapp/groups/$groupId'
     | '/whatsapp/groups/'
     | '/whatsapp/messages/'
-    | '/whatsapp/sessions/';
-  fileRoutesById: FileRoutesById;
+    | '/whatsapp/sessions/'
+  fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute;
-  DashboardRoute: typeof DashboardRoute;
-  LoginRoute: typeof LoginRoute;
-  SessionsPickRoute: typeof SessionsPickRoute;
-  WhatsappGroupsGroupIdRoute: typeof WhatsappGroupsGroupIdRoute;
-  WhatsappGroupsIndexRoute: typeof WhatsappGroupsIndexRoute;
-  WhatsappMessagesIndexRoute: typeof WhatsappMessagesIndexRoute;
-  WhatsappSessionsIndexRoute: typeof WhatsappSessionsIndexRoute;
+  IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
+  LoginRoute: typeof LoginRoute
+  SessionsPickRoute: typeof SessionsPickRoute
+  WhatsappGroupsGroupIdRoute: typeof WhatsappGroupsGroupIdRoute
+  WhatsappGroupsIndexRoute: typeof WhatsappGroupsIndexRoute
+  WhatsappMessagesIndexRoute: typeof WhatsappMessagesIndexRoute
+  WhatsappSessionsIndexRoute: typeof WhatsappSessionsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
     '/login': {
-      id: '/login';
-      path: '/login';
-      fullPath: '/login';
-      preLoaderRoute: typeof LoginRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
-      id: '/dashboard';
-      path: '/dashboard';
-      fullPath: '/dashboard';
-      preLoaderRoute: typeof DashboardRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
-      id: '/';
-      path: '/';
-      fullPath: '/';
-      preLoaderRoute: typeof IndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sessions/pick': {
-      id: '/sessions/pick';
-      path: '/sessions/pick';
-      fullPath: '/sessions/pick';
-      preLoaderRoute: typeof SessionsPickRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/sessions/pick'
+      path: '/sessions/pick'
+      fullPath: '/sessions/pick'
+      preLoaderRoute: typeof SessionsPickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/whatsapp/sessions/': {
-      id: '/whatsapp/sessions/';
-      path: '/whatsapp/sessions';
-      fullPath: '/whatsapp/sessions';
-      preLoaderRoute: typeof WhatsappSessionsIndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/whatsapp/sessions/'
+      path: '/whatsapp/sessions'
+      fullPath: '/whatsapp/sessions'
+      preLoaderRoute: typeof WhatsappSessionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/whatsapp/messages/': {
-      id: '/whatsapp/messages/';
-      path: '/whatsapp/messages';
-      fullPath: '/whatsapp/messages';
-      preLoaderRoute: typeof WhatsappMessagesIndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/whatsapp/messages/'
+      path: '/whatsapp/messages'
+      fullPath: '/whatsapp/messages'
+      preLoaderRoute: typeof WhatsappMessagesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/whatsapp/groups/': {
-      id: '/whatsapp/groups/';
-      path: '/whatsapp/groups';
-      fullPath: '/whatsapp/groups';
-      preLoaderRoute: typeof WhatsappGroupsIndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/whatsapp/groups/'
+      path: '/whatsapp/groups'
+      fullPath: '/whatsapp/groups'
+      preLoaderRoute: typeof WhatsappGroupsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/whatsapp/groups/$groupId': {
-      id: '/whatsapp/groups/$groupId';
-      path: '/whatsapp/groups/$groupId';
-      fullPath: '/whatsapp/groups/$groupId';
-      preLoaderRoute: typeof WhatsappGroupsGroupIdRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+      id: '/whatsapp/groups/$groupId'
+      path: '/whatsapp/groups/$groupId'
+      fullPath: '/whatsapp/groups/$groupId'
+      preLoaderRoute: typeof WhatsappGroupsGroupIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -204,7 +204,7 @@ const rootRouteChildren: RootRouteChildren = {
   WhatsappGroupsIndexRoute: WhatsappGroupsIndexRoute,
   WhatsappMessagesIndexRoute: WhatsappMessagesIndexRoute,
   WhatsappSessionsIndexRoute: WhatsappSessionsIndexRoute,
-};
+}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>();
+  ._addFileTypes<FileRouteTypes>()
