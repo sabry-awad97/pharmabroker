@@ -197,6 +197,9 @@ export {
   processMessageInput,
   bulkProcessInput,
   messageStatsInput,
+  scheduleProcessingInput,
+  cancelScheduleInput,
+  scheduledMessagesInput,
   // Response schemas
   messagesListResponse,
   messageDetailResponse,
@@ -207,6 +210,9 @@ export {
   processMessageResponse,
   bulkProcessResponse,
   exportMessagesResponse,
+  scheduleProcessingResponse,
+  cancelScheduleResponse,
+  scheduledMessagesResponse,
   // Types
   type StoredMessageType,
   type StoredMessageStatus,
@@ -225,6 +231,9 @@ export {
   type ProcessMessageInput,
   type BulkProcessInput,
   type MessageStatsInput,
+  type ScheduleProcessingInput,
+  type CancelScheduleInput,
+  type ScheduledMessagesInput,
   type MessagesListResponse,
   type MessageDetailResponse,
   type MessageStatsResponse,
@@ -234,6 +243,9 @@ export {
   type ProcessMessageResponse,
   type BulkProcessResponse,
   type ExportMessagesResponse,
+  type ScheduleProcessingResponse,
+  type CancelScheduleResponse,
+  type ScheduledMessagesResponse,
 } from './messages';
 
 // Re-export branded types from common for convenience

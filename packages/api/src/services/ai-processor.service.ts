@@ -18,7 +18,10 @@ import {
   messageExtractionSchema,
   type MessageExtraction,
 } from '@pharmabroker/schemas/ai';
-import type { AIStatus } from '@pharmabroker/schemas/whatsapp';
+import type {
+  AIStatus,
+  WhatsAppMessageWithGroup,
+} from '@pharmabroker/schemas/whatsapp';
 
 // ============================================================================
 // Types
@@ -36,6 +39,16 @@ export interface BulkProcessResult {
   queued: number;
   skipped: number;
   errors: string[];
+}
+
+export interface ScheduleResult {
+  scheduled: number;
+  skipped: number;
+  scheduledFor: Date;
+}
+
+export interface CancelScheduleResult {
+  cancelled: number;
 }
 
 // ============================================================================
@@ -370,6 +383,196 @@ class AIProcessorService {
     });
 
     return messages.map(m => m.id);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Scheduling Methods
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Schedule messages for AI processing at a specific time
+   */
+  async scheduleProcessing(
+    userId: string,
+    messageIds: string[],
+    scheduledFor: Date,
+    priority: number = 0,
+  ): Promise<ScheduleResult> {
+    let scheduled = 0;
+    let skipped = 0;
+
+    // Verify ownership of all messages
+    const messages = await prisma.whatsAppMessage.findMany({
+      where: {
+        id: { in: messageIds },
+        session: { userId },
+      },
+      select: {
+        id: true,
+        aiStatus: true,
+        text: true,
+        caption: true,
+      },
+    });
+
+    const ownedIds = new Set(messages.map(m => m.id));
+
+    for (const id of messageIds) {
+      if (!ownedIds.has(id)) {
+        skipped++;
+        continue;
+      }
+
+      const message = messages.find(m => m.id === id);
+      if (!message) {
+        skipped++;
+        continue;
+      }
+
+      // Skip already processed or processing
+      if (
+        message.aiStatus === 'completed' ||
+        message.aiStatus === 'processing'
+      ) {
+        skipped++;
+        continue;
+      }
+
+      // Skip messages without content
+      if (!message.text && !message.caption) {
+        await prisma.whatsAppMessage.update({
+          where: { id },
+          data: { aiStatus: 'skipped' },
+        });
+        skipped++;
+        continue;
+      }
+
+      // Schedule the message
+      await prisma.whatsAppMessage.update({
+        where: { id },
+        data: {
+          aiStatus: 'scheduled' as const,
+          aiScheduledFor: scheduledFor,
+          aiScheduledAt: new Date(),
+          aiPriority: priority,
+          aiError: null,
+        } as Parameters<typeof prisma.whatsAppMessage.update>[0]['data'],
+      });
+      scheduled++;
+    }
+
+    return { scheduled, skipped, scheduledFor };
+  }
+
+  /**
+   * Cancel scheduled processing for messages
+   */
+  async cancelSchedule(
+    userId: string,
+    messageIds: string[],
+  ): Promise<CancelScheduleResult> {
+    // Update only scheduled messages owned by user
+    const result = await prisma.whatsAppMessage.updateMany({
+      where: {
+        id: { in: messageIds },
+        session: { userId },
+        aiStatus: 'scheduled' as const,
+      },
+      data: {
+        aiStatus: 'pending',
+        aiScheduledFor: null,
+        aiScheduledAt: null,
+        aiPriority: 0,
+      } as Parameters<typeof prisma.whatsAppMessage.updateMany>[0]['data'],
+    });
+
+    return { cancelled: result.count };
+  }
+
+  /**
+   * Get scheduled messages for a user
+   */
+  async getScheduledMessages(
+    userId: string,
+    sessionId?: string,
+    limit: number = 50,
+  ): Promise<{
+    messages: WhatsAppMessageWithGroup[];
+    total: number;
+  }> {
+    const messages = await prisma.whatsAppMessage.findMany({
+      where: {
+        session: { userId },
+        ...(sessionId && { sessionId }),
+        aiStatus: 'scheduled' as const,
+      },
+      include: {
+        group: {
+          select: { id: true, name: true, jid: true },
+        },
+        participant: {
+          select: { id: true, displayName: true, jid: true },
+        },
+      },
+      take: limit,
+      orderBy: [{ aiPriority: 'desc' }, { aiScheduledFor: 'asc' }],
+    });
+
+    // Cast to match the expected schema type
+    return {
+      messages: messages as unknown as WhatsAppMessageWithGroup[],
+      total: messages.length,
+    };
+  }
+
+  /**
+   * Process due scheduled messages (called by scheduler/cron)
+   */
+  async processDueScheduledMessages(userId: string): Promise<number> {
+    const now = new Date();
+
+    // Get messages that are due for processing
+    const dueMessages = await prisma.whatsAppMessage.findMany({
+      where: {
+        session: { userId },
+        aiStatus: 'scheduled' as const,
+        aiScheduledFor: { lte: now },
+      },
+      select: { id: true },
+      orderBy: [{ aiPriority: 'desc' }, { aiScheduledFor: 'asc' }],
+      take: 50, // Process in batches
+    });
+
+    if (dueMessages.length === 0) {
+      return 0;
+    }
+
+    // Process each message
+    let processed = 0;
+    for (const message of dueMessages) {
+      try {
+        // Clear scheduling fields before processing
+        await prisma.whatsAppMessage.update({
+          where: { id: message.id },
+          data: {
+            aiScheduledFor: null,
+            aiScheduledAt: null,
+            aiPriority: 0,
+          } as Parameters<typeof prisma.whatsAppMessage.update>[0]['data'],
+        });
+
+        await this.processMessage(userId, message.id);
+        processed++;
+      } catch (error) {
+        console.error(
+          `[AI Processor] Failed to process scheduled message ${message.id}:`,
+          error,
+        );
+      }
+    }
+
+    return processed;
   }
 
   // ─────────────────────────────────────────────────────────────────────────

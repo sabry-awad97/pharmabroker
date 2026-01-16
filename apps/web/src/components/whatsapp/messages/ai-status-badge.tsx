@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   SkipForward,
+  CalendarClock,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
 
 export type AIStatus =
   | 'pending'
+  | 'scheduled'
   | 'processing'
   | 'completed'
   | 'failed'
@@ -43,6 +45,13 @@ const aiStatusConfig: Record<AIStatus, AIStatusConfig> = {
     description: 'Waiting for AI processing',
     color: 'text-slate-500',
     bgColor: 'bg-slate-500/10 border-slate-500/20',
+  },
+  scheduled: {
+    icon: CalendarClock,
+    label: 'Scheduled',
+    description: 'Scheduled for AI processing',
+    color: 'text-violet-500',
+    bgColor: 'bg-violet-500/10 border-violet-500/20',
   },
   processing: {
     icon: Loader2,

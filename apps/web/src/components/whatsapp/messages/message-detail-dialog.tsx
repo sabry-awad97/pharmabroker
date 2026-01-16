@@ -4,16 +4,9 @@
  * A beautiful, creative dialog for viewing message details.
  */
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,17 +15,14 @@ import {
   Copy,
   Sparkles,
   RotateCcw,
-  Clock,
   Users,
   MessageSquare,
   FileJson,
   Brain,
-  CheckCircle2,
   Forward,
   Reply,
   Zap,
   Database,
-  ArrowRight,
   Hash,
   Calendar,
   User,
@@ -267,10 +257,10 @@ export function MessageDetailDialog({
 
             {/* Tabs Content */}
             <Tabs defaultValue="content" className="flex-1 overflow-hidden">
-              <div className="overflow-x-auto border-b px-6">
+              <div className="border-b px-6">
                 <TabsList
                   variant="line"
-                  className="h-12 w-full min-w-max justify-start gap-4 bg-transparent p-0"
+                  className="h-12 w-full justify-start gap-4 bg-transparent p-0"
                 >
                   <TabsTrigger
                     value="content"

@@ -20,6 +20,9 @@ import type {
   BulkProcessResponse,
   BulkDeleteResponse,
   ExportMessagesResponse,
+  ScheduleProcessingResponse,
+  CancelScheduleResponse,
+  ScheduledMessagesResponse,
 } from '@pharmabroker/schemas/whatsapp';
 
 // ============================================================================
@@ -374,4 +377,101 @@ export function useInvalidateMessages() {
   return useCallback(() => {
     queryClient.invalidateQueries({ queryKey: messageKeys.all });
   }, [queryClient]);
+}
+
+// ============================================================================
+// Scheduling Hooks
+// ============================================================================
+
+export const schedulingKeys = {
+  all: ['whatsapp-scheduling'] as const,
+  scheduled: (sessionId?: string) =>
+    [...schedulingKeys.all, 'scheduled', sessionId] as const,
+};
+
+/**
+ * Schedule AI processing for messages
+ */
+export function useScheduleAI() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      messageIds,
+      scheduledFor,
+      priority = 0,
+    }: {
+      messageIds: string[];
+      scheduledFor: Date;
+      priority?: number;
+    }): Promise<ScheduleProcessingResponse> => {
+      const response = await client.whatsapp.messages.scheduleAI({
+        messageIds,
+        scheduledFor,
+        priority,
+      });
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.all });
+      queryClient.invalidateQueries({ queryKey: schedulingKeys.all });
+    },
+  });
+}
+
+/**
+ * Cancel scheduled AI processing
+ */
+export function useCancelScheduleAI() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      messageIds: string[],
+    ): Promise<CancelScheduleResponse> => {
+      const response = await client.whatsapp.messages.cancelScheduleAI({
+        messageIds,
+      });
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.all });
+      queryClient.invalidateQueries({ queryKey: schedulingKeys.all });
+    },
+  });
+}
+
+/**
+ * Get scheduled messages
+ */
+export function useScheduledMessages(sessionId?: string, limit?: number) {
+  return useQuery({
+    queryKey: schedulingKeys.scheduled(sessionId),
+    queryFn: async (): Promise<ScheduledMessagesResponse> => {
+      const response = await client.whatsapp.messages.scheduledMessages({
+        sessionId,
+        limit,
+      });
+      return response;
+    },
+    staleTime: 30 * 1000,
+  });
+}
+
+/**
+ * Process due scheduled messages
+ */
+export function useProcessDueScheduled() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (): Promise<{ processed: number }> => {
+      const response = await client.whatsapp.messages.processDueScheduled({});
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.all });
+      queryClient.invalidateQueries({ queryKey: schedulingKeys.all });
+    },
+  });
 }

@@ -183,6 +183,11 @@ model WhatsAppMessage {
     aiError       String?          @map("ai_error") // Error message if failed
     aiRetryCount  Int              @default(0) @map("ai_retry_count")
 
+    // Scheduling fields
+    aiScheduledFor DateTime? @map("ai_scheduled_for") // When to process
+    aiScheduledAt  DateTime? @map("ai_scheduled_at") // When scheduling was set
+    aiPriority     Int       @default(0) @map("ai_priority") // Higher = process first
+
     // Relations
     extractedData WhatsAppExtractedData[]
 
@@ -269,6 +274,7 @@ enum WhatsAppMessageSource {
 
 enum WhatsAppAIStatus {
     pending    // Not yet processed
+    scheduled  // Scheduled for future processing
     processing // Currently being processed
     completed  // Successfully processed
     failed     // Processing failed

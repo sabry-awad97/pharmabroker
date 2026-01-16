@@ -43,6 +43,7 @@ export const messageSource = z.enum(['realtime', 'history']);
 /** AI processing status enum matching Prisma WhatsAppAIStatus */
 export const aiStatus = z.enum([
   'pending',
+  'scheduled',
   'processing',
   'completed',
   'failed',
@@ -86,6 +87,9 @@ export const whatsAppMessage = z.object({
   aiError: z.string().nullable(),
   aiRetryCount: z.number().int().min(0),
   aiProcessedAt: z.coerce.date().nullable(),
+  aiScheduledFor: z.coerce.date().nullable(),
+  aiScheduledAt: z.coerce.date().nullable(),
+  aiPriority: z.number().int().min(0).max(10).default(0),
 });
 
 /** WhatsApp message with group info for list display */
@@ -178,6 +182,24 @@ export const bulkProcessInput = z.object({
   messageIds: z.array(z.string().uuid()).min(1).max(100),
 });
 
+/** Schedule AI processing input */
+export const scheduleProcessingInput = z.object({
+  messageIds: z.array(z.string().uuid()).min(1).max(100),
+  scheduledFor: z.coerce.date(),
+  priority: z.number().int().min(0).max(10).optional().default(0),
+});
+
+/** Cancel scheduled processing input */
+export const cancelScheduleInput = z.object({
+  messageIds: z.array(z.string().uuid()).min(1).max(100),
+});
+
+/** Get scheduled messages input */
+export const scheduledMessagesInput = z.object({
+  sessionId: z.string().uuid().optional(),
+  limit: z.number().int().min(1).max(100).optional().default(50),
+});
+
 /** Message stats input */
 export const messageStatsInput = z.object({
   sessionId: z.string().uuid().optional(),
@@ -234,6 +256,24 @@ export const bulkProcessResponse = z.object({
   skipped: z.number().int().min(0),
 });
 
+/** Schedule processing response */
+export const scheduleProcessingResponse = z.object({
+  scheduled: z.number().int().min(0),
+  skipped: z.number().int().min(0),
+  scheduledFor: z.coerce.date(),
+});
+
+/** Cancel schedule response */
+export const cancelScheduleResponse = z.object({
+  cancelled: z.number().int().min(0),
+});
+
+/** Scheduled messages response */
+export const scheduledMessagesResponse = z.object({
+  messages: z.array(whatsAppMessageWithGroup),
+  total: z.number().int().min(0),
+});
+
 /** Export messages response - returns file data */
 export const exportMessagesResponse = z.object({
   filename: z.string(),
@@ -261,6 +301,9 @@ export type SyncMessagesInput = z.infer<typeof syncMessagesInput>;
 export type ExportMessagesInput = z.infer<typeof exportMessagesInput>;
 export type ProcessMessageInput = z.infer<typeof processMessageInput>;
 export type BulkProcessInput = z.infer<typeof bulkProcessInput>;
+export type ScheduleProcessingInput = z.infer<typeof scheduleProcessingInput>;
+export type CancelScheduleInput = z.infer<typeof cancelScheduleInput>;
+export type ScheduledMessagesInput = z.infer<typeof scheduledMessagesInput>;
 export type MessageStatsInput = z.infer<typeof messageStatsInput>;
 export type MessagesListResponse = z.infer<typeof messagesListResponse>;
 export type MessageDetailResponse = z.infer<typeof messageDetailResponse>;
@@ -270,4 +313,11 @@ export type BulkDeleteResponse = z.infer<typeof bulkDeleteResponse>;
 export type SyncMessagesResponse = z.infer<typeof syncMessagesResponse>;
 export type ProcessMessageResponse = z.infer<typeof processMessageResponse>;
 export type BulkProcessResponse = z.infer<typeof bulkProcessResponse>;
+export type ScheduleProcessingResponse = z.infer<
+  typeof scheduleProcessingResponse
+>;
+export type CancelScheduleResponse = z.infer<typeof cancelScheduleResponse>;
+export type ScheduledMessagesResponse = z.infer<
+  typeof scheduledMessagesResponse
+>;
 export type ExportMessagesResponse = z.infer<typeof exportMessagesResponse>;

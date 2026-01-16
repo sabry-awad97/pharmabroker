@@ -23,6 +23,12 @@ import {
   bulkProcessResponse,
   syncMessagesInput,
   syncMessagesResponse,
+  scheduleProcessingInput,
+  scheduleProcessingResponse,
+  cancelScheduleInput,
+  cancelScheduleResponse,
+  scheduledMessagesInput,
+  scheduledMessagesResponse,
 } from '@pharmabroker/schemas/whatsapp';
 
 import { o, protectedProcedure } from '..';
@@ -273,5 +279,87 @@ export const whatsappMessagesRouter = o.router({
         model: result.model,
         error: result.error,
       };
+    }),
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // AI Scheduling
+  // ─────────────────────────────────────────────────────────────────────────
+
+  scheduleAI: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/messages/schedule',
+        tags: ['WhatsApp Messages'],
+        summary: 'Schedule AI processing',
+        description: 'Schedules messages for AI processing at a specific time.',
+      },
+    })
+    .input(scheduleProcessingInput)
+    .output(scheduleProcessingResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return aiProcessorService.scheduleProcessing(
+        userId,
+        input.messageIds,
+        input.scheduledFor,
+        input.priority,
+      );
+    }),
+
+  cancelScheduleAI: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/messages/cancel-schedule',
+        tags: ['WhatsApp Messages'],
+        summary: 'Cancel scheduled AI processing',
+        description: 'Cancels scheduled AI processing for messages.',
+      },
+    })
+    .input(cancelScheduleInput)
+    .output(cancelScheduleResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return aiProcessorService.cancelSchedule(userId, input.messageIds);
+    }),
+
+  scheduledMessages: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'GET',
+        path: '/whatsapp/messages/scheduled',
+        tags: ['WhatsApp Messages'],
+        summary: 'Get scheduled messages',
+        description: 'Returns messages scheduled for AI processing.',
+      },
+    })
+    .input(scheduledMessagesInput)
+    .output(scheduledMessagesResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return aiProcessorService.getScheduledMessages(
+        userId,
+        input.sessionId,
+        input.limit,
+      );
+    }),
+
+  processDueScheduled: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/messages/process-scheduled',
+        tags: ['WhatsApp Messages'],
+        summary: 'Process due scheduled messages',
+        description:
+          'Processes all messages that are due for scheduled AI processing.',
+      },
+    })
+    .handler(async ({ context }) => {
+      const userId = context.session!.user.id;
+      const processed =
+        await aiProcessorService.processDueScheduledMessages(userId);
+      return { processed };
     }),
 });

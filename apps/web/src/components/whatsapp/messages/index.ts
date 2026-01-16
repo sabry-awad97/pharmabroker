@@ -52,3 +52,6 @@ export { DateRangeFilter } from './date-range-filter';
 
 // Column visibility toggle
 export { ColumnVisibilityToggle } from './column-visibility-toggle';
+
+// Schedule AI dialog
+export { ScheduleAIDialog } from './schedule-ai-dialog';
