@@ -59,6 +59,7 @@ type WhatsmeowClient struct {
 	logger         waLog.Logger
 	circuitBreaker *CircuitBreaker
 	mediaUploader  *WhatsmeowMediaUploader
+	messageParser  *MessageParser
 }
 
 // NewWhatsmeowClient creates a new WhatsApp client
@@ -80,12 +81,13 @@ func NewWhatsmeowClient(ctx context.Context, config ClientConfig) (*WhatsmeowCli
 	}
 
 	client := &WhatsmeowClient{
-		config:       config,
-		container:    container,
-		clients:      make(map[string]*whatsmeow.Client),
-		sessionToJID: make(map[string]string),
-		handlers:     make([]repository.EventHandler, 0),
-		logger:       logger,
+		config:        config,
+		container:     container,
+		clients:       make(map[string]*whatsmeow.Client),
+		sessionToJID:  make(map[string]string),
+		handlers:      make([]repository.EventHandler, 0),
+		logger:        logger,
+		messageParser: NewMessageParser(),
 	}
 
 	// Initialize circuit breaker if enabled
@@ -674,9 +676,9 @@ func (c *WhatsmeowClient) handleEvent(sessionID string, client *whatsmeow.Client
 	case *events.Receipt:
 		event, err = c.handleReceiptEvent(sessionID, v)
 	case *events.HistorySync:
-		// Handle history sync to extract pushnames from synced messages
-		c.handleHistorySyncEvent(client, v)
-		return // Don't emit domain event for history sync
+		// Handle history sync to extract pushnames and emit message events
+		c.handleHistorySyncEvent(sessionID, client, v)
+		return // Don't emit domain event for history sync itself
 	default:
 		// Ignore other events
 		return
@@ -710,33 +712,29 @@ func (c *WhatsmeowClient) handleMessageEvent(sessionID string, client *whatsmeow
 		}
 	}
 
-	payload := map[string]interface{}{
-		"message_id": msg.Info.ID,
-		"from":       msg.Info.Sender.String(),
-		"timestamp":  msg.Info.Timestamp,
-		"push_name":  msg.Info.PushName,
+	// Use the message parser to create a full ParsedMessage
+	parsedMsg, err := c.messageParser.ParseRealtimeMessage(sessionID, msg)
+	if err != nil {
+		c.logger.Warnf("Failed to parse message: %v", err)
+		return nil, err
 	}
 
-	// Extract message content
-	if msg.Message.GetConversation() != "" {
-		payload["text"] = msg.Message.GetConversation()
-		payload["type"] = "text"
-	} else if msg.Message.GetExtendedTextMessage() != nil {
-		payload["text"] = msg.Message.GetExtendedTextMessage().GetText()
-		payload["type"] = "text"
-	} else if msg.Message.GetImageMessage() != nil {
-		payload["type"] = "image"
-		payload["caption"] = msg.Message.GetImageMessage().GetCaption()
-	} else if msg.Message.GetDocumentMessage() != nil {
-		payload["type"] = "document"
-		payload["filename"] = msg.Message.GetDocumentMessage().GetFileName()
+	// Resolve LID to phone number JID if needed
+	if msg.Info.Sender.Server == "lid" && client != nil && client.Store != nil && client.Store.LIDs != nil {
+		ctx := context.Background()
+		pnJID, err := client.Store.LIDs.GetPNForLID(ctx, msg.Info.Sender)
+		if err == nil && !pnJID.IsEmpty() {
+			parsedMsg.SenderJID = pnJID.String()
+			c.logger.Debugf("Resolved LID %s to PN %s", msg.Info.Sender.String(), pnJID.String())
+		}
 	}
 
+	// Emit the full parsed message as the event payload
 	return entity.NewEventWithPayload(
 		generateEventID(),
 		entity.EventTypeMessageReceived,
 		sessionID,
-		payload,
+		parsedMsg,
 	)
 }
 
@@ -769,13 +767,21 @@ func (c *WhatsmeowClient) handleReceiptEvent(sessionID string, receipt *events.R
 
 // handleHistorySyncEvent processes history sync events to extract and save pushnames
 // This is called during initial connection when WhatsApp syncs message history
-func (c *WhatsmeowClient) handleHistorySyncEvent(client *whatsmeow.Client, evt *events.HistorySync) {
-	if client == nil || client.Store == nil || client.Store.Contacts == nil {
+// It also emits message events for each message in the history
+func (c *WhatsmeowClient) handleHistorySyncEvent(sessionID string, client *whatsmeow.Client, evt *events.HistorySync) {
+	if client == nil || client.Store == nil {
 		return
 	}
 
 	ctx := context.Background()
 	savedCount := 0
+	messageCount := 0
+
+	// Get handlers for emitting events
+	c.mu.RLock()
+	handlers := make([]repository.EventHandler, len(c.handlers))
+	copy(handlers, c.handlers)
+	c.mu.RUnlock()
 
 	// Process conversations from history sync
 	if evt.Data != nil && evt.Data.Conversations != nil {
@@ -784,7 +790,7 @@ func (c *WhatsmeowClient) handleHistorySyncEvent(client *whatsmeow.Client, evt *
 			if conv.Name != nil && *conv.Name != "" && conv.ID != nil {
 				// Parse JID from conversation ID
 				jid, err := types.ParseJID(*conv.ID)
-				if err == nil && !jid.IsEmpty() {
+				if err == nil && !jid.IsEmpty() && client.Store.Contacts != nil {
 					_, _, err := client.Store.Contacts.PutPushName(ctx, jid, *conv.Name)
 					if err == nil {
 						savedCount++
@@ -792,33 +798,93 @@ func (c *WhatsmeowClient) handleHistorySyncEvent(client *whatsmeow.Client, evt *
 				}
 			}
 
-			// Process messages in the conversation for pushnames
+			// Get chat JID for this conversation
+			chatJID := ""
+			if conv.ID != nil {
+				chatJID = *conv.ID
+			}
+
+			// Process messages in the conversation
 			if conv.Messages != nil {
-				for _, msg := range conv.Messages {
-					if msg.Message != nil && msg.Message.Key != nil {
-						// Get sender JID and pushname from message
-						var senderJID types.JID
-						var pushName string
+				for _, histMsg := range conv.Messages {
+					if histMsg.Message == nil || histMsg.Message.Message == nil {
+						continue
+					}
 
-						if msg.Message.Key.RemoteJID != nil {
-							jid, err := types.ParseJID(*msg.Message.Key.RemoteJID)
-							if err == nil {
-								senderJID = jid
-							}
-						}
+					// Get sender JID and pushname from message
+					var senderJID types.JID
+					var pushName string
 
-						if msg.Message.PushName != nil && *msg.Message.PushName != "" {
-							pushName = *msg.Message.PushName
-						}
-
-						// Save pushname if we have both JID and pushname
-						if !senderJID.IsEmpty() && pushName != "" && senderJID.Server == types.DefaultUserServer {
-							_, _, err := client.Store.Contacts.PutPushName(ctx, senderJID, pushName)
-							if err == nil {
-								savedCount++
-							}
+					if histMsg.Message.Key != nil && histMsg.Message.Key.RemoteJID != nil {
+						jid, err := types.ParseJID(*histMsg.Message.Key.RemoteJID)
+						if err == nil {
+							senderJID = jid
 						}
 					}
+
+					if histMsg.Message.PushName != nil && *histMsg.Message.PushName != "" {
+						pushName = *histMsg.Message.PushName
+					}
+
+					// Save pushname if we have both JID and pushname
+					if !senderJID.IsEmpty() && pushName != "" && senderJID.Server == types.DefaultUserServer && client.Store.Contacts != nil {
+						_, _, err := client.Store.Contacts.PutPushName(ctx, senderJID, pushName)
+						if err == nil {
+							savedCount++
+						}
+					}
+
+					// Build MessageInfo from history message
+					var msgInfo *types.MessageInfo
+					if histMsg.Message.Key != nil {
+						msgInfo = &types.MessageInfo{
+							ID:        types.MessageID(histMsg.Message.Key.GetID()),
+							Timestamp: time.Unix(int64(histMsg.Message.GetMessageTimestamp()), 0),
+							MessageSource: types.MessageSource{
+								Sender:   senderJID,
+								IsFromMe: histMsg.Message.Key.GetFromMe(),
+							},
+							PushName: pushName,
+						}
+					}
+
+					// Parse the history message
+					parsedMsg, err := c.messageParser.ParseHistoryMessage(sessionID, chatJID, histMsg.Message.Message, msgInfo)
+					if err != nil {
+						c.logger.Warnf("Failed to parse history message: %v", err)
+						continue
+					}
+
+					// Resolve LID to phone number JID if needed
+					if !senderJID.IsEmpty() && senderJID.Server == "lid" && client.Store != nil && client.Store.LIDs != nil {
+						pnJID, err := client.Store.LIDs.GetPNForLID(ctx, senderJID)
+						if err == nil && !pnJID.IsEmpty() {
+							parsedMsg.SenderJID = pnJID.String()
+						}
+					}
+
+					// Only emit events for group messages (as per requirements)
+					if !parsedMsg.IsGroupMessage() {
+						continue
+					}
+
+					// Create and emit the event
+					event, err := entity.NewEventWithPayload(
+						generateEventID(),
+						entity.EventTypeMessageReceived,
+						sessionID,
+						parsedMsg,
+					)
+					if err != nil {
+						c.logger.Warnf("Failed to create history message event: %v", err)
+						continue
+					}
+
+					// Dispatch to all handlers
+					for _, handler := range handlers {
+						handler(event)
+					}
+					messageCount++
 				}
 			}
 		}
@@ -826,6 +892,9 @@ func (c *WhatsmeowClient) handleHistorySyncEvent(client *whatsmeow.Client, evt *
 
 	if savedCount > 0 {
 		c.logger.Infof("History sync: saved %d pushnames to contact store", savedCount)
+	}
+	if messageCount > 0 {
+		c.logger.Infof("History sync: emitted %d message events", messageCount)
 	}
 }
 

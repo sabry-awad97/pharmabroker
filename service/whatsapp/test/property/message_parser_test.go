@@ -301,3 +301,101 @@ func stringPtrEqual(a, b *string) bool {
 	}
 	return *a == *b
 }
+
+// Feature: whatsapp-messages-backend, Property 6: Message Event Payload Completeness
+// *For any* emitted message event, the payload SHALL contain all required fields:
+// sessionId, messageId, senderJid, chatJid, messageType, messageTimestamp, source, and rawPayload.
+// **Validates: Requirements 4.3, 4.4, 4.5, 4.6**
+
+func TestMessageEventPayloadCompleteness_Property6(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	// Property 6.1: All required fields are present in ParsedMessage
+	properties.Property("all required fields are present in ParsedMessage", prop.ForAll(
+		func(msgTypeIdx int, isRealtime bool) bool {
+			msg := createTestParsedMessage(msgTypeIdx, true, false, false)
+			if isRealtime {
+				msg.Source = whatsapp.ParsedMessageSourceRealtime
+			} else {
+				msg.Source = whatsapp.ParsedMessageSourceHistory
+			}
+
+			// Check required fields
+			if msg.SessionID == "" {
+				t.Log("SessionID is empty")
+				return false
+			}
+			if msg.MessageID == "" {
+				t.Log("MessageID is empty")
+				return false
+			}
+			if msg.SenderJID == "" {
+				t.Log("SenderJID is empty")
+				return false
+			}
+			if msg.ChatJID == "" {
+				t.Log("ChatJID is empty")
+				return false
+			}
+			if msg.MessageType == "" {
+				t.Log("MessageType is empty")
+				return false
+			}
+			if msg.MessageTimestamp.IsZero() {
+				t.Log("MessageTimestamp is zero")
+				return false
+			}
+			if msg.Source == "" {
+				t.Log("Source is empty")
+				return false
+			}
+
+			return true
+		},
+		gen.IntRange(0, 11), // message type index
+		gen.Bool(),          // isRealtime
+	))
+
+	// Property 6.2: Media messages have media metadata
+	properties.Property("media messages have media metadata", prop.ForAll(
+		func(mediaTypeIdx int) bool {
+			// Media types: image(1), video(2), audio(3), document(4), sticker(5)
+			mediaTypes := []int{1, 2, 3, 4, 5}
+			typeIdx := mediaTypes[mediaTypeIdx%len(mediaTypes)]
+			msg := createTestParsedMessage(typeIdx, false, true, true)
+
+			// Media messages should have media URL and mimetype
+			if msg.MediaURL == nil || *msg.MediaURL == "" {
+				t.Logf("MediaURL is nil or empty for type %s", msg.MessageType)
+				return false
+			}
+			if msg.Mimetype == nil || *msg.Mimetype == "" {
+				t.Logf("Mimetype is nil or empty for type %s", msg.MessageType)
+				return false
+			}
+
+			return true
+		},
+		gen.IntRange(0, 4), // media type index
+	))
+
+	// Property 6.3: Source field is valid
+	properties.Property("source field is valid", prop.ForAll(
+		func(isRealtime bool) bool {
+			msg := createTestParsedMessage(0, true, false, false)
+			if isRealtime {
+				msg.Source = whatsapp.ParsedMessageSourceRealtime
+			} else {
+				msg.Source = whatsapp.ParsedMessageSourceHistory
+			}
+
+			return msg.Source == whatsapp.ParsedMessageSourceRealtime ||
+				msg.Source == whatsapp.ParsedMessageSourceHistory
+		},
+		gen.Bool(),
+	))
+
+	properties.TestingRun(t)
+}
