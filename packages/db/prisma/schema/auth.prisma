@@ -26,10 +26,23 @@ model UserAISettings {
   autoProcessRealtime Boolean @default(true) @map("auto_process_realtime") // Process realtime messages
   autoProcessHistory  Boolean @default(false) @map("auto_process_history") // Process history sync messages
 
+  // Idle processing - process pending messages when no realtime messages
+  idleProcessingEnabled Boolean @default(false) @map("idle_processing_enabled")
+  idleTimeoutSeconds    Int     @default(30) @map("idle_timeout_seconds") // Wait time before processing pending
+  idleMaxBatchSize      Int     @default(5) @map("idle_max_batch_size") // Max messages to process in idle batch
+
+  // History sync processing
+  historyParallelEnabled Boolean @default(true) @map("history_parallel_enabled") // Process history in parallel after sync
+  historyParallelCount   Int     @default(3) @map("history_parallel_count") // Number of parallel workers for history
+  historyProcessDelay    Int     @default(5) @map("history_process_delay") // Seconds to wait after sync completes
+
+  // Priority settings
+  prioritizeLatest Boolean @default(true) @map("prioritize_latest") // Process latest message first when new arrives
+
   // Filtering options
-  processTextOnly     Boolean  @default(true) @map("process_text_only") // Only process text messages
-  minTextLength       Int      @default(10) @map("min_text_length") // Minimum text length to process
-  excludeFromMe       Boolean  @default(true) @map("exclude_from_me") // Skip messages sent by user
+  processTextOnly Boolean @default(true) @map("process_text_only") // Only process text messages
+  minTextLength   Int     @default(10) @map("min_text_length") // Minimum text length to process
+  excludeFromMe   Boolean @default(true) @map("exclude_from_me") // Skip messages sent by user
 
   // Rate limiting
   maxProcessPerMinute Int @default(10) @map("max_process_per_minute") // Rate limit per minute

@@ -203,6 +203,11 @@ export class EventBridgeService {
       error: undefined,
     });
 
+    // Notify auto-processor that history sync is starting
+    autoProcessorService.notifyHistorySyncStarted(sessionId).catch(err => {
+      console.error('[EventBridge] Failed to notify auto-processor:', err);
+    });
+
     // Emit sync started event
     this.emitSyncStatusEvent({
       type: 'sync.started',
@@ -322,6 +327,11 @@ export class EventBridgeService {
         },
       });
 
+      // Notify auto-processor that history sync is complete
+      autoProcessorService.notifyHistorySyncCompleted(sessionId).catch(err => {
+        console.error('[EventBridge] Failed to notify auto-processor:', err);
+      });
+
       return;
     }
 
@@ -361,6 +371,11 @@ export class EventBridgeService {
         messagesProcessed: result.stored,
         messagesDropped: result.dropped,
       },
+    });
+
+    // Notify auto-processor that history sync is complete
+    autoProcessorService.notifyHistorySyncCompleted(sessionId).catch(err => {
+      console.error('[EventBridge] Failed to notify auto-processor:', err);
     });
 
     console.log(

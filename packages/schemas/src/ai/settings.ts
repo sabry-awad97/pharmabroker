@@ -20,6 +20,19 @@ export const userAISettings = z.object({
   autoProcessRealtime: z.boolean(),
   autoProcessHistory: z.boolean(),
 
+  // Idle processing - process pending messages when no realtime messages
+  idleProcessingEnabled: z.boolean(),
+  idleTimeoutSeconds: z.number().int().min(5).max(300),
+  idleMaxBatchSize: z.number().int().min(1).max(20),
+
+  // History sync processing
+  historyParallelEnabled: z.boolean(),
+  historyParallelCount: z.number().int().min(1).max(10),
+  historyProcessDelay: z.number().int().min(0).max(60),
+
+  // Priority settings
+  prioritizeLatest: z.boolean(),
+
   // Filtering options
   processTextOnly: z.boolean(),
   minTextLength: z.number().int().min(0).max(1000),
@@ -43,6 +56,21 @@ export const updateAISettingsInput = z.object({
   autoProcessEnabled: z.boolean().optional(),
   autoProcessRealtime: z.boolean().optional(),
   autoProcessHistory: z.boolean().optional(),
+
+  // Idle processing
+  idleProcessingEnabled: z.boolean().optional(),
+  idleTimeoutSeconds: z.number().int().min(5).max(300).optional(),
+  idleMaxBatchSize: z.number().int().min(1).max(20).optional(),
+
+  // History sync processing
+  historyParallelEnabled: z.boolean().optional(),
+  historyParallelCount: z.number().int().min(1).max(10).optional(),
+  historyProcessDelay: z.number().int().min(0).max(60).optional(),
+
+  // Priority settings
+  prioritizeLatest: z.boolean().optional(),
+
+  // Filtering
   processTextOnly: z.boolean().optional(),
   minTextLength: z.number().int().min(0).max(1000).optional(),
   excludeFromMe: z.boolean().optional(),
@@ -60,7 +88,11 @@ export const autoProcessStatsResponse = z.object({
   processedLastMinute: z.number().int().min(0),
   processedLastHour: z.number().int().min(0),
   queuedCount: z.number().int().min(0),
+  pendingCount: z.number().int().min(0),
   isRateLimited: z.boolean(),
+  isIdle: z.boolean(),
+  lastRealtimeAt: z.coerce.date().nullable(),
+  historySyncStatus: z.enum(['idle', 'syncing', 'processing', 'completed']),
 });
 
 // ============================================================================
