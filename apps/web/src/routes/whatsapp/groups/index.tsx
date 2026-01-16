@@ -1,15 +1,13 @@
 /**
  * WhatsApp Groups List Page
  *
- * Displays a filterable, searchable grid of WhatsApp groups.
- * Supports responsive layouts and multiple states (loading, empty, error).
- *
- * Requirements: 1.1, 1.2, 1.3, 1.7, 5.1, 5.2, 5.3, 5.4, 8.2, 8.3, 8.4
+ * Displays groups for the currently active session.
+ * Groups are now session-scoped based on the global session picker.
  */
 
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { RefreshCw } from 'lucide-react';
-import { useState, useCallback, useMemo } from 'react';
+import { MessageSquare, RefreshCw, Users } from 'lucide-react';
+import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -21,7 +19,6 @@ import {
 } from '@/components/ui/tooltip';
 import {
   GroupCard,
-  GroupFilterPanel,
   SyncGroupsDialog,
   GroupErrorState,
   getErrorType,
@@ -39,12 +36,10 @@ import {
   useSyncGroups,
   useInvalidateGroups,
   useGroupFilterCounts,
+  type GroupFilterType,
 } from '@/hooks/whatsapp-groups';
-import { useWhatsappSessions } from '@/hooks/whatsapp';
-import {
-  useGroupFilters,
-  useGroupFilterActions,
-} from '@/stores/whatsapp-groups.store';
+import { useActiveSession } from '@/stores/active-session.store';
+import { SessionRequiredState } from '@/components/session-picker/session-required-state';
 
 export const Route = createFileRoute('/whatsapp/groups/')({
   component: WhatsappGroupsPage,
@@ -59,11 +54,11 @@ export const Route = createFileRoute('/whatsapp/groups/')({
 
 function WhatsappGroupsPage() {
   const navigate = useNavigate();
+  const activeSession = useActiveSession();
 
-  // Filter state from store
-  const { search, filter, sessionId } = useGroupFilters();
-  const { setSearch, setFilter, setSessionId, resetFilters } =
-    useGroupFilterActions();
+  // Local filter state (search and filter type only - session comes from global state)
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<GroupFilterType>('all');
 
   // Sync dialog state
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
@@ -71,59 +66,29 @@ function WhatsappGroupsPage() {
   const [syncResult, setSyncResult] = useState<SyncResult | undefined>();
   const [syncError, setSyncError] = useState<Error | null>(null);
 
-  // Data fetching
+  // Data fetching - always scoped to active session
   const {
     data: groups,
     isLoading: isLoadingGroups,
     isFetching: isFetchingGroups,
     error: groupsError,
   } = useWhatsappGroupsFlat({
-    sessionId: sessionId ?? undefined,
+    sessionId: activeSession?.id,
     search: search || undefined,
     filter,
+    enabled: !!activeSession,
   });
-
-  const { data: sessions } = useWhatsappSessions();
 
   // Mutations
   const syncGroups = useSyncGroups();
   const invalidateGroups = useInvalidateGroups();
 
-  // Derived state
-  const showSkeleton = isLoadingGroups && !groups;
-  const isRefetching = isFetchingGroups && !!groups;
-  const hasFiltersApplied =
-    search.length > 0 || filter !== 'all' || sessionId !== null;
-  const hasGroups = groups && groups.length > 0;
-  const hasNoResults = !hasGroups && hasFiltersApplied;
-  const hasNoGroups = !hasGroups && !hasFiltersApplied;
+  // Fetch filter counts for active session
+  const { data: filterCountsData } = useGroupFilterCounts({
+    sessionId: activeSession?.id,
+    enabled: !!activeSession,
+  });
 
-  // Determine if we should show session indicators (Requirements 6.4)
-  // Show when viewing all sessions (sessionId is null) and multiple sessions exist
-  const showSessionIndicator =
-    sessionId === null && (sessions?.length ?? 0) > 1;
-
-  // Create a map of session info for quick lookup
-  const sessionMap = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; status: string }>();
-    sessions?.forEach(s => {
-      map.set(s.id, { id: s.id, name: s.name, status: s.status });
-    });
-    return map;
-  }, [sessions]);
-
-  // Get current session name for dialog
-  const currentSessionName = sessionId
-    ? sessions?.find(s => s.id === sessionId)?.name
-    : undefined;
-
-  // Fetch filter counts from API
-  const { data: filterCountsData, isLoading: isLoadingCounts } =
-    useGroupFilterCounts({
-      sessionId: sessionId ?? undefined,
-    });
-
-  // Use API counts with fallback to zeros while loading
   const filterCounts = filterCountsData ?? {
     all: 0,
     admin: 0,
@@ -131,52 +96,41 @@ function WhatsappGroupsPage() {
     muted: 0,
   };
 
-  // Sync handler with dialog integration
-  const handleSync = useCallback(async () => {
-    // If a session is selected, sync that session
-    // Otherwise, sync all sessions
-    const sessionsToSync = sessionId
-      ? [sessionId]
-      : (sessions?.map(s => s.id) ?? []);
+  // Derived state
+  const showSkeleton = isLoadingGroups && !groups;
+  const isRefetching = isFetchingGroups && !!groups;
+  const hasFiltersApplied = search.length > 0 || filter !== 'all';
+  const hasGroups = groups && groups.length > 0;
+  const hasNoResults = !hasGroups && hasFiltersApplied;
+  const hasNoGroups = !hasGroups && !hasFiltersApplied;
 
-    if (sessionsToSync.length === 0) {
-      toast.error('No sessions available to sync');
+  // Sync handler
+  const handleSync = useCallback(async () => {
+    if (!activeSession) {
+      toast.error('No session selected');
       return;
     }
 
-    // Open dialog and set syncing state
     setSyncDialogOpen(true);
     setSyncStatus('syncing');
     setSyncResult(undefined);
     setSyncError(null);
 
     try {
-      let totalSynced = 0;
-      const allErrors: string[] = [];
-
-      // Sync each session
-      for (const sid of sessionsToSync) {
-        const result = await syncGroups.mutateAsync(sid);
-        totalSynced += result.synced;
-        allErrors.push(...result.errors);
-      }
-
-      // Update state with results
-      setSyncResult({ synced: totalSynced, errors: allErrors });
+      const result = await syncGroups.mutateAsync(activeSession.id);
+      setSyncResult({ synced: result.synced, errors: result.errors });
       setSyncStatus('success');
 
-      // Show toast notification (Requirements 5.3)
-      if (allErrors.length > 0) {
+      if (result.errors.length > 0) {
         toast.warning('Groups synced with warnings', {
-          description: `${totalSynced} groups synced, ${allErrors.length} warnings`,
+          description: `${result.synced} groups synced, ${result.errors.length} warnings`,
         });
       } else {
         toast.success('Groups synced successfully', {
-          description: `${totalSynced} groups synced`,
+          description: `${result.synced} groups synced`,
         });
       }
     } catch (error) {
-      // Handle error state (Requirements 5.4)
       const err = error instanceof Error ? error : new Error('Unknown error');
       setSyncError(err);
       setSyncStatus('error');
@@ -184,39 +138,29 @@ function WhatsappGroupsPage() {
         description: err.message,
       });
     }
-  }, [sessionId, sessions, syncGroups]);
+  }, [activeSession, syncGroups]);
 
-  // Retry sync handler
   const handleRetrySync = useCallback(() => {
     handleSync();
   }, [handleSync]);
 
-  // Quick sync without dialog (for header button)
   const handleQuickSync = useCallback(async () => {
-    const sessionsToSync = sessionId
-      ? [sessionId]
-      : (sessions?.map(s => s.id) ?? []);
-
-    if (sessionsToSync.length === 0) {
-      toast.error('No sessions available to sync');
+    if (!activeSession) {
+      toast.error('No session selected');
       return;
     }
 
     try {
-      let totalSynced = 0;
-      for (const sid of sessionsToSync) {
-        const result = await syncGroups.mutateAsync(sid);
-        totalSynced += result.synced;
-      }
+      const result = await syncGroups.mutateAsync(activeSession.id);
       toast.success('Groups synced successfully', {
-        description: `${totalSynced} groups synced`,
+        description: `${result.synced} groups synced`,
       });
     } catch (error) {
       toast.error('Failed to sync groups', {
         description: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }, [sessionId, sessions, syncGroups]);
+  }, [activeSession, syncGroups]);
 
   const handleGroupSelect = (groupId: string) => {
     navigate({ to: '/whatsapp/groups/$groupId', params: { groupId } });
@@ -241,7 +185,7 @@ function WhatsappGroupsPage() {
         try {
           await syncGroups.mutateAsync(group.sessionId);
           toast.success('Group refreshed');
-        } catch (error) {
+        } catch {
           toast.error('Failed to refresh group');
         }
         break;
@@ -249,8 +193,14 @@ function WhatsappGroupsPage() {
   };
 
   const handleClearFilters = () => {
-    resetFilters();
+    setSearch('');
+    setFilter('all');
   };
+
+  // Show session required state if no active session
+  if (!activeSession) {
+    return <SessionRequiredState />;
+  }
 
   return (
     <div className="p-6">
@@ -262,67 +212,93 @@ function WhatsappGroupsPage() {
         result={syncResult}
         error={syncError}
         onRetry={handleRetrySync}
-        sessionName={currentSessionName}
+        sessionName={activeSession.name}
       />
 
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">WhatsApp Groups</h1>
-          <p className="text-muted-foreground text-xs">
-            Manage your WhatsApp groups across all sessions
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={invalidateGroups}
-                disabled={isFetchingGroups}
-                aria-label="Refresh groups"
-              >
-                <RefreshCw
-                  className={cn(
-                    'h-4 w-4 transition-transform duration-500',
-                    isFetchingGroups && 'animate-spin',
-                  )}
-                />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Refresh groups</TooltipContent>
-          </Tooltip>
-          <Button
-            size="sm"
-            onClick={handleQuickSync}
-            disabled={syncGroups.isPending}
-            aria-label="Sync groups from WhatsApp"
-          >
-            <RefreshCw
-              className={cn(
-                'mr-2 h-3.5 w-3.5',
-                syncGroups.isPending && 'animate-spin',
-              )}
-            />
-            {syncGroups.isPending ? 'Syncing...' : 'Sync Groups'}
-          </Button>
+      {/* Header with session context */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <h1 className="text-lg font-semibold">Groups</h1>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-500">
+                {activeSession.name}
+              </span>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {filterCounts.all} groups in this session
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={invalidateGroups}
+                  disabled={isFetchingGroups}
+                  aria-label="Refresh groups"
+                >
+                  <RefreshCw
+                    className={cn(
+                      'h-4 w-4 transition-transform duration-500',
+                      isFetchingGroups && 'animate-spin',
+                    )}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh groups</TooltipContent>
+            </Tooltip>
+            <Button
+              size="sm"
+              onClick={handleQuickSync}
+              disabled={syncGroups.isPending}
+              aria-label="Sync groups from WhatsApp"
+            >
+              <RefreshCw
+                className={cn(
+                  'mr-2 h-3.5 w-3.5',
+                  syncGroups.isPending && 'animate-spin',
+                )}
+              />
+              {syncGroups.isPending ? 'Syncing...' : 'Sync'}
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Filter Panel */}
-      <GroupFilterPanel
-        search={search}
-        filter={filter}
-        sessionId={sessionId}
-        sessions={sessions ?? []}
-        counts={filterCounts}
-        onSearchChange={setSearch}
-        onFilterChange={setFilter}
-        onSessionChange={setSessionId}
-        isLoading={isLoadingGroups}
-        className="mb-6"
-      />
+      {/* Simplified Filter Bar */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        {/* Search */}
+        <div className="relative max-w-sm min-w-[200px] flex-1">
+          <input
+            type="text"
+            placeholder="Search groups..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="border-border bg-background placeholder:text-muted-foreground h-9 w-full rounded-md border px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+          />
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="border-border flex items-center gap-1 rounded-lg border p-1">
+          {(['all', 'admin', 'archived', 'muted'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                filter === f
+                  ? 'bg-emerald-500 text-white'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+              )}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+              <span className="ml-1.5 opacity-70">{filterCounts[f]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Groups Grid */}
       {showSkeleton ? (
@@ -350,32 +326,22 @@ function WhatsappGroupsPage() {
         />
       ) : (
         <LoadingOverlay isLoading={isRefetching}>
-          <div
-            className={cn(
-              'grid gap-4',
-              // Responsive grid: 1 column on mobile, 2 on tablet, 3 on desktop
-              'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-            )}
-          >
-            {groups?.map(group => {
-              const sessionInfo = sessionMap.get(group.sessionId);
-              return (
-                <GroupCardErrorBoundary
-                  key={group.id}
-                  groupId={group.id}
-                  onRetry={invalidateGroups}
-                >
-                  <GroupCard
-                    group={group}
-                    session={sessionInfo as any}
-                    showSessionIndicator={showSessionIndicator}
-                    onSelect={handleGroupSelect}
-                    onQuickAction={handleQuickAction}
-                    isLoading={syncGroups.isPending}
-                  />
-                </GroupCardErrorBoundary>
-              );
-            })}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {groups?.map(group => (
+              <GroupCardErrorBoundary
+                key={group.id}
+                groupId={group.id}
+                onRetry={invalidateGroups}
+              >
+                <GroupCard
+                  group={group}
+                  showSessionIndicator={false}
+                  onSelect={handleGroupSelect}
+                  onQuickAction={handleQuickAction}
+                  isLoading={syncGroups.isPending}
+                />
+              </GroupCardErrorBoundary>
+            ))}
           </div>
         </LoadingOverlay>
       )}

@@ -18,12 +18,22 @@ import { useCreateWhatsappSession } from '@/hooks/whatsapp';
 
 interface WhatsappNewSessionDialogProps {
   children: React.ReactNode;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function WhatsappNewSessionDialog({
   children,
+  defaultOpen = false,
+  onOpenChange,
 }: WhatsappNewSessionDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const open = internalOpen;
+
+  const handleOpenChange = (newOpen: boolean) => {
+    setInternalOpen(newOpen);
+    onOpenChange?.(newOpen);
+  };
   const [name, setName] = useState('');
   const createSession = useCreateWhatsappSession();
 
@@ -35,7 +45,7 @@ export function WhatsappNewSessionDialog({
       { name: name.trim() },
       {
         onSuccess: () => {
-          setOpen(false);
+          handleOpenChange(false);
           setName('');
         },
       },
@@ -43,7 +53,7 @@ export function WhatsappNewSessionDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring inline-flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md px-3 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none">
         {children}
       </DialogTrigger>

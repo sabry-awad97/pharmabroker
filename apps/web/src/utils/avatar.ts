@@ -6,6 +6,18 @@
  */
 
 /**
+ * Generates a deterministic avatar URL using DiceBear API.
+ * Uses the seed to generate consistent avatars for the same input.
+ *
+ * @param seed - A unique identifier (name, jid, etc.) to generate avatar from
+ * @returns URL to a DiceBear avatar image
+ */
+export function getAvatarUrl(seed: string): string {
+  const encodedSeed = encodeURIComponent(seed);
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${encodedSeed}&backgroundColor=10b981,14b8a6,06b6d4,0ea5e9&backgroundType=gradientLinear`;
+}
+
+/**
  * Generates initials from a name for avatar fallback display.
  *
  * Rules:
