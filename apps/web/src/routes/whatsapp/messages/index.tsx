@@ -5,8 +5,14 @@
  * filtering, sorting, and AI processing capabilities.
  */
 
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { RefreshCw, Sparkles, Download, Keyboard } from 'lucide-react';
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import {
+  RefreshCw,
+  Sparkles,
+  Download,
+  Keyboard,
+  Settings2,
+} from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -28,6 +34,8 @@ import {
   BulkProcessDialog,
   ExportDialog,
   DateRangeFilter,
+  ScheduleAIDialog,
+  AISettingsDialog,
 } from '@/components/whatsapp/messages';
 import type { MessageType } from '@/components/whatsapp/messages/message-type-badge';
 import type { AIStatus } from '@/components/whatsapp/messages/ai-status-badge';
@@ -63,7 +71,6 @@ export const Route = createFileRoute('/whatsapp/messages/')({
 });
 
 function WhatsappMessagesPage() {
-  const navigate = useNavigate();
   const activeSession = useActiveSession();
   const invalidateMessages = useInvalidateMessages();
 
@@ -83,12 +90,15 @@ function WhatsappMessagesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bulkProcessDialogOpen, setBulkProcessDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [messagesToDelete, setMessagesToDelete] = useState<
     WhatsAppMessageWithGroup[]
   >([]);
   const [messagesToProcess, setMessagesToProcess] = useState<
     WhatsAppMessageWithGroup[]
   >([]);
+  const [messagesToSchedule, setMessagesToSchedule] = useState<string[]>([]);
   const [processingMessageId, setProcessingMessageId] = useState<string | null>(
     null,
   );
@@ -175,6 +185,8 @@ function WhatsappMessagesPage() {
     setDeleteDialogOpen(false);
     setBulkProcessDialogOpen(false);
     setExportDialogOpen(false);
+    setScheduleDialogOpen(false);
+    setSettingsDialogOpen(false);
   });
 
   // Handlers
@@ -303,6 +315,21 @@ function WhatsappMessagesPage() {
     [],
   );
 
+  const handleScheduleAI = useCallback(
+    (messages: WhatsAppMessageWithGroup[]) => {
+      const schedulableMessages = messages.filter(
+        m => m.aiStatus === 'pending' || m.aiStatus === 'failed',
+      );
+      if (schedulableMessages.length === 0) {
+        toast.info('No messages available for scheduling');
+        return;
+      }
+      setMessagesToSchedule(schedulableMessages.map(m => m.id));
+      setScheduleDialogOpen(true);
+    },
+    [],
+  );
+
   const handleExport = useCallback(
     async (format: 'csv' | 'json') => {
       try {
@@ -408,6 +435,18 @@ function WhatsappMessagesPage() {
         count={totalCount}
       />
 
+      <ScheduleAIDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        messageIds={messagesToSchedule}
+        onSuccess={() => setMessagesToSchedule([])}
+      />
+
+      <AISettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+      />
+
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
@@ -435,6 +474,19 @@ function WhatsappMessagesPage() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Export messages (Ctrl+E)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setSettingsDialogOpen(true)}
+                  aria-label="AI Settings"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>AI Processing Settings</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -551,6 +603,7 @@ function WhatsappMessagesPage() {
             onDelete={handleDeleteMessage}
             onBulkProcess={handleBulkProcess}
             onBulkDelete={handleBulkDelete}
+            onScheduleAI={handleScheduleAI}
             isProcessing={isProcessing}
             processingMessageId={processingMessageId}
             pageSize={pageSize}

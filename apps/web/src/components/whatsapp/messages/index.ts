@@ -55,3 +55,6 @@ export { ColumnVisibilityToggle } from './column-visibility-toggle';
 
 // Schedule AI dialog
 export { ScheduleAIDialog } from './schedule-ai-dialog';
+
+// AI Settings dialog
+export { AISettingsDialog } from './ai-settings-dialog';

@@ -26,6 +26,7 @@ import {
   type ParsedMessageEvent,
 } from './whatsapp-messages.service';
 import { messageQueueService } from './message-queue.service';
+import { autoProcessorService } from './auto-processor.service';
 import { HEALTH_CONFIG } from '../config/health.config';
 
 // ============================================================================
@@ -691,6 +692,34 @@ export class EventBridgeService {
       };
 
       await whatsappMessagesService.storeMessage(parsedEvent);
+
+      // Trigger auto-processing if enabled for this user
+      // Get the message DB ID for auto-processing
+      try {
+        const storedMessage = await import('@pharmabroker/db').then(db =>
+          db.default.whatsAppMessage.findFirst({
+            where: {
+              sessionId,
+              messageId,
+            },
+            select: { id: true },
+          }),
+        );
+
+        if (storedMessage) {
+          await autoProcessorService.handleNewMessage(
+            storedMessage.id,
+            sessionId,
+            parsedEvent,
+          );
+        }
+      } catch (autoProcessError) {
+        // Don't fail message storage if auto-processing fails
+        console.error(
+          '[EventBridge] Auto-processing trigger failed:',
+          autoProcessError,
+        );
+      }
     } catch (error) {
       console.error('[EventBridge] Failed to store message:', error);
       // Don't throw - continue processing other events

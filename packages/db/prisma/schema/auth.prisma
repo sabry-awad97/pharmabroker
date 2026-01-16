@@ -9,9 +9,41 @@ model User {
   sessions         Session[]
   accounts         Account[]
   whatsappSessions WhatsAppSession[]
+  aiSettings       UserAISettings?
 
   @@unique([email])
   @@map("user")
+}
+
+// User AI Processing Settings
+model UserAISettings {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Auto-processing configuration
+  autoProcessEnabled  Boolean @default(false) @map("auto_process_enabled")
+  autoProcessRealtime Boolean @default(true) @map("auto_process_realtime") // Process realtime messages
+  autoProcessHistory  Boolean @default(false) @map("auto_process_history") // Process history sync messages
+
+  // Filtering options
+  processTextOnly     Boolean  @default(true) @map("process_text_only") // Only process text messages
+  minTextLength       Int      @default(10) @map("min_text_length") // Minimum text length to process
+  excludeFromMe       Boolean  @default(true) @map("exclude_from_me") // Skip messages sent by user
+
+  // Rate limiting
+  maxProcessPerMinute Int @default(10) @map("max_process_per_minute") // Rate limit per minute
+  maxProcessPerHour   Int @default(100) @map("max_process_per_hour") // Rate limit per hour
+
+  // Session/Group filtering (JSON arrays of IDs)
+  enabledSessionIds Json? @map("enabled_session_ids") // null = all sessions
+  enabledGroupIds   Json? @map("enabled_group_ids") // null = all groups
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_ai_settings")
 }
 
 model Session {

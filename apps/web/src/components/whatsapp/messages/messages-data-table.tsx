@@ -35,6 +35,7 @@ import {
   Forward,
   Users,
   Loader2,
+  Clock,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -77,6 +78,7 @@ interface MessagesDataTableProps {
   onDelete?: (message: WhatsAppMessageWithGroup) => void;
   onBulkProcess?: (messages: WhatsAppMessageWithGroup[]) => void;
   onBulkDelete?: (messages: WhatsAppMessageWithGroup[]) => void;
+  onScheduleAI?: (messages: WhatsAppMessageWithGroup[]) => void;
   pageSize?: number;
   isProcessing?: boolean;
   processingMessageId?: string | null;
@@ -91,6 +93,7 @@ export function MessagesDataTable({
   onDelete,
   onBulkProcess,
   onBulkDelete,
+  onScheduleAI,
   pageSize = 20,
   isProcessing = false,
   processingMessageId = null,
@@ -133,6 +136,16 @@ export function MessagesDataTable({
         row.aiStatus === 'completed' || row.aiStatus === 'processing',
       disabled: isProcessing,
       onClick: row => onProcessAI?.(row),
+    },
+    {
+      id: 'schedule',
+      label: 'Schedule AI Processing',
+      icon: Clock,
+      hidden: row =>
+        row.aiStatus === 'completed' ||
+        row.aiStatus === 'processing' ||
+        row.aiStatus === 'scheduled',
+      onClick: row => onScheduleAI?.([row]),
     },
     {
       id: 'retry',
@@ -413,6 +426,14 @@ export function MessagesDataTable({
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
               Process with AI
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onScheduleAI?.(selectedRows.map(r => r.original))}
+            >
+              <Clock className="mr-1.5 h-3.5 w-3.5" />
+              Schedule
             </Button>
             <Button
               variant="outline"

@@ -2,6 +2,7 @@ import type { RouterClient } from '@orpc/server';
 
 import { protectedProcedure, publicProcedure } from '../index';
 import { whatsappRouter } from './whatsapp.router';
+import { aiSettingsRouter } from './ai-settings.router';
 
 export const appRouter = {
   healthCheck: publicProcedure.handler(() => {
@@ -14,6 +15,9 @@ export const appRouter = {
     };
   }),
   whatsapp: whatsappRouter,
+  ai: {
+    settings: aiSettingsRouter,
+  },
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;
