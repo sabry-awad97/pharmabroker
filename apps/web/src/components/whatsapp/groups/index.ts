@@ -79,14 +79,6 @@ export {
   type GroupDetailHeaderProps,
 } from './group-detail-header';
 
-// Sync groups dialog component
-export {
-  SyncGroupsDialog,
-  type SyncGroupsDialogProps,
-  type SyncStatus,
-  type SyncResult,
-} from './sync-groups-dialog';
-
 // Error state component
 export {
   GroupErrorState,
@@ -113,3 +105,9 @@ export { GroupsViewToggle, type ViewMode } from './groups-view-toggle';
 
 // Faceted filter component
 export { GroupsFacetedFilter } from './groups-faceted-filter';
+
+// Sync progress indicator component
+export {
+  SyncProgressIndicator,
+  type SyncProgressIndicatorProps,
+} from './sync-progress-indicator';

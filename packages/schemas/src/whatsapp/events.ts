@@ -172,6 +172,79 @@ export const sessionEvent = z.union([
 ]);
 
 // ============================================================================
+// Sync Status Events (for auto-sync progress tracking)
+// ============================================================================
+
+/** Sync progress data */
+export const syncProgressData = z.object({
+  phase: z.enum(['groups', 'messages']),
+  current: z.number(),
+  total: z.number().optional(),
+});
+
+/** Sync started event */
+export const syncStartedEvent = z.object({
+  type: z.literal('sync.started'),
+  session_id: unbranded.uuid,
+  timestamp: z.string().optional(),
+  data: z
+    .object({
+      phase: z.enum(['groups', 'messages']).optional(),
+    })
+    .optional(),
+});
+
+/** Sync progress event */
+export const syncProgressEvent = z.object({
+  type: z.literal('sync.progress'),
+  session_id: unbranded.uuid,
+  timestamp: z.string().optional(),
+  data: z
+    .object({
+      phase: z.enum(['groups', 'messages']).optional(),
+      current: z.number().optional(),
+      total: z.number().optional(),
+      groupsSynced: z.number().optional(),
+      messagesProcessed: z.number().optional(),
+    })
+    .optional(),
+});
+
+/** Sync completed event */
+export const syncCompletedEvent = z.object({
+  type: z.literal('sync.completed'),
+  session_id: unbranded.uuid,
+  timestamp: z.string().optional(),
+  data: z
+    .object({
+      groupsSynced: z.number().optional(),
+      messagesProcessed: z.number().optional(),
+      messagesDropped: z.number().optional(),
+    })
+    .optional(),
+});
+
+/** Sync failed event */
+export const syncFailedEvent = z.object({
+  type: z.literal('sync.failed'),
+  session_id: unbranded.uuid,
+  timestamp: z.string().optional(),
+  data: z
+    .object({
+      error: z.string().optional(),
+    })
+    .optional(),
+});
+
+/** Union of all sync events */
+export const syncEvent = z.discriminatedUnion('type', [
+  syncStartedEvent,
+  syncProgressEvent,
+  syncCompletedEvent,
+  syncFailedEvent,
+]);
+
+// ============================================================================
 // Combined WhatsApp Event
 // ============================================================================
 
@@ -193,6 +266,11 @@ export const whatsappEvent = z.discriminatedUnion('type', [
   sessionQrScannedEvent,
   sessionAuthenticatedEvent,
   sessionExpiredEvent,
+  // Sync events
+  syncStartedEvent,
+  syncProgressEvent,
+  syncCompletedEvent,
+  syncFailedEvent,
 ]);
 
 /** Event types for type-safe event handling */
@@ -210,6 +288,10 @@ export const whatsappEventType = z.enum([
   'session.qr_scanned',
   'session.authenticated',
   'session.expired',
+  'sync.started',
+  'sync.progress',
+  'sync.completed',
+  'sync.failed',
 ]);
 
 // ============================================================================
@@ -260,6 +342,13 @@ export type SessionAuthenticatedEvent = z.infer<
 >;
 export type SessionExpiredEvent = z.infer<typeof sessionExpiredEvent>;
 export type SessionEvent = z.infer<typeof sessionEvent>;
+
+export type SyncProgressData = z.infer<typeof syncProgressData>;
+export type SyncStartedEvent = z.infer<typeof syncStartedEvent>;
+export type SyncProgressEvent = z.infer<typeof syncProgressEvent>;
+export type SyncCompletedEvent = z.infer<typeof syncCompletedEvent>;
+export type SyncFailedEvent = z.infer<typeof syncFailedEvent>;
+export type SyncEvent = z.infer<typeof syncEvent>;
 
 export type WhatsAppEvent = z.infer<typeof whatsappEvent>;
 export type WhatsAppEventType = z.infer<typeof whatsappEventType>;

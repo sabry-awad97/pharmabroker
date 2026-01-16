@@ -7,7 +7,7 @@
 
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { RefreshCw, Sparkles, Download, Keyboard } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useHotkeys } from 'react-hotkeys-hook';
 
@@ -28,7 +28,6 @@ import {
   BulkProcessDialog,
   ExportDialog,
   DateRangeFilter,
-  type WhatsAppMessage,
 } from '@/components/whatsapp/messages';
 import type { MessageType } from '@/components/whatsapp/messages/message-type-badge';
 import type { AIStatus } from '@/components/whatsapp/messages/ai-status-badge';
@@ -49,6 +48,7 @@ import {
   useExportMessages,
   useInvalidateMessages,
 } from '@/hooks/whatsapp-messages';
+import type { WhatsAppMessageWithGroup } from '@pharmabroker/schemas/whatsapp';
 
 export const Route = createFileRoute('/whatsapp/messages/')({
   component: WhatsappMessagesPage,
@@ -73,22 +73,21 @@ function WhatsappMessagesPage() {
   const [source, setSource] = useState<MessageSource>('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
-  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
   // UI state
   const [selectedMessage, setSelectedMessage] =
-    useState<WhatsAppMessage | null>(null);
+    useState<WhatsAppMessageWithGroup | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bulkProcessDialogOpen, setBulkProcessDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [messagesToDelete, setMessagesToDelete] = useState<WhatsAppMessage[]>(
-    [],
-  );
-  const [messagesToProcess, setMessagesToProcess] = useState<WhatsAppMessage[]>(
-    [],
-  );
+  const [messagesToDelete, setMessagesToDelete] = useState<
+    WhatsAppMessageWithGroup[]
+  >([]);
+  const [messagesToProcess, setMessagesToProcess] = useState<
+    WhatsAppMessageWithGroup[]
+  >([]);
 
   // Data fetching
   const {
@@ -103,8 +102,7 @@ function WhatsappMessagesPage() {
     source,
     dateFrom,
     dateTo,
-    page,
-    pageSize,
+    limit: pageSize,
   });
 
   const { data: messageDetail, isLoading: isLoadingDetail } =
@@ -179,25 +177,23 @@ function WhatsappMessagesPage() {
     setSource('all');
     setDateFrom(undefined);
     setDateTo(undefined);
-    setPage(1);
   }, []);
 
   const handleDateChange = useCallback(
     (from: Date | undefined, to: Date | undefined) => {
       setDateFrom(from);
       setDateTo(to);
-      setPage(1);
     },
     [],
   );
 
-  const handleViewMessage = useCallback((message: WhatsAppMessage) => {
+  const handleViewMessage = useCallback((message: WhatsAppMessageWithGroup) => {
     setSelectedMessage(message);
     setDetailSheetOpen(true);
   }, []);
 
   const handleProcessAI = useCallback(
-    async (message: WhatsAppMessage) => {
+    async (message: WhatsAppMessageWithGroup) => {
       try {
         await processAI.mutateAsync(message.id);
         toast.success('AI processing started');
@@ -209,7 +205,7 @@ function WhatsappMessagesPage() {
   );
 
   const handleRetryAI = useCallback(
-    async (message: WhatsAppMessage) => {
+    async (message: WhatsAppMessageWithGroup) => {
       try {
         await retryAI.mutateAsync(message.id);
         toast.success('AI processing retried');
@@ -220,10 +216,13 @@ function WhatsappMessagesPage() {
     [retryAI],
   );
 
-  const handleDeleteMessage = useCallback((message: WhatsAppMessage) => {
-    setMessagesToDelete([message]);
-    setDeleteDialogOpen(true);
-  }, []);
+  const handleDeleteMessage = useCallback(
+    (message: WhatsAppMessageWithGroup) => {
+      setMessagesToDelete([message]);
+      setDeleteDialogOpen(true);
+    },
+    [],
+  );
 
   const handleConfirmDelete = useCallback(async () => {
     try {
@@ -241,17 +240,20 @@ function WhatsappMessagesPage() {
     }
   }, [messagesToDelete, deleteMessage, bulkDeleteMessages]);
 
-  const handleBulkProcess = useCallback((messages: WhatsAppMessage[]) => {
-    const pendingMessages = messages.filter(
-      m => m.aiStatus === 'pending' || m.aiStatus === 'failed',
-    );
-    if (pendingMessages.length === 0) {
-      toast.info('No messages to process');
-      return;
-    }
-    setMessagesToProcess(pendingMessages);
-    setBulkProcessDialogOpen(true);
-  }, []);
+  const handleBulkProcess = useCallback(
+    (messages: WhatsAppMessageWithGroup[]) => {
+      const pendingMessages = messages.filter(
+        m => m.aiStatus === 'pending' || m.aiStatus === 'failed',
+      );
+      if (pendingMessages.length === 0) {
+        toast.info('No messages to process');
+        return;
+      }
+      setMessagesToProcess(pendingMessages);
+      setBulkProcessDialogOpen(true);
+    },
+    [],
+  );
 
   const handleConfirmBulkProcess = useCallback(async () => {
     try {
@@ -264,25 +266,25 @@ function WhatsappMessagesPage() {
     }
   }, [messagesToProcess, bulkProcessAI]);
 
-  const handleBulkDelete = useCallback((messages: WhatsAppMessage[]) => {
-    setMessagesToDelete(messages);
-    setDeleteDialogOpen(true);
-  }, []);
+  const handleBulkDelete = useCallback(
+    (messages: WhatsAppMessageWithGroup[]) => {
+      setMessagesToDelete(messages);
+      setDeleteDialogOpen(true);
+    },
+    [],
+  );
 
   const handleExport = useCallback(
     async (format: 'csv' | 'json') => {
       try {
         const blob = await exportMessages.mutateAsync({
           format,
-          filters: {
-            sessionId: activeSession?.id,
-            search,
-            messageType,
-            aiStatus,
-            source,
-            dateFrom,
-            dateTo,
-          },
+          sessionId: activeSession?.id,
+          messageType: messageType !== 'all' ? messageType : undefined,
+          aiStatus: aiStatus !== 'all' ? aiStatus : undefined,
+          source: source !== 'all' ? source : undefined,
+          dateFrom,
+          dateTo,
         });
 
         // Download the file
@@ -306,7 +308,6 @@ function WhatsappMessagesPage() {
     [
       exportMessages,
       activeSession?.id,
-      search,
       messageType,
       aiStatus,
       source,
@@ -337,8 +338,17 @@ function WhatsappMessagesPage() {
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         message={selectedMessage}
-        extractedData={messageDetail?.extractedData}
-        rawPayload={messageDetail?.rawPayload}
+        extractedData={messageDetail?.extractedData?.map(ed => ({
+          id: ed.id,
+          dataType: ed.dataType,
+          data: ed.data,
+          confidence: ed.confidence ?? 0,
+          model: ed.model,
+          createdAt: ed.createdAt,
+        }))}
+        rawPayload={
+          messageDetail?.rawPayload as Record<string, unknown> | undefined
+        }
         isLoading={isLoadingDetail}
         onProcessAI={() => selectedMessage && handleProcessAI(selectedMessage)}
         onRetryAI={() => selectedMessage && handleRetryAI(selectedMessage)}
@@ -441,22 +451,10 @@ function WhatsappMessagesPage() {
           messageType={messageType}
           aiStatus={aiStatus}
           source={source}
-          onSearchChange={v => {
-            setSearch(v);
-            setPage(1);
-          }}
-          onMessageTypeChange={v => {
-            setMessageType(v);
-            setPage(1);
-          }}
-          onAIStatusChange={v => {
-            setAIStatus(v);
-            setPage(1);
-          }}
-          onSourceChange={v => {
-            setSource(v);
-            setPage(1);
-          }}
+          onSearchChange={setSearch}
+          onMessageTypeChange={setMessageType}
+          onAIStatusChange={setAIStatus}
+          onSourceChange={setSource}
           onClear={handleClearFilters}
           totalCount={totalCount}
           filteredCount={messages.length}

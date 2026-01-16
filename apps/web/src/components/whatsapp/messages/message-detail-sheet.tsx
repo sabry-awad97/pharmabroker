@@ -232,7 +232,7 @@ export function MessageDetailSheet({
                   <MetadataItem
                     icon={Users}
                     label="Group"
-                    value={message.groupName}
+                    value={message.group.name}
                   />
                   <MetadataItem
                     label="Message ID"

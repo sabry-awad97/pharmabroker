@@ -1117,4 +1117,473 @@ describe('WhatsApp Messages Service - Property Tests', () => {
       );
     });
   });
+
+  /**
+   * Property 18: Session Connection Validation
+   *
+   * *For any* sync operation on a session, if the session status is not 'connected',
+   * the operation SHALL fail with an error indicating the session must be connected.
+   *
+   * **Validates: Requirements 9.2, 9.4**
+   */
+  describe('Property 18: Session Connection Validation', () => {
+    it('getSyncStatus fails for disconnected sessions', async () => {
+      const user = await createTestUser('sync-disconnected-1');
+
+      // Create a disconnected session
+      const session = await prisma.whatsAppSession.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: 'Disconnected Session',
+          userId: user.id,
+          status: 'disconnected',
+        },
+      });
+      testSessions.push(session);
+
+      // Sync should fail
+      try {
+        await whatsappMessagesService.getSyncStatus(user.id, session.id);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error: unknown) {
+        expect((error as { code: string }).code).toBe('SESSION_NOT_CONNECTED');
+      }
+    });
+
+    it('getSyncStatus succeeds for connected sessions', async () => {
+      const user = await createTestUser('sync-connected-1');
+      const session = await createTestSession(user.id, 'sync-connected-1'); // Creates with status 'connected'
+      const group = await createTestGroup(
+        session.id,
+        '9999999999@g.us',
+        'Test Group',
+      );
+
+      // Create some history messages
+      await createTestMessage(session.id, group.id, { source: 'history' });
+      await createTestMessage(session.id, group.id, { source: 'history' });
+      await createTestMessage(session.id, group.id, { source: 'realtime' });
+
+      // Sync should succeed and return history count
+      const result = await whatsappMessagesService.getSyncStatus(
+        user.id,
+        session.id,
+      );
+
+      expect(result.synced).toBe(2); // Only history messages
+      expect(result.errors).toEqual([]);
+    });
+
+    it('getSyncStatus fails for non-existent sessions', async () => {
+      const user = await createTestUser('sync-nonexistent-1');
+
+      try {
+        await whatsappMessagesService.getSyncStatus(
+          user.id,
+          crypto.randomUUID(),
+        );
+        expect(true).toBe(false); // Should not reach here
+      } catch (error: unknown) {
+        expect((error as { code: string }).code).toBe('SESSION_NOT_FOUND');
+      }
+    });
+
+    it('getSyncStatus fails for sessions belonging to other users', async () => {
+      const user1 = await createTestUser('sync-auth-1');
+      const user2 = await createTestUser('sync-auth-2');
+
+      const session1 = await createTestSession(user1.id, 'sync-auth-1');
+
+      // User2 cannot get sync status for user1's session
+      try {
+        await whatsappMessagesService.getSyncStatus(user2.id, session1.id);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error: unknown) {
+        expect((error as { code: string }).code).toBe('SESSION_NOT_FOUND');
+      }
+    });
+
+    it('property: for any non-connected session status, sync fails', async () => {
+      const nonConnectedStatuses = [
+        'pending',
+        'connecting',
+        'disconnected',
+        'logged_out',
+        'expired',
+      ];
+
+      await fc.assert(
+        fc.asyncProperty(
+          fc.constantFrom(...nonConnectedStatuses),
+          async status => {
+            const user = await createTestUser(`sync-status-${Date.now()}`);
+
+            const session = await prisma.whatsAppSession.create({
+              data: {
+                id: crypto.randomUUID(),
+                name: `Session ${status}`,
+                userId: user.id,
+                status: status as any,
+              },
+            });
+            testSessions.push(session);
+
+            // Sync should fail for non-connected status
+            try {
+              await whatsappMessagesService.getSyncStatus(user.id, session.id);
+              // Should not reach here
+              return false;
+            } catch (error: unknown) {
+              expect((error as { code: string }).code).toBe(
+                'SESSION_NOT_CONNECTED',
+              );
+              return true;
+            }
+          },
+        ),
+        { numRuns: 5 },
+      );
+    });
+  });
+});
+
+// ============================================================================
+// Property-Based Tests - Message Queueing (auto-sync-groups-messages)
+// ============================================================================
+
+describe('WhatsApp Messages Service - Queueing Property Tests', () => {
+  afterEach(async () => {
+    await cleanupTestData();
+  });
+
+  /**
+   * Property 6: Queued messages processed after sync
+   *
+   * *For any* session where group sync completes successfully, all queued messages
+   * for groups that now exist SHALL be stored in the database.
+   *
+   * Feature: auto-sync-groups-messages, Property 6: Queued messages processed after sync
+   * **Validates: Requirements 2.3**
+   */
+  describe('Property 6: Queued messages processed after sync', () => {
+    it('processQueuedMessages stores messages for existing groups', async () => {
+      const user = await createTestUser('queue-process-1');
+      const session = await createTestSession(user.id, 'queue-process-1');
+      const group = await createTestGroup(
+        session.id,
+        '1234567890@g.us',
+        'Test Group',
+      );
+
+      // Create queued messages for the existing group
+      const queuedMessages: ParsedMessageEvent[] = [
+        {
+          messageId: `MSG-Q1-${Date.now()}`,
+          sessionId: session.id,
+          chatJid: group.jid,
+          senderJid: '1111111111@s.whatsapp.net',
+          messageType: 'text',
+          text: 'Queued message 1',
+          isFromMe: false,
+          isForwarded: false,
+          isViewOnce: false,
+          isBroadcast: false,
+          messageTimestamp: new Date().toISOString(),
+          source: 'history',
+        },
+        {
+          messageId: `MSG-Q2-${Date.now()}`,
+          sessionId: session.id,
+          chatJid: group.jid,
+          senderJid: '2222222222@s.whatsapp.net',
+          messageType: 'text',
+          text: 'Queued message 2',
+          isFromMe: false,
+          isForwarded: false,
+          isViewOnce: false,
+          isBroadcast: false,
+          messageTimestamp: new Date().toISOString(),
+          source: 'history',
+        },
+      ];
+
+      // Process the queued messages
+      const result =
+        await whatsappMessagesService.processQueuedMessages(queuedMessages);
+
+      // All messages should be stored
+      expect(result.stored).toBe(2);
+      expect(result.dropped).toBe(0);
+
+      // Verify messages exist in database
+      const storedMessages = await prisma.whatsAppMessage.findMany({
+        where: {
+          sessionId: session.id,
+          messageId: { in: queuedMessages.map(m => m.messageId) },
+        },
+      });
+      expect(storedMessages.length).toBe(2);
+
+      // Clean up
+      await prisma.whatsAppMessage.deleteMany({
+        where: {
+          sessionId: session.id,
+          messageId: { in: queuedMessages.map(m => m.messageId) },
+        },
+      });
+    });
+
+    it('property: for any number of queued messages with existing groups, all are stored', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 5 }), // Number of messages
+          async numMessages => {
+            const user = await createTestUser(`queue-prop-${Date.now()}`);
+            const session = await createTestSession(
+              user.id,
+              `queue-prop-${Date.now()}`,
+            );
+            const group = await createTestGroup(
+              session.id,
+              `${Date.now()}@g.us`,
+              'Test Group',
+            );
+
+            // Create queued messages
+            const queuedMessages: ParsedMessageEvent[] = [];
+            for (let i = 0; i < numMessages; i++) {
+              queuedMessages.push({
+                messageId: `MSG-PROP-${Date.now()}-${i}`,
+                sessionId: session.id,
+                chatJid: group.jid,
+                senderJid: `${Date.now()}${i}@s.whatsapp.net`,
+                messageType: 'text',
+                text: `Message ${i}`,
+                isFromMe: false,
+                isForwarded: false,
+                isViewOnce: false,
+                isBroadcast: false,
+                messageTimestamp: new Date().toISOString(),
+                source: 'history',
+              });
+            }
+
+            // Process the queued messages
+            const result =
+              await whatsappMessagesService.processQueuedMessages(
+                queuedMessages,
+              );
+
+            // All messages should be stored
+            expect(result.stored).toBe(numMessages);
+            expect(result.dropped).toBe(0);
+
+            // Clean up
+            await prisma.whatsAppMessage.deleteMany({
+              where: {
+                sessionId: session.id,
+                messageId: { in: queuedMessages.map(m => m.messageId) },
+              },
+            });
+
+            return true;
+          },
+        ),
+        { numRuns: 5 },
+      );
+    });
+  });
+
+  /**
+   * Property 7: Orphan messages discarded after sync
+   *
+   * *For any* queued message whose group is still unknown after sync completes,
+   * the message SHALL be discarded and a warning logged.
+   *
+   * Feature: auto-sync-groups-messages, Property 7: Orphan messages discarded after sync
+   * **Validates: Requirements 2.4**
+   */
+  describe('Property 7: Orphan messages discarded after sync', () => {
+    it('processQueuedMessages drops messages for non-existent groups', async () => {
+      const user = await createTestUser('queue-orphan-1');
+      const session = await createTestSession(user.id, 'queue-orphan-1');
+
+      // Create queued messages for a non-existent group
+      const queuedMessages: ParsedMessageEvent[] = [
+        {
+          messageId: `MSG-ORPHAN-${Date.now()}`,
+          sessionId: session.id,
+          chatJid: 'nonexistent@g.us', // Group doesn't exist
+          senderJid: '1111111111@s.whatsapp.net',
+          messageType: 'text',
+          text: 'Orphan message',
+          isFromMe: false,
+          isForwarded: false,
+          isViewOnce: false,
+          isBroadcast: false,
+          messageTimestamp: new Date().toISOString(),
+          source: 'history',
+        },
+      ];
+
+      // Process the queued messages
+      const result =
+        await whatsappMessagesService.processQueuedMessages(queuedMessages);
+
+      // Message should be dropped
+      expect(result.stored).toBe(0);
+      expect(result.dropped).toBe(1);
+
+      // Verify message does not exist in database
+      const storedMessages = await prisma.whatsAppMessage.findMany({
+        where: {
+          sessionId: session.id,
+          messageId: queuedMessages[0]!.messageId,
+        },
+      });
+      expect(storedMessages.length).toBe(0);
+    });
+
+    it('processQueuedMessages handles mixed existing and non-existent groups', async () => {
+      const user = await createTestUser('queue-mixed-1');
+      const session = await createTestSession(user.id, 'queue-mixed-1');
+      const existingGroup = await createTestGroup(
+        session.id,
+        '1234567890@g.us',
+        'Existing Group',
+      );
+
+      // Create queued messages - some for existing group, some for non-existent
+      const queuedMessages: ParsedMessageEvent[] = [
+        {
+          messageId: `MSG-EXIST-${Date.now()}`,
+          sessionId: session.id,
+          chatJid: existingGroup.jid, // Exists
+          senderJid: '1111111111@s.whatsapp.net',
+          messageType: 'text',
+          text: 'Message for existing group',
+          isFromMe: false,
+          isForwarded: false,
+          isViewOnce: false,
+          isBroadcast: false,
+          messageTimestamp: new Date().toISOString(),
+          source: 'history',
+        },
+        {
+          messageId: `MSG-ORPHAN-${Date.now()}`,
+          sessionId: session.id,
+          chatJid: 'nonexistent@g.us', // Doesn't exist
+          senderJid: '2222222222@s.whatsapp.net',
+          messageType: 'text',
+          text: 'Orphan message',
+          isFromMe: false,
+          isForwarded: false,
+          isViewOnce: false,
+          isBroadcast: false,
+          messageTimestamp: new Date().toISOString(),
+          source: 'history',
+        },
+      ];
+
+      // Process the queued messages
+      const result =
+        await whatsappMessagesService.processQueuedMessages(queuedMessages);
+
+      // One stored, one dropped
+      expect(result.stored).toBe(1);
+      expect(result.dropped).toBe(1);
+
+      // Clean up
+      await prisma.whatsAppMessage.deleteMany({
+        where: {
+          sessionId: session.id,
+          messageId: queuedMessages[0]!.messageId,
+        },
+      });
+    });
+
+    it('property: for any mix of existing and non-existent groups, counts are accurate', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 3 }), // Messages for existing groups
+          fc.integer({ min: 1, max: 3 }), // Messages for non-existent groups
+          async (existingCount, orphanCount) => {
+            const user = await createTestUser(`queue-mix-${Date.now()}`);
+            const session = await createTestSession(
+              user.id,
+              `queue-mix-${Date.now()}`,
+            );
+            const group = await createTestGroup(
+              session.id,
+              `${Date.now()}@g.us`,
+              'Test Group',
+            );
+
+            const queuedMessages: ParsedMessageEvent[] = [];
+
+            // Messages for existing group
+            for (let i = 0; i < existingCount; i++) {
+              queuedMessages.push({
+                messageId: `MSG-EXIST-${Date.now()}-${i}`,
+                sessionId: session.id,
+                chatJid: group.jid,
+                senderJid: `${Date.now()}${i}@s.whatsapp.net`,
+                messageType: 'text',
+                text: `Existing ${i}`,
+                isFromMe: false,
+                isForwarded: false,
+                isViewOnce: false,
+                isBroadcast: false,
+                messageTimestamp: new Date().toISOString(),
+                source: 'history',
+              });
+            }
+
+            // Messages for non-existent group
+            for (let i = 0; i < orphanCount; i++) {
+              queuedMessages.push({
+                messageId: `MSG-ORPHAN-${Date.now()}-${i}`,
+                sessionId: session.id,
+                chatJid: `nonexistent-${i}@g.us`,
+                senderJid: `${Date.now()}${i}@s.whatsapp.net`,
+                messageType: 'text',
+                text: `Orphan ${i}`,
+                isFromMe: false,
+                isForwarded: false,
+                isViewOnce: false,
+                isBroadcast: false,
+                messageTimestamp: new Date().toISOString(),
+                source: 'history',
+              });
+            }
+
+            // Process the queued messages
+            const result =
+              await whatsappMessagesService.processQueuedMessages(
+                queuedMessages,
+              );
+
+            // Verify counts
+            expect(result.stored).toBe(existingCount);
+            expect(result.dropped).toBe(orphanCount);
+
+            // Clean up
+            await prisma.whatsAppMessage.deleteMany({
+              where: {
+                sessionId: session.id,
+                messageId: {
+                  in: queuedMessages
+                    .filter(m => m.chatJid === group.jid)
+                    .map(m => m.messageId),
+                },
+              },
+            });
+
+            return true;
+          },
+        ),
+        { numRuns: 5 },
+      );
+    });
+  });
 });

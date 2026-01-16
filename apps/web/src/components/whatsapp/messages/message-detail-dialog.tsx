@@ -362,7 +362,7 @@ export function MessageDetailDialog({
                     <MetadataCard
                       icon={Users}
                       label="Group"
-                      value={message.groupName}
+                      value={message.group.name}
                     />
                     <MetadataCard
                       icon={Calendar}

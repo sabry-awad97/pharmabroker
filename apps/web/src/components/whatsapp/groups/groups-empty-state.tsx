@@ -3,11 +3,13 @@
  *
  * Displays empty state messages for the groups list page.
  * Handles both "no groups" and "no results" states.
+ * Groups are automatically synced when the session connects.
  *
+ * Feature: auto-sync-groups-messages
  * Requirements: 1.3, 2.4
  */
 
-import { RefreshCw, Search, Users } from 'lucide-react';
+import { Loader2, Search, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -25,8 +27,6 @@ export type EmptyStateVariant = 'no-groups' | 'no-results';
 export interface GroupsEmptyStateProps {
   /** The type of empty state to display */
   variant: EmptyStateVariant;
-  /** Callback when sync button is clicked (for no-groups variant) */
-  onSync?: () => void;
   /** Callback when clear filters button is clicked (for no-results variant) */
   onClearFilters?: () => void;
   /** Whether sync is in progress */
@@ -41,32 +41,28 @@ export interface GroupsEmptyStateProps {
  * Empty state for when no groups exist
  */
 function NoGroupsState({
-  onSync,
   isSyncing,
   className,
-}: Pick<GroupsEmptyStateProps, 'onSync' | 'isSyncing' | 'className'>) {
+}: Pick<GroupsEmptyStateProps, 'isSyncing' | 'className'>) {
   return (
     <Empty className={cn('border-border rounded-md border py-12', className)}>
       <EmptyHeader>
         <EmptyMedia>
-          <Users className="text-muted-foreground size-12" />
+          {isSyncing ? (
+            <Loader2 className="text-muted-foreground size-12 animate-spin" />
+          ) : (
+            <Users className="text-muted-foreground size-12" />
+          )}
         </EmptyMedia>
-        <EmptyTitle>No groups yet</EmptyTitle>
+        <EmptyTitle>
+          {isSyncing ? 'Syncing groups...' : 'No groups yet'}
+        </EmptyTitle>
         <EmptyDescription>
-          Sync your WhatsApp groups to start managing them here. Groups from all
-          your connected sessions will appear in this list.
+          {isSyncing
+            ? 'Groups are being synced from WhatsApp. This may take a moment.'
+            : 'Groups will automatically sync when your WhatsApp session connects. Make sure your session is connected and authenticated.'}
         </EmptyDescription>
       </EmptyHeader>
-      <EmptyContent>
-        {onSync && (
-          <Button onClick={onSync} disabled={isSyncing} size="sm">
-            <RefreshCw
-              className={cn('mr-2 size-4', isSyncing && 'animate-spin')}
-            />
-            {isSyncing ? 'Syncing...' : 'Sync Groups'}
-          </Button>
-        )}
-      </EmptyContent>
     </Empty>
   );
 }
@@ -120,20 +116,13 @@ function NoResultsState({
  */
 export function GroupsEmptyState({
   variant,
-  onSync,
   onClearFilters,
   isSyncing = false,
   searchQuery,
   className,
 }: GroupsEmptyStateProps) {
   if (variant === 'no-groups') {
-    return (
-      <NoGroupsState
-        onSync={onSync}
-        isSyncing={isSyncing}
-        className={className}
-      />
-    );
+    return <NoGroupsState isSyncing={isSyncing} className={className} />;
   }
 
   return (

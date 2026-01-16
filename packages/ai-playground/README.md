@@ -28,24 +28,26 @@ bun run --filter @pharmabroker/ai-playground compare
 
 ## Test Suites
 
-| Suite | Description | Cases |
-|-------|-------------|-------|
-| Basic Text Understanding | Basic text comprehension | 3 |
-| Order Extraction | Extract order details | 4 |
-| Intent Classification | Classify user intents | 4 |
-| Sentiment Analysis | Detect sentiment | 3 |
-| Entity Extraction | Extract named entities | 3 |
-| Complex Scenarios | Multi-intent messages | 3 |
+| Suite                    | Description              | Cases |
+| ------------------------ | ------------------------ | ----- |
+| Basic Text Understanding | Basic text comprehension | 3     |
+| Order Extraction         | Extract order details    | 4     |
+| Intent Classification    | Classify user intents    | 4     |
+| Sentiment Analysis       | Detect sentiment         | 3     |
+| Entity Extraction        | Extract named entities   | 3     |
+| Complex Scenarios        | Multi-intent messages    | 3     |
 
 ## Evaluation Metrics
 
 ### Per-Case Metrics
+
 - **Latency** - Processing time in milliseconds
 - **Precision** - Matched extractions / Actual extractions
 - **Recall** - Matched extractions / Expected extractions
 - **F1 Score** - Harmonic mean of precision and recall
 
 ### Aggregated Metrics
+
 - **Pass Rate** - Percentage of test cases that passed
 - **Avg/P50/P95/P99 Latency** - Latency distribution
 - **Avg Precision/Recall/F1** - Average accuracy metrics

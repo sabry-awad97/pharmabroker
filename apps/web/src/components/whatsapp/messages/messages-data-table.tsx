@@ -30,13 +30,13 @@ import {
   Sparkles,
   RotateCcw,
   Trash2,
-  ExternalLink,
   Reply,
   Forward,
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import type { WhatsAppMessageWithGroup } from '@pharmabroker/schemas/whatsapp';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -63,39 +63,17 @@ import { MessageTypeBadge, type MessageType } from './message-type-badge';
 import { AIStatusBadge, type AIStatus } from './ai-status-badge';
 import { MessagePreview } from './message-preview';
 
-// Message type for the table (placeholder until backend is implemented)
-export interface WhatsAppMessage {
-  id: string;
-  messageId: string;
-  sessionId: string;
-  groupId: string;
-  groupName: string;
-  senderJid: string;
-  senderPushName: string | null;
-  participantId: string | null;
-  messageType: MessageType;
-  text: string | null;
-  caption: string | null;
-  filename: string | null;
-  isFromMe: boolean;
-  isForwarded: boolean;
-  quotedMessageId: string | null;
-  status: 'received' | 'sent' | 'delivered' | 'read' | 'failed';
-  messageTimestamp: Date;
-  source: 'realtime' | 'history';
-  aiStatus: AIStatus;
-  aiModel: string | null;
-  aiError: string | null;
-}
+// Re-export the type for backward compatibility
+export type WhatsAppMessage = WhatsAppMessageWithGroup;
 
 interface MessagesDataTableProps {
-  data: WhatsAppMessage[];
-  onView?: (message: WhatsAppMessage) => void;
-  onProcessAI?: (message: WhatsAppMessage) => void;
-  onRetryAI?: (message: WhatsAppMessage) => void;
-  onDelete?: (message: WhatsAppMessage) => void;
-  onBulkProcess?: (messages: WhatsAppMessage[]) => void;
-  onBulkDelete?: (messages: WhatsAppMessage[]) => void;
+  data: WhatsAppMessageWithGroup[];
+  onView?: (message: WhatsAppMessageWithGroup) => void;
+  onProcessAI?: (message: WhatsAppMessageWithGroup) => void;
+  onRetryAI?: (message: WhatsAppMessageWithGroup) => void;
+  onDelete?: (message: WhatsAppMessageWithGroup) => void;
+  onBulkProcess?: (messages: WhatsAppMessageWithGroup[]) => void;
+  onBulkDelete?: (messages: WhatsAppMessageWithGroup[]) => void;
   pageSize?: number;
   isProcessing?: boolean;
 }
@@ -122,8 +100,8 @@ export function MessagesDataTable({
 
   // Define actions for each row
   const getRowActions = (
-    message: WhatsAppMessage,
-  ): TableAction<WhatsAppMessage>[] => [
+    message: WhatsAppMessageWithGroup,
+  ): TableAction<WhatsAppMessageWithGroup>[] => [
     {
       id: 'view',
       label: 'View Details',
@@ -165,7 +143,7 @@ export function MessagesDataTable({
     },
   ];
 
-  const columns: ColumnDef<WhatsAppMessage>[] = [
+  const columns: ColumnDef<WhatsAppMessageWithGroup>[] = [
     // Selection column
     {
       id: 'select',
@@ -284,7 +262,7 @@ export function MessagesDataTable({
     },
     // Group column
     {
-      accessorKey: 'groupName',
+      accessorKey: 'group.name',
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -299,7 +277,7 @@ export function MessagesDataTable({
       ),
       cell: ({ row }) => (
         <span className="text-muted-foreground max-w-[150px] truncate text-xs">
-          {row.original.groupName}
+          {row.original.group.name}
         </span>
       ),
     },

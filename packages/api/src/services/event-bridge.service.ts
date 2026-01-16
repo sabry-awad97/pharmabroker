@@ -5,7 +5,12 @@
  * for real-time event streaming. Events are validated and published to
  * the oRPC EventPublisher for frontend clients.
  *
- * Feature: service-status-cleanup
+ * Features:
+ * - Auto-sync groups on session connection
+ * - Message queue for messages arriving before groups are synced
+ * - Sync status events for frontend progress tracking
+ *
+ * Feature: service-status-cleanup, auto-sync-groups-messages
  * Requirements: 1.1, 1.2, 2.2, 2.3
  */
 
@@ -15,10 +20,12 @@ import {
 } from '@pharmabroker/schemas/whatsapp';
 import { whatsappEventPublisher } from '../routers/whatsapp.router';
 import { whatsappService } from './whatsapp.service';
+import { whatsappGroupsService } from './whatsapp-groups.service';
 import {
   whatsappMessagesService,
   type ParsedMessageEvent,
 } from './whatsapp-messages.service';
+import { messageQueueService } from './message-queue.service';
 import { HEALTH_CONFIG } from '../config/health.config';
 
 // ============================================================================
@@ -51,6 +58,39 @@ export interface EventBridgeStatus {
   reconnectAttempts: number;
   lastError?: string;
 }
+
+/** Sync state for a session */
+export interface SyncState {
+  status: 'idle' | 'syncing_groups' | 'processing_queue' | 'ready' | 'failed';
+  lastSyncAt?: Date;
+  retryCount: number;
+  error?: string;
+  groupsSynced?: number;
+  messagesProcessed?: number;
+  messagesDropped?: number;
+}
+
+/** Sync status event for frontend */
+export interface SyncStatusEvent {
+  type: 'sync.started' | 'sync.progress' | 'sync.completed' | 'sync.failed';
+  session_id: string;
+  data?: {
+    phase?: 'groups' | 'messages';
+    current?: number;
+    total?: number;
+    groupsSynced?: number;
+    messagesProcessed?: number;
+    messagesDropped?: number;
+    error?: string;
+  };
+}
+
+/** Configuration for auto-sync */
+const AUTO_SYNC_CONFIG = {
+  maxRetries: 3,
+  retryDelayMs: 5000,
+  retryBackoffMultiplier: 2,
+};
 
 // ============================================================================
 // Exponential Backoff Calculator
@@ -86,8 +126,241 @@ export class EventBridgeService {
   private shouldReconnect: boolean = true;
   private onConnectedCallback?: () => void | Promise<void>;
 
+  /** Per-session sync state tracking */
+  private syncStates: Map<string, SyncState> = new Map();
+
   constructor(config: EventBridgeConfig) {
     this.config = config;
+  }
+
+  /**
+   * Get sync state for a session
+   */
+  getSyncState(sessionId: string): SyncState {
+    return (
+      this.syncStates.get(sessionId) ?? {
+        status: 'idle',
+        retryCount: 0,
+      }
+    );
+  }
+
+  /**
+   * Set sync state for a session
+   */
+  private setSyncState(sessionId: string, state: Partial<SyncState>): void {
+    const current = this.getSyncState(sessionId);
+    this.syncStates.set(sessionId, { ...current, ...state });
+  }
+
+  /**
+   * Clear sync state for a session
+   */
+  private clearSyncState(sessionId: string): void {
+    this.syncStates.delete(sessionId);
+  }
+
+  /**
+   * Emit sync status event to frontend clients
+   */
+  private emitSyncStatusEvent(event: SyncStatusEvent): void {
+    whatsappEventPublisher.publish('whatsapp-event', {
+      type: event.type as any,
+      session_id: event.session_id,
+      data: event.data ?? {},
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Trigger group sync for a session with retry logic
+   * Uses exponential backoff on failure
+   * @param sessionId The session to sync groups for
+   */
+  async triggerGroupSync(sessionId: string): Promise<void> {
+    const currentState = this.getSyncState(sessionId);
+
+    // Don't start a new sync if already syncing
+    if (
+      currentState.status === 'syncing_groups' ||
+      currentState.status === 'processing_queue'
+    ) {
+      console.log(
+        `[EventBridge] Sync already in progress for session ${sessionId}`,
+      );
+      return;
+    }
+
+    // Update state to syncing
+    this.setSyncState(sessionId, {
+      status: 'syncing_groups',
+      retryCount: 0,
+      error: undefined,
+    });
+
+    // Emit sync started event
+    this.emitSyncStatusEvent({
+      type: 'sync.started',
+      session_id: sessionId,
+      data: { phase: 'groups' },
+    });
+
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= AUTO_SYNC_CONFIG.maxRetries; attempt++) {
+      try {
+        console.log(
+          `[EventBridge] Starting group sync for session ${sessionId} (attempt ${attempt + 1})`,
+        );
+
+        const result =
+          await whatsappGroupsService.syncGroupsInternal(sessionId);
+
+        // Success - update state
+        this.setSyncState(sessionId, {
+          status: 'processing_queue',
+          lastSyncAt: new Date(),
+          retryCount: attempt,
+          groupsSynced: result.synced,
+          error: undefined,
+        });
+
+        // Emit progress event
+        this.emitSyncStatusEvent({
+          type: 'sync.progress',
+          session_id: sessionId,
+          data: {
+            phase: 'groups',
+            current: result.synced,
+            groupsSynced: result.synced,
+          },
+        });
+
+        console.log(
+          `[EventBridge] Group sync completed for session ${sessionId}: ${result.synced} groups synced`,
+        );
+
+        // Process the message queue after successful sync
+        await this.processMessageQueue(sessionId);
+
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.error(
+          `[EventBridge] Group sync failed for session ${sessionId} (attempt ${attempt + 1}):`,
+          lastError.message,
+        );
+
+        this.setSyncState(sessionId, {
+          retryCount: attempt + 1,
+        });
+
+        // If we have more retries, wait with exponential backoff
+        if (attempt < AUTO_SYNC_CONFIG.maxRetries) {
+          const delay =
+            AUTO_SYNC_CONFIG.retryDelayMs *
+            Math.pow(AUTO_SYNC_CONFIG.retryBackoffMultiplier, attempt);
+          console.log(`[EventBridge] Retrying group sync in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // All retries exhausted - mark as failed
+    this.setSyncState(sessionId, {
+      status: 'failed',
+      error: lastError?.message ?? 'Unknown error',
+    });
+
+    // Emit sync failed event
+    this.emitSyncStatusEvent({
+      type: 'sync.failed',
+      session_id: sessionId,
+      data: {
+        error: lastError?.message ?? 'Group sync failed after max retries',
+      },
+    });
+
+    // Clear the message queue since we can't process it
+    const droppedCount = messageQueueService.clear(sessionId);
+    if (droppedCount > 0) {
+      console.warn(
+        `[EventBridge] Dropped ${droppedCount} queued messages for session ${sessionId} due to sync failure`,
+      );
+    }
+  }
+
+  /**
+   * Process queued messages after group sync completes
+   * @param sessionId The session to process messages for
+   */
+  async processMessageQueue(sessionId: string): Promise<void> {
+    const messages = messageQueueService.drain(sessionId);
+
+    if (messages.length === 0) {
+      // No messages to process - mark as ready
+      this.setSyncState(sessionId, {
+        status: 'ready',
+        messagesProcessed: 0,
+        messagesDropped: 0,
+      });
+
+      // Emit sync completed event
+      const state = this.getSyncState(sessionId);
+      this.emitSyncStatusEvent({
+        type: 'sync.completed',
+        session_id: sessionId,
+        data: {
+          groupsSynced: state.groupsSynced ?? 0,
+          messagesProcessed: 0,
+          messagesDropped: 0,
+        },
+      });
+
+      return;
+    }
+
+    console.log(
+      `[EventBridge] Processing ${messages.length} queued messages for session ${sessionId}`,
+    );
+
+    // Emit progress event for message processing phase
+    this.emitSyncStatusEvent({
+      type: 'sync.progress',
+      session_id: sessionId,
+      data: {
+        phase: 'messages',
+        current: 0,
+        total: messages.length,
+      },
+    });
+
+    // Process messages through the messages service
+    const result =
+      await whatsappMessagesService.processQueuedMessages(messages);
+
+    // Update state
+    this.setSyncState(sessionId, {
+      status: 'ready',
+      messagesProcessed: result.stored,
+      messagesDropped: result.dropped,
+    });
+
+    // Emit sync completed event
+    const state = this.getSyncState(sessionId);
+    this.emitSyncStatusEvent({
+      type: 'sync.completed',
+      session_id: sessionId,
+      data: {
+        groupsSynced: state.groupsSynced ?? 0,
+        messagesProcessed: result.stored,
+        messagesDropped: result.dropped,
+      },
+    });
+
+    console.log(
+      `[EventBridge] Message queue processed for session ${sessionId}: ${result.stored} stored, ${result.dropped} dropped`,
+    );
   }
 
   /**
@@ -278,6 +551,7 @@ export class EventBridgeService {
 
   /**
    * Handle session status synchronization based on connection events
+   * Triggers auto-sync on connection.connected event
    */
   private async handleSessionStatusSync(event: WhatsAppEvent): Promise<void> {
     try {
@@ -287,6 +561,14 @@ export class EventBridgeService {
             event.session_id,
             'connected',
           );
+          // Trigger auto-sync of groups on connection
+          // Run async without blocking event processing
+          this.triggerGroupSync(event.session_id).catch(err => {
+            console.error(
+              `[EventBridge] Auto-sync failed for session ${event.session_id}:`,
+              err,
+            );
+          });
           break;
 
         case 'connection.disconnected':
@@ -294,6 +576,8 @@ export class EventBridgeService {
             event.session_id,
             'disconnected',
           );
+          // Clear sync state on disconnect
+          this.clearSyncState(event.session_id);
           break;
 
         case 'session.authenticated':
@@ -311,10 +595,12 @@ export class EventBridgeService {
             event.session_id,
             'disconnected',
           );
+          // Clear sync state on logout
+          this.clearSyncState(event.session_id);
           break;
 
         case 'message.received':
-          // Store incoming messages
+          // Store incoming messages (may be queued if group not yet synced)
           await this.handleMessageReceived(event.session_id, event.data);
           break;
       }

@@ -6,6 +6,7 @@
  *
  * Features:
  * - Message storage from Go service events (realtime and history sync)
+ * - Message queueing for messages arriving before groups are synced
  * - Filtering by session, group, type, AI status, source, date range
  * - Full-text search across message content
  * - Cursor-based pagination
@@ -28,6 +29,7 @@ import type {
   MessageSource,
 } from '@pharmabroker/schemas/whatsapp';
 import { escapeSqlWildcards } from '../utils/prisma';
+import { messageQueueService } from './message-queue.service';
 
 // ============================================================================
 // Types for Prisma queries
@@ -377,6 +379,7 @@ class WhatsAppMessagesService {
   /**
    * Store a message from Go service event
    * Uses upsert to handle duplicates (same session + messageId)
+   * Queues messages for unknown groups instead of dropping them
    */
   async storeMessage(event: ParsedMessageEvent): Promise<void> {
     const {
@@ -414,9 +417,10 @@ class WhatsAppMessagesService {
     });
 
     if (!group) {
-      // Skip messages for unknown groups
-      console.warn(
-        `[WhatsApp Messages] Skipping message for unknown group: ${chatJid}`,
+      // Queue message for later processing instead of dropping
+      messageQueueService.enqueue(sessionId, event);
+      console.log(
+        `[WhatsApp Messages] Queued message for unknown group: ${chatJid} (session: ${sessionId})`,
       );
       return;
     }
@@ -480,6 +484,120 @@ class WhatsAppMessagesService {
         // Don't update source - keep original
       },
     });
+  }
+
+  /**
+   * Process a batch of queued messages after group sync
+   * Attempts to store each message, tracking stored vs dropped counts
+   * @param messages Array of parsed message events from the queue
+   * @returns Object with stored and dropped counts
+   */
+  async processQueuedMessages(
+    messages: ParsedMessageEvent[],
+  ): Promise<{ stored: number; dropped: number }> {
+    let stored = 0;
+    let dropped = 0;
+
+    for (const event of messages) {
+      const { sessionId, chatJid, messageId } = event;
+
+      // Find the group by JID
+      const group = await prisma.whatsAppGroup.findFirst({
+        where: {
+          sessionId,
+          jid: chatJid,
+        },
+        select: { id: true },
+      });
+
+      if (!group) {
+        // Group still doesn't exist after sync - drop the message
+        console.warn(
+          `[WhatsApp Messages] Dropping orphan message ${messageId} for unknown group: ${chatJid}`,
+        );
+        dropped++;
+        continue;
+      }
+
+      try {
+        // Try to find participant by JID
+        const participant = await prisma.whatsAppGroupParticipant.findFirst({
+          where: {
+            groupId: group.id,
+            jid: event.senderJid,
+          },
+          select: { id: true },
+        });
+
+        // Convert byte arrays to Buffer
+        const mediaKeyBuffer = event.mediaKey
+          ? Buffer.from(event.mediaKey)
+          : null;
+        const mediaSha256Buffer = event.mediaSha256
+          ? Buffer.from(event.mediaSha256)
+          : null;
+
+        // Upsert the message
+        await prisma.whatsAppMessage.upsert({
+          where: {
+            sessionId_messageId: {
+              sessionId,
+              messageId,
+            },
+          },
+          create: {
+            messageId,
+            sessionId,
+            groupId: group.id,
+            senderJid: event.senderJid,
+            senderPushName: event.senderPushName ?? null,
+            participantId: participant?.id ?? null,
+            messageType: event.messageType as any,
+            text: event.text ?? null,
+            caption: event.caption ?? null,
+            filename: event.filename ?? null,
+            mimetype: event.mimetype ?? null,
+            mediaUrl: event.mediaUrl ?? null,
+            mediaKey: mediaKeyBuffer,
+            mediaSha256: mediaSha256Buffer,
+            mediaSize: event.mediaSize ?? null,
+            isFromMe: event.isFromMe,
+            isForwarded: event.isForwarded,
+            isViewOnce: event.isViewOnce,
+            isBroadcast: event.isBroadcast,
+            quotedMessageId: event.quotedMessageId ?? null,
+            messageTimestamp: new Date(event.messageTimestamp),
+            source: event.source as any,
+            rawPayload:
+              event.rawPayload === null || event.rawPayload === undefined
+                ? Prisma.JsonNull
+                : (event.rawPayload as Prisma.InputJsonValue),
+            aiStatus: 'pending',
+          },
+          update: {
+            // Update fields that might change
+            senderPushName: event.senderPushName ?? null,
+            participantId: participant?.id ?? null,
+            text: event.text ?? null,
+            caption: event.caption ?? null,
+          },
+        });
+
+        stored++;
+      } catch (error) {
+        console.error(
+          `[WhatsApp Messages] Failed to store queued message ${messageId}:`,
+          error,
+        );
+        dropped++;
+      }
+    }
+
+    console.log(
+      `[WhatsApp Messages] Processed queued messages: ${stored} stored, ${dropped} dropped`,
+    );
+
+    return { stored, dropped };
   }
 
   /**
@@ -608,6 +726,54 @@ class WhatsAppMessagesService {
       where: { id: messageId },
       data: updateData,
     });
+  }
+
+  /**
+   * Get sync status for a session
+   * Returns the count of messages synced from history
+   * Verifies session is connected before returning
+   */
+  async getSyncStatus(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ synced: number; errors: string[] }> {
+    // Verify session belongs to user and is connected
+    const session = await prisma.whatsAppSession.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!session) {
+      throw new ORPCError('SESSION_NOT_FOUND', {
+        message: 'Session not found',
+      });
+    }
+
+    if (session.status !== 'connected') {
+      throw new ORPCError('SESSION_NOT_CONNECTED', {
+        message:
+          'Session must be connected to sync messages. History sync happens automatically when the session connects.',
+      });
+    }
+
+    // Count messages synced from history for this session
+    const synced = await prisma.whatsAppMessage.count({
+      where: {
+        sessionId,
+        source: 'history',
+      },
+    });
+
+    return {
+      synced,
+      errors: [],
+    };
   }
 }
 

@@ -5,7 +5,6 @@
  */
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import type { LanguageModelV1 } from 'ai';
 import type { AIProvider, AIProviderConfig } from '../types';
 
 export interface GeminiConfig {
@@ -32,7 +31,7 @@ export function createGeminiProvider(config: GeminiConfig): AIProvider {
 
   return {
     name: 'gemini',
-    model: google(model) as LanguageModelV1,
+    model: google(model),
     config: providerConfig,
     supportsStructuredOutput: true,
   };

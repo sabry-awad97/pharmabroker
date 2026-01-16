@@ -21,6 +21,8 @@ import {
   bulkProcessInput,
   processMessageResponse,
   bulkProcessResponse,
+  syncMessagesInput,
+  syncMessagesResponse,
 } from '@pharmabroker/schemas/whatsapp';
 
 import { o, protectedProcedure } from '..';
@@ -151,6 +153,28 @@ export const whatsappMessagesRouter = o.router({
     .handler(async ({ input, context }) => {
       const userId = context.session!.user.id;
       return whatsappMessagesService.exportMessages(userId, input);
+    }),
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Sync
+  // ─────────────────────────────────────────────────────────────────────────
+
+  sync: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/messages/sync',
+        tags: ['WhatsApp Messages'],
+        summary: 'Get message sync status',
+        description:
+          'Returns the count of messages synced from WhatsApp history. History sync happens automatically when a session connects. Session must be connected.',
+      },
+    })
+    .input(syncMessagesInput)
+    .output(syncMessagesResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+      return whatsappMessagesService.getSyncStatus(userId, input.sessionId);
     }),
 
   // ─────────────────────────────────────────────────────────────────────────

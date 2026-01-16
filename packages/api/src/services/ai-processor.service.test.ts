@@ -104,6 +104,9 @@ async function createTestMessage(
   } = {},
 ): Promise<TestMessage> {
   const messageId = `MSG-AI-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // Use 'text' in options to check if it was explicitly provided (even if null)
+  const textValue =
+    'text' in options ? options.text : 'Test message for AI processing';
   const message = await prisma.whatsAppMessage.create({
     data: {
       id: crypto.randomUUID(),
@@ -112,7 +115,7 @@ async function createTestMessage(
       groupId,
       senderJid: `${Date.now()}@s.whatsapp.net`,
       messageType: 'text',
-      text: options.text ?? 'Test message for AI processing',
+      text: textValue,
       isFromMe: false,
       isForwarded: false,
       isViewOnce: false,
@@ -196,7 +199,7 @@ describe('AI Processor Service - Property Tests', () => {
       expect(dbMessage?.aiStatus).toBe('pending');
     });
 
-    it('messages without text content are processed as completed (placeholder extractors)', async () => {
+    it('messages without text content are skipped', async () => {
       const user = await createTestUser('skip-1');
       const session = await createTestSession(user.id, 'skip-1');
       const group = await createTestGroup(
@@ -205,7 +208,7 @@ describe('AI Processor Service - Property Tests', () => {
         'Test Group',
       );
 
-      // Create message without text
+      // Create message without text (text: null, caption: null by default)
       const message = await createTestMessage(session.id, group.id, {
         text: null,
       });
@@ -218,9 +221,8 @@ describe('AI Processor Service - Property Tests', () => {
         message.id,
       );
 
-      // With placeholder extractors, messages complete (no extractions)
-      // The skip logic checks text AND caption - if both null, it skips
-      expect(['completed', 'skipped']).toContain(result.status);
+      // Messages without text AND caption should be skipped
+      expect(result.status).toBe('skipped');
     });
 
     it('property: valid status values are always one of the defined statuses', async () => {
@@ -253,7 +255,7 @@ describe('AI Processor Service - Property Tests', () => {
             where: { id: message.id },
           });
 
-          expect(validStatuses).toContain(dbMessage?.aiStatus);
+          expect(validStatuses).toContain(dbMessage?.aiStatus!);
           return true;
         }),
         { numRuns: 5 },
@@ -270,7 +272,7 @@ describe('AI Processor Service - Property Tests', () => {
    * **Validates: Requirements 7.11**
    */
   describe('Property 14: AI Retry Reset', () => {
-    it('retryMessage resets failed status to pending', async () => {
+    it('retryMessage resets failed status and reprocesses', async () => {
       const user = await createTestUser('retry-1');
       const session = await createTestSession(user.id, 'retry-1');
       const group = await createTestGroup(
@@ -292,11 +294,24 @@ describe('AI Processor Service - Property Tests', () => {
 
       const { aiProcessorService } = await import('./ai-processor.service');
 
-      // Retry should process the message (which will complete since extractors are placeholders)
+      // Retry should process the message
+      // In test environment without AI config, it may complete, skip, or fail
+      // The important thing is that it doesn't throw INVALID_STATUS
       const result = await aiProcessorService.retryMessage(user.id, message.id);
 
-      // Result should be completed (since extractors return empty)
-      expect(['completed', 'skipped']).toContain(result.status);
+      // Result should be one of the valid terminal statuses
+      expect(['completed', 'skipped', 'failed']).toContain(result.status);
+
+      // Verify the message was processed (status changed from 'failed')
+      const dbMessage = await prisma.whatsAppMessage.findUnique({
+        where: { id: message.id },
+      });
+      // After retry, status should not be 'failed' with the old error
+      // (it may be 'failed' with a new error from AI processing, but that's different)
+      if (dbMessage?.aiStatus === 'failed') {
+        // If still failed, it should be from a new processing attempt
+        expect(dbMessage.aiError).not.toBe('Previous error');
+      }
     });
 
     it('retryMessage fails for non-failed messages', async () => {
@@ -439,14 +454,18 @@ describe('AI Processor Service - Property Tests', () => {
             for (let i = 0; i < users.length; i++) {
               const currentUser = users[i]!;
 
-              // Can process own message
+              // Can process own message (may complete, skip, or fail due to AI config)
               const result = await aiProcessorService.processMessage(
                 currentUser.user.id,
                 currentUser.message.id,
               );
-              expect(['completed', 'skipped', 'processing']).toContain(
-                result.status,
-              );
+              // Any valid status is acceptable - the key is it doesn't throw MESSAGE_NOT_FOUND
+              expect([
+                'completed',
+                'skipped',
+                'processing',
+                'failed',
+              ]).toContain(result.status);
 
               // Cannot process other users' messages
               for (let j = 0; j < users.length; j++) {

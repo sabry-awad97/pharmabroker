@@ -3,6 +3,9 @@
  *
  * Displays groups for the currently active session with
  * grid/table view toggle and pagination.
+ * Groups are automatically synced when the session connects.
+ *
+ * Feature: auto-sync-groups-messages
  */
 
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
@@ -18,7 +21,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  SyncGroupsDialog,
   GroupErrorState,
   getErrorType,
   GroupsEmptyState,
@@ -27,9 +29,8 @@ import {
   GroupsGridView,
   GroupsViewToggle,
   GroupsFacetedFilter,
+  SyncProgressIndicator,
   type GroupQuickAction,
-  type SyncStatus,
-  type SyncResult,
   type ViewMode,
 } from '@/components/whatsapp/groups';
 import { SessionRequiredState } from '@/components/session-picker';
@@ -37,11 +38,11 @@ import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
 import {
   useWhatsappGroupsFlat,
-  useSyncGroups,
   useInvalidateGroups,
   useGroupFilterCounts,
   type GroupFilterType,
 } from '@/hooks/whatsapp-groups';
+import { useSyncStatus } from '@/hooks/use-sync-status';
 import { useActiveSession } from '@/stores/active-session.store';
 
 export const Route = createFileRoute('/whatsapp/groups/')({
@@ -71,11 +72,8 @@ function WhatsappGroupsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<GroupFilterType>('all');
 
-  // Sync dialog state
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
-  const [syncResult, setSyncResult] = useState<SyncResult | undefined>();
-  const [syncError, setSyncError] = useState<Error | null>(null);
+  // Auto-sync status tracking
+  const syncStatus = useSyncStatus(activeSession?.id);
 
   // Data fetching
   const {
@@ -91,7 +89,6 @@ function WhatsappGroupsPage() {
   });
 
   // Mutations
-  const syncGroups = useSyncGroups();
   const invalidateGroups = useInvalidateGroups();
 
   // Fetch filter counts
@@ -121,64 +118,6 @@ function WhatsappGroupsPage() {
     localStorage.setItem('groups-view-mode', mode);
   };
 
-  // Sync handler
-  const handleSync = useCallback(async () => {
-    if (!activeSession) {
-      toast.error('No session selected');
-      return;
-    }
-
-    setSyncDialogOpen(true);
-    setSyncStatus('syncing');
-    setSyncResult(undefined);
-    setSyncError(null);
-
-    try {
-      const result = await syncGroups.mutateAsync(activeSession.id);
-      setSyncResult({ synced: result.synced, errors: result.errors });
-      setSyncStatus('success');
-
-      if (result.errors.length > 0) {
-        toast.warning('Groups synced with warnings', {
-          description: `${result.synced} groups synced, ${result.errors.length} warnings`,
-        });
-      } else {
-        toast.success('Groups synced successfully', {
-          description: `${result.synced} groups synced`,
-        });
-      }
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error('Unknown error');
-      setSyncError(err);
-      setSyncStatus('error');
-      toast.error('Failed to sync groups', {
-        description: err.message,
-      });
-    }
-  }, [activeSession, syncGroups]);
-
-  const handleRetrySync = useCallback(() => {
-    handleSync();
-  }, [handleSync]);
-
-  const handleQuickSync = useCallback(async () => {
-    if (!activeSession) {
-      toast.error('No session selected');
-      return;
-    }
-
-    try {
-      const result = await syncGroups.mutateAsync(activeSession.id);
-      toast.success('Groups synced successfully', {
-        description: `${result.synced} groups synced`,
-      });
-    } catch (error) {
-      toast.error('Failed to sync groups', {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }, [activeSession, syncGroups]);
-
   const handleGroupSelect = (groupId: string) => {
     navigate({ to: '/whatsapp/groups/$groupId', params: { groupId } });
   };
@@ -199,12 +138,8 @@ function WhatsappGroupsPage() {
         toast.success('JID copied to clipboard');
         break;
       case 'refresh':
-        try {
-          await syncGroups.mutateAsync(group.sessionId);
-          toast.success('Group refreshed');
-        } catch {
-          toast.error('Failed to refresh group');
-        }
+        invalidateGroups();
+        toast.success('Refreshing groups...');
         break;
     }
   };
@@ -226,16 +161,18 @@ function WhatsappGroupsPage() {
 
   return (
     <div className="p-6">
-      {/* Sync Groups Dialog */}
-      <SyncGroupsDialog
-        open={syncDialogOpen}
-        onOpenChange={setSyncDialogOpen}
-        status={syncStatus}
-        result={syncResult}
-        error={syncError}
-        onRetry={handleRetrySync}
-        sessionName={activeSession.name}
-      />
+      {/* Sync Progress Indicator - shows during auto-sync */}
+      {syncStatus.status !== 'idle' && (
+        <div className="mb-4">
+          <SyncProgressIndicator
+            status={syncStatus.status}
+            progress={syncStatus.progress}
+            error={syncStatus.error}
+            groupsSynced={syncStatus.groupsSynced}
+            messagesProcessed={syncStatus.messagesProcessed}
+          />
+        </div>
+      )}
 
       {/* Header */}
       <div className="mb-6">
@@ -246,9 +183,20 @@ function WhatsappGroupsPage() {
               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-500">
                 {activeSession.name}
               </span>
+              {/* Compact sync indicator in header */}
+              <SyncProgressIndicator
+                status={syncStatus.status}
+                progress={syncStatus.progress}
+                error={syncStatus.error}
+                groupsSynced={syncStatus.groupsSynced}
+                messagesProcessed={syncStatus.messagesProcessed}
+                compact
+              />
             </div>
             <p className="text-muted-foreground text-xs">
               {filterCounts.all} groups in this session
+              {syncStatus.status === 'idle' &&
+                ' • Groups sync automatically on connect'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -275,20 +223,6 @@ function WhatsappGroupsPage() {
               </TooltipTrigger>
               <TooltipContent>Refresh groups</TooltipContent>
             </Tooltip>
-            <Button
-              size="sm"
-              onClick={handleQuickSync}
-              disabled={syncGroups.isPending}
-              className="bg-emerald-500 hover:bg-emerald-600"
-            >
-              <RefreshCw
-                className={cn(
-                  'mr-2 h-3.5 w-3.5',
-                  syncGroups.isPending && 'animate-spin',
-                )}
-              />
-              {syncGroups.isPending ? 'Syncing...' : 'Sync'}
-            </Button>
           </div>
         </div>
       </div>
@@ -319,8 +253,7 @@ function WhatsappGroupsPage() {
       ) : hasNoGroups ? (
         <GroupsEmptyState
           variant="no-groups"
-          onSync={handleSync}
-          isSyncing={syncGroups.isPending}
+          isSyncing={syncStatus.status === 'syncing'}
         />
       ) : hasNoResults ? (
         <GroupsEmptyState
@@ -335,7 +268,7 @@ function WhatsappGroupsPage() {
               data={groups || []}
               onSelect={handleGroupSelect}
               onQuickAction={handleQuickAction}
-              isLoading={syncGroups.isPending}
+              isLoading={syncStatus.status === 'syncing'}
               pageSize={9}
             />
           ) : (

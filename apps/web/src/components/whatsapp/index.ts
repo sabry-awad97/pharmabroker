@@ -69,11 +69,6 @@ export {
   // Group detail header
   GroupDetailHeader,
   type GroupDetailHeaderProps,
-  // Sync groups dialog
-  SyncGroupsDialog,
-  type SyncGroupsDialogProps,
-  type SyncStatus,
-  type SyncResult,
   // Error state
   GroupErrorState,
   getErrorType,

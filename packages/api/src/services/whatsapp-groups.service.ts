@@ -694,6 +694,96 @@ class WhatsAppGroupsService {
       });
     }
   }
+
+  /**
+   * Internal sync groups method - bypasses user authentication
+   * Used by EventBridge for auto-sync on session connection
+   * @param sessionId The session ID to sync groups for
+   * @returns Sync result with count and errors
+   */
+  async syncGroupsInternal(sessionId: string): Promise<SyncGroupsResponse> {
+    const startTime = Date.now();
+
+    // Verify session exists (no user check)
+    const session = await prisma.whatsAppSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new ORPCError('SESSION_NOT_FOUND', {
+        message: 'Session not found',
+      });
+    }
+
+    // Check if session is connected
+    if (session.status !== 'connected') {
+      throw new ORPCError('SESSION_NOT_CONNECTED', {
+        message: 'Session must be connected to sync groups',
+      });
+    }
+
+    try {
+      // Call Go service to sync groups
+      const baseUrl = env.WHATSAPP_SERVICE_URL.replace(/\/$/, '');
+      const response = await fetch(
+        `${baseUrl}/api/sessions/${sessionId}/groups/sync`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+
+      const json = (await response.json()) as {
+        success: boolean;
+        data?: {
+          groups: GoGroupData[];
+          synced: number;
+          errors: string[];
+        };
+        error?: { code: string; message: string };
+      };
+
+      if (!json.success) {
+        throw new ORPCError(json.error?.code || 'SYNC_FAILED', {
+          message: json.error?.message || 'Failed to sync groups',
+        });
+      }
+
+      const groups = json.data?.groups ?? [];
+      const errors: string[] = [...(json.data?.errors ?? [])];
+
+      // Process groups in batches with parallel execution
+      const groupBatches = chunkArray(groups, SYNC_CONFIG.GROUP_BATCH_SIZE);
+      let totalSynced = 0;
+
+      for (const batch of groupBatches) {
+        const result = await this.syncGroupsBatch(sessionId, batch);
+        totalSynced += result.synced;
+        errors.push(...result.errors);
+      }
+
+      // Log performance warning if sync took too long
+      const duration = Date.now() - startTime;
+      if (duration > SYNC_CONFIG.PERFORMANCE_WARN_MS) {
+        console.warn(
+          `[WhatsApp Groups Sync] Performance warning: sync took ${duration}ms for ${groups.length} groups`,
+        );
+      }
+
+      return {
+        synced: totalSynced,
+        errors,
+      };
+    } catch (error) {
+      if (error instanceof ORPCError) {
+        throw error;
+      }
+      throw new ORPCError('SYNC_FAILED', {
+        message:
+          error instanceof Error ? error.message : 'Failed to sync groups',
+      });
+    }
+  }
 }
 
 // ============================================================================

@@ -11,9 +11,38 @@ import {
   getAIClient,
   type AIClient,
   type MessageInput,
-  type ProcessingResult,
 } from '@pharmabroker/ai';
+import {
+  messageExtractionSchema,
+  type MessageExtraction,
+} from '@pharmabroker/schemas/ai';
 import type { AIStatus } from '@pharmabroker/schemas/whatsapp';
+
+// ============================================================================
+// Prompts for Medication Extraction
+// ============================================================================
+
+const MEDICATION_SYSTEM_PROMPT = `You are an AI assistant specialized in extracting pharmaceutical information from WhatsApp messages in a pharmaceutical distribution context.
+
+Your task is to:
+1. Determine the message intent (offer = announcing available stock, request = asking for products)
+2. Assess urgency based on keywords like "ضروري", "فوري", "طوارئ", "urgent", "STAT", "emergency"
+3. Extract all medications mentioned with their details
+
+Rules:
+- Preserve medication names exactly as written (Arabic or English)
+- Concentration is dosage/strength (e.g., "150", "1mg", "واحد ونص")
+- Form is physical form (e.g., "امبول", "فايل", "اقراص", "tablets", "pens")
+- Expiry dates are in XX/XX or XX/XXXX format (e.g., "10/27", "٣/٢٦")
+- Do NOT translate medication names
+- Do NOT merge or split medications unless clearly indicated by "و" (and)`;
+
+const MEDICATION_PROMPT_TEMPLATE = `Analyze this WhatsApp message from a pharmaceutical group:
+{{context}}
+
+Message: "{{message}}"
+
+Extract the intent, urgency, and all medications with their details.`;
 
 // ============================================================================
 // Types
@@ -24,6 +53,7 @@ export interface ProcessMessageResult {
   model: string | null;
   error: string | null;
   extractedCount: number;
+  data?: MessageExtraction;
 }
 
 export interface BulkProcessResult {
@@ -108,10 +138,14 @@ class AIProcessorService {
         timestamp: message.messageTimestamp,
       };
 
-      // Process with AI
-      const result = await this.client.processMessage(input);
+      // Process with AI using medication extraction schema
+      const result = await this.client.processMessage(input, {
+        schema: messageExtractionSchema,
+        systemPrompt: MEDICATION_SYSTEM_PROMPT,
+        promptTemplate: MEDICATION_PROMPT_TEMPLATE,
+      });
 
-      if (result.status === 'failed') {
+      if (result.status === 'failed' || !result.data) {
         await this.handleProcessingFailure(
           messageId,
           result.error ?? 'Unknown error',
@@ -125,7 +159,11 @@ class AIProcessorService {
       }
 
       // Store extracted data
-      const extractedCount = await this.storeExtractions(messageId, result);
+      const extractedCount = await this.storeExtractionData(
+        messageId,
+        result.data,
+        result.model,
+      );
 
       // Update message status
       await prisma.whatsAppMessage.update({
@@ -143,6 +181,7 @@ class AIProcessorService {
         model: result.model,
         error: null,
         extractedCount,
+        data: result.data,
       };
     } catch (error) {
       const errorMessage =
@@ -316,25 +355,57 @@ class AIProcessorService {
     });
   }
 
-  private async storeExtractions(
+  /**
+   * Store extraction data in the database
+   * Creates separate records for:
+   * - message_extraction: intent, urgency, reason
+   * - medication: each medication with its details
+   */
+  private async storeExtractionData(
     messageId: string,
-    result: ProcessingResult,
+    data: MessageExtraction,
+    model: string,
   ): Promise<number> {
-    if (result.extractions.length === 0) return 0;
+    const extractedRecords = [];
 
-    const extractedData = result.extractions.map(extraction => ({
+    // Store the main extraction (intent, urgency, reason)
+    extractedRecords.push({
       messageId,
-      dataType: extraction.type,
-      data: JSON.parse(JSON.stringify(extraction.data)),
-      confidence: extraction.confidence,
-      model: result.model,
-    }));
-
-    await prisma.whatsAppExtractedData.createMany({
-      data: extractedData,
+      dataType: 'message_extraction',
+      data: {
+        intent: data.intent,
+        urgency: data.urgency,
+        reason: data.reason,
+        medicationCount: data.medications.length,
+      },
+      confidence: 1.0,
+      model,
     });
 
-    return extractedData.length;
+    // Store each medication as a separate record
+    for (const medication of data.medications) {
+      extractedRecords.push({
+        messageId,
+        dataType: 'medication',
+        data: {
+          name: medication.name,
+          concentration: medication.concentration,
+          form: medication.form,
+          expiry: medication.expiry,
+          reason: medication.reason,
+        },
+        confidence: medication.confidence,
+        model,
+      });
+    }
+
+    if (extractedRecords.length > 0) {
+      await prisma.whatsAppExtractedData.createMany({
+        data: extractedRecords,
+      });
+    }
+
+    return extractedRecords.length;
   }
 
   private async processQueuedMessages(
