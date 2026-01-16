@@ -89,12 +89,22 @@ const AUTO_SYNC_CONFIG = {
 export class WhatsAppWebSocketService {
   private currentClient: WebSocketClient | null = null;
   private apiKey: string;
+  private onConnectedCallback?: () => void | Promise<void>;
+  private hasRunInitialSync: boolean = false;
 
   /** Per-session sync state tracking */
   private syncStates: Map<string, SyncState> = new Map();
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+  }
+
+  /**
+   * Set a callback to be called when Go service connects and authenticates.
+   * Used for session sync on startup.
+   */
+  onConnected(callback: () => void | Promise<void>): void {
+    this.onConnectedCallback = callback;
   }
 
   /**
@@ -220,6 +230,22 @@ export class WhatsAppWebSocketService {
       };
       client.ws.send(JSON.stringify(response));
       console.log('[WhatsAppWS] Client authenticated successfully');
+
+      // Call onConnected callback for session sync (only on initial connection)
+      if (this.onConnectedCallback && !this.hasRunInitialSync) {
+        this.hasRunInitialSync = true;
+        console.log('[WhatsAppWS] Running initial session sync...');
+        try {
+          const result = this.onConnectedCallback();
+          if (result instanceof Promise) {
+            result.catch(err =>
+              console.error('[WhatsAppWS] onConnected callback error:', err),
+            );
+          }
+        } catch (err) {
+          console.error('[WhatsAppWS] onConnected callback error:', err);
+        }
+      }
     } else {
       const response: AuthResponse = {
         type: 'auth_response',

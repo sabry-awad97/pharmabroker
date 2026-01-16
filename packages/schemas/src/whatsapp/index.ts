@@ -159,6 +159,10 @@ export {
   participantsListResponse,
   syncGroupsResponse,
   filterCountsResponse,
+  asyncSyncStatus,
+  asyncSyncResponse,
+  syncStatusInput,
+  syncStatusResponse,
   type ParticipantRole,
   type GroupFilterType,
   type WhatsAppGroup,
@@ -173,6 +177,10 @@ export {
   type ParticipantsListResponse,
   type SyncGroupsResponse,
   type FilterCountsResponse,
+  type AsyncSyncStatus,
+  type AsyncSyncResponse,
+  type SyncStatusInput,
+  type SyncStatusResponse,
 } from './groups';
 
 // Messages schemas (stored messages with AI processing)

@@ -18,10 +18,15 @@ import {
   whatsAppGroupWithParticipants,
   filterCountsInput,
   filterCountsResponse,
+  asyncSyncResponse,
+  syncStatusInput,
+  syncStatusResponse,
 } from '@pharmabroker/schemas/whatsapp';
 
+import { ORPCError } from '@orpc/server';
 import { o, protectedProcedure } from '..';
 import { whatsappGroupsService } from '../services/whatsapp-groups.service';
+import { asyncGroupSyncService } from '../services/async-group-sync.service';
 
 // ============================================================================
 // WhatsApp Groups Router
@@ -124,5 +129,61 @@ export const whatsappGroupsRouter = o.router({
     .handler(async ({ input, context }) => {
       const userId = context.session!.user.id;
       return whatsappGroupsService.syncGroups(userId, input.sessionId);
+    }),
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Async Sync Operations
+  // Feature: websocket-architecture-refactor
+  // Requirements: 8.1, 8.2, 8.7
+  // ─────────────────────────────────────────────────────────────────────────
+
+  syncAsync: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/groups/sync-async',
+        tags: ['WhatsApp Groups'],
+        summary: 'Start async group sync',
+        description:
+          'Starts an asynchronous sync operation. Returns immediately with a syncId. Progress and completion events are sent via WebSocket.',
+      },
+    })
+    .input(syncGroupsInput)
+    .output(asyncSyncResponse)
+    .handler(async ({ input }) => {
+      return asyncGroupSyncService.startSync(input.sessionId);
+    }),
+
+  syncStatus: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'GET',
+        path: '/whatsapp/groups/sync-status/{syncId}',
+        tags: ['WhatsApp Groups'],
+        summary: 'Get sync status',
+        description: 'Returns the current status of an async sync operation.',
+      },
+    })
+    .input(syncStatusInput)
+    .output(syncStatusResponse)
+    .handler(async ({ input }) => {
+      const status = asyncGroupSyncService.getSyncStatus(input.syncId);
+      if (!status) {
+        throw new ORPCError('SYNC_NOT_FOUND', {
+          message: `Sync operation ${input.syncId} not found`,
+          code: 'NOT_FOUND',
+        });
+      }
+      return {
+        syncId: status.syncId,
+        sessionId: status.sessionId,
+        status: status.status,
+        startedAt: status.startedAt,
+        completedAt: status.completedAt ?? null,
+        progress: status.progress,
+        groupsProcessed: status.groupsProcessed,
+        totalGroups: status.totalGroups,
+        error: status.error ?? null,
+      };
     }),
 });

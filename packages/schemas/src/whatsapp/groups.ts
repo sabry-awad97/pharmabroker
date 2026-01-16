@@ -127,6 +127,39 @@ export const syncGroupsResponse = z.object({
   errors: z.array(z.string()),
 });
 
+/** Async sync status enum */
+export const asyncSyncStatus = z.enum([
+  'pending',
+  'in_progress',
+  'completed',
+  'failed',
+  'timeout',
+]);
+
+/** Async sync response (immediate return) */
+export const asyncSyncResponse = z.object({
+  syncId: z.string().uuid(),
+  status: z.literal('in_progress'),
+});
+
+/** Sync status query input */
+export const syncStatusInput = z.object({
+  syncId: z.string().uuid(),
+});
+
+/** Sync status response */
+export const syncStatusResponse = z.object({
+  syncId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  status: asyncSyncStatus,
+  startedAt: z.coerce.date(),
+  completedAt: z.coerce.date().nullable(),
+  progress: z.number().int().min(0).max(100),
+  groupsProcessed: z.number().int().min(0),
+  totalGroups: z.number().int().min(0),
+  error: z.string().nullable(),
+});
+
 /** Filter counts response */
 export const filterCountsResponse = z.object({
   all: z.number().int().min(0),
@@ -155,3 +188,7 @@ export type ParticipantsListResponse = z.infer<typeof participantsListResponse>;
 export type SyncGroupsResponse = z.infer<typeof syncGroupsResponse>;
 export type FilterCountsInput = z.infer<typeof filterCountsInput>;
 export type FilterCountsResponse = z.infer<typeof filterCountsResponse>;
+export type AsyncSyncStatus = z.infer<typeof asyncSyncStatus>;
+export type AsyncSyncResponse = z.infer<typeof asyncSyncResponse>;
+export type SyncStatusInput = z.infer<typeof syncStatusInput>;
+export type SyncStatusResponse = z.infer<typeof syncStatusResponse>;

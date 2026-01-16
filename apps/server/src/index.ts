@@ -5,7 +5,6 @@ import { RPCHandler } from '@orpc/server/fetch';
 import { ZodToJsonSchemaConverter } from '@orpc/zod/zod4';
 import { createContext } from '@pharmabroker/api/context';
 import { appRouter } from '@pharmabroker/api/routers/index';
-import { getEventBridge } from '@pharmabroker/api/services/event-bridge.service';
 import { getWhatsAppWebSocketService } from '@pharmabroker/api/services/whatsapp-ws.service';
 import { syncSessionsOnStartup } from '@pharmabroker/api/services/session-sync.service';
 import { requestFilterMiddleware } from '@pharmabroker/api/middleware/request-filter';
@@ -85,24 +84,6 @@ app.get('/', c => {
   return c.text('OK');
 });
 
-// Health check endpoint with event bridge status
-app.get('/health/event-bridge', c => {
-  try {
-    const bridge = getEventBridge();
-    const status = bridge.getStatus();
-    return c.json({
-      status:
-        status.connected && status.authenticated ? 'healthy' : 'unhealthy',
-      details: status,
-    });
-  } catch {
-    return c.json({
-      status: 'not_initialized',
-      details: { connected: false, authenticated: false, reconnectAttempts: 0 },
-    });
-  }
-});
-
 // Health check endpoint for Go service WebSocket connections
 app.get('/health/whatsapp-ws', c => {
   const wsService = getWhatsAppWebSocketService();
@@ -136,42 +117,13 @@ app.get(
   }),
 );
 
-// Initialize Event Bridge on server startup
-const eventBridge = getEventBridge({
-  wsUrl: env.WHATSAPP_WS_URL,
-  apiKey: env.WHATSAPP_API_KEY,
-  pingInterval: 30000, // 30 seconds
-  pongTimeout: 10000, // 10 seconds
-  reconnectDelay: 1000, // 1 second initial
-  maxReconnectDelay: 60000, // 60 seconds max
+// Initialize WhatsApp WebSocket service with session sync callback
+// Session sync runs when Go service connects and authenticates
+const wsService = getWhatsAppWebSocketService();
+wsService.onConnected(async () => {
+  console.log('[Server] Go service connected, running session sync...');
+  await syncSessionsOnStartup();
 });
-
-// Flag to ensure session sync only runs once on initial startup
-let hasRunInitialSync = false;
-
-// Set up onConnected callback - runs on both initial connect and reconnect
-eventBridge.onConnected(async () => {
-  console.log('[Server] Event Bridge connected');
-
-  // Only sync sessions on initial startup, not on every reconnect
-  if (!hasRunInitialSync) {
-    hasRunInitialSync = true;
-    console.log('[Server] Running initial session sync...');
-    await syncSessionsOnStartup();
-  }
-});
-
-// Start connection (will retry automatically on failure)
-eventBridge.connect().catch(error => {
-  console.error(
-    '[Server] Event Bridge initial connection failed, will retry:',
-    error,
-  );
-  // onConnected callback will be called when it eventually connects
-});
-
-// Initialize WhatsApp WebSocket service
-getWhatsAppWebSocketService();
 console.log('[Server] WhatsApp WebSocket service initialized');
 
 // Export for Bun with WebSocket support

@@ -2,37 +2,50 @@
  * Session Sync Service
  *
  * Handles session status synchronization on API server startup.
- * - Sessions with autoConnect=true: attempt reconnection
+ * - Sessions with autoConnect=true: attempt reconnection with retries
  * - Sessions with autoConnect=false that show 'connected': mark as 'disconnected'
  *
  * This ensures the UI reflects reality after container restarts, when the
  * Go service's in-memory client map is cleared but PostgreSQL still shows
  * sessions as "connected".
+ *
+ * Feature: websocket-architecture-refactor
+ * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
  */
 
 import { whatsappService } from './whatsapp.service';
+import { loadHealthConfig } from '../config/health.config';
+import { calculateBackoff } from '../utils/backoff';
 
 export interface SyncResult {
   totalSessions: number;
   reconnectAttempted: number;
+  reconnectSucceeded: number;
+  reconnectFailed: number;
   markedDisconnected: number;
-  errors: number;
+  errors: Array<{ sessionId: string; error: string }>;
 }
+
+// Re-export calculateBackoff for backward compatibility with tests
+export { calculateBackoff } from '../utils/backoff';
 
 /**
  * Synchronize session status on API server startup.
  * Should be called after Event Bridge connects successfully.
  *
  * For sessions with stale status ('connected' or 'connecting'):
- * - autoConnect=true: attempt reconnection via Go service
+ * - autoConnect=true: attempt reconnection via Go service with retries
  * - autoConnect=false: update status to 'disconnected'
  */
 export async function syncSessionsOnStartup(): Promise<SyncResult> {
+  const config = loadHealthConfig();
   const result: SyncResult = {
     totalSessions: 0,
     reconnectAttempted: 0,
+    reconnectSucceeded: 0,
+    reconnectFailed: 0,
     markedDisconnected: 0,
-    errors: 0,
+    errors: [],
   };
 
   // Query sessions with stale status
@@ -51,8 +64,13 @@ export async function syncSessionsOnStartup(): Promise<SyncResult> {
   // Process each session
   for (const session of sessions) {
     if (session.autoConnect) {
-      // Attempt reconnection for auto-connect sessions
-      await processAutoConnectSession(session, result);
+      // Attempt reconnection for auto-connect sessions with retries
+      await processAutoConnectSession(
+        session,
+        result,
+        config.SYNC_MAX_RETRIES,
+        config.SYNC_RETRY_DELAY_MS,
+      );
     } else {
       // Mark non-auto-connect sessions as disconnected
       await processNonAutoConnectSession(session, result);
@@ -60,54 +78,81 @@ export async function syncSessionsOnStartup(): Promise<SyncResult> {
   }
 
   console.log(
-    `[SessionSync] Sync complete: ${result.reconnectAttempted} reconnect attempted, ` +
-      `${result.markedDisconnected} marked disconnected, ${result.errors} errors`,
+    `[SessionSync] Sync complete: ${result.reconnectSucceeded} reconnect succeeded, ` +
+      `${result.reconnectFailed} reconnect failed, ` +
+      `${result.markedDisconnected} marked disconnected, ${result.errors.length} errors`,
   );
 
   return result;
 }
 
 /**
- * Process a session with autoConnect=true by attempting reconnection.
+ * Process a session with autoConnect=true by attempting reconnection with retries.
+ * Implements exponential backoff between retry attempts.
  */
 async function processAutoConnectSession(
   session: { id: string; name: string; jid: string | null },
   result: SyncResult,
+  maxRetries: number,
+  initialDelayMs: number,
 ): Promise<void> {
-  try {
-    console.log(
-      `[SessionSync] Attempting reconnection for session ${session.id} (${session.name})`,
-    );
+  const maxDelayMs = 30_000; // Cap at 30 seconds
+  let lastError: Error | undefined;
 
-    await whatsappService.reconnectSessionInternal(session.id);
-    result.reconnectAttempted++;
-
-    console.log(
-      `[SessionSync] Reconnection initiated for session ${session.id}`,
-    );
-  } catch (error) {
-    // On reconnection failure, mark as disconnected
-    console.error(
-      `[SessionSync] Reconnection failed for session ${session.id}:`,
-      error,
-    );
-
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      await whatsappService.updateSessionStatusDirect(
-        session.id,
-        'disconnected',
-      );
-      result.markedDisconnected++;
       console.log(
-        `[SessionSync] Marked session ${session.id} as disconnected after reconnection failure`,
+        `[SessionSync] Attempting reconnection for session ${session.id} (${session.name}) - attempt ${attempt + 1}/${maxRetries + 1}`,
       );
-    } catch (updateError) {
+
+      await whatsappService.reconnectSessionInternal(session.id);
+      result.reconnectAttempted++;
+      result.reconnectSucceeded++;
+
+      console.log(
+        `[SessionSync] Reconnection initiated for session ${session.id}`,
+      );
+      return; // Success - exit retry loop
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
       console.error(
-        `[SessionSync] Failed to update status for session ${session.id}:`,
-        updateError,
+        `[SessionSync] Reconnection attempt ${attempt + 1} failed for session ${session.id}:`,
+        lastError.message,
       );
-      result.errors++;
+
+      // If we have more retries, wait with exponential backoff
+      if (attempt < maxRetries) {
+        const delay = calculateBackoff(attempt, initialDelayMs, maxDelayMs);
+        console.log(
+          `[SessionSync] Retrying session ${session.id} in ${delay}ms...`,
+        );
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
+  }
+
+  // All retries exhausted - mark as disconnected
+  result.reconnectAttempted++;
+  result.reconnectFailed++;
+
+  console.error(
+    `[SessionSync] All ${maxRetries + 1} reconnection attempts failed for session ${session.id}`,
+  );
+
+  try {
+    await whatsappService.updateSessionStatusDirect(session.id, 'disconnected');
+    result.markedDisconnected++;
+    console.log(
+      `[SessionSync] Marked session ${session.id} as disconnected after all retries failed`,
+    );
+  } catch (updateError) {
+    const errorMsg =
+      updateError instanceof Error ? updateError.message : String(updateError);
+    console.error(
+      `[SessionSync] Failed to update status for session ${session.id}:`,
+      errorMsg,
+    );
+    result.errors.push({ sessionId: session.id, error: errorMsg });
   }
 }
 
@@ -128,11 +173,12 @@ async function processNonAutoConnectSession(
 
     console.log(`[SessionSync] Session ${session.id} marked as disconnected`);
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(
       `[SessionSync] Failed to update status for session ${session.id}:`,
-      error,
+      errorMsg,
     );
-    result.errors++;
+    result.errors.push({ sessionId: session.id, error: errorMsg });
   }
 }
 
@@ -147,8 +193,10 @@ export async function markAllSessionsDisconnected(): Promise<SyncResult> {
   const result: SyncResult = {
     totalSessions: 0,
     reconnectAttempted: 0,
+    reconnectSucceeded: 0,
+    reconnectFailed: 0,
     markedDisconnected: 0,
-    errors: 0,
+    errors: [],
   };
 
   try {
@@ -177,16 +225,17 @@ export async function markAllSessionsDisconnected(): Promise<SyncResult> {
           `[SessionSync] Marked session ${session.id} (${session.name}) as disconnected`,
         );
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(
           `[SessionSync] Failed to update status for session ${session.id}:`,
-          error,
+          errorMsg,
         );
-        result.errors++;
+        result.errors.push({ sessionId: session.id, error: errorMsg });
       }
     }
 
     console.log(
-      `[SessionSync] Completed: ${result.markedDisconnected} marked disconnected, ${result.errors} errors`,
+      `[SessionSync] Completed: ${result.markedDisconnected} marked disconnected, ${result.errors.length} errors`,
     );
   } catch (error) {
     console.error('[SessionSync] Failed to query sessions:', error);

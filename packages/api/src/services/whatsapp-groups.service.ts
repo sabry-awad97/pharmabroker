@@ -697,7 +697,7 @@ class WhatsAppGroupsService {
 
   /**
    * Internal sync groups method - bypasses user authentication
-   * Used by EventBridge for auto-sync on session connection
+   * Used by WhatsAppWebSocketService for auto-sync on session connection
    * @param sessionId The session ID to sync groups for
    * @returns Sync result with count and errors
    */

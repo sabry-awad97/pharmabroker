@@ -277,6 +277,82 @@ Features:
 - **Write Loop**: Event publishing
 - **Reconnect Loop**: Automatic reconnection
 
+## WebSocket Architecture
+
+### Single Connection Model
+
+The Go service maintains a single WebSocket connection to the API server for event propagation. This design:
+
+- **Simplifies architecture**: One connection point for all events
+- **Reduces resource usage**: No duplicate connections
+- **Centralizes authentication**: Single API key validation
+
+### Connection Flow
+
+```
+Go Service                          API Server
+    │                                    │
+    │──── WebSocket Connect ────────────>│ /ws/whatsapp
+    │                                    │
+    │──── Auth {api_key} ───────────────>│
+    │<─── Auth Response {success} ───────│
+    │                                    │
+    │──── Events (ongoing) ─────────────>│
+    │<─── Pong (response to ping) ───────│
+    │                                    │
+```
+
+### Ping/Pong Configuration
+
+The Go service is the **sole initiator** of ping messages:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `PING_INTERVAL` | 30 seconds | How often Go sends ping |
+| `PONG_TIMEOUT` | 10 seconds | Max wait for pong response |
+| `RECONNECT_DELAY` | 5 seconds | Initial reconnect delay |
+| `MAX_RECONNECT_DELAY` | 10 minutes | Maximum reconnect delay |
+
+**Important**: The API server only responds to pings with pongs. It does NOT initiate pings.
+
+### Reconnection Strategy
+
+On connection loss, the Go service uses exponential backoff:
+
+```
+Attempt 1: 5 seconds
+Attempt 2: 10 seconds
+Attempt 3: 20 seconds
+Attempt 4: 40 seconds
+...
+Maximum: 10 minutes
+```
+
+Formula: `min(initialDelay * 2^attempts, maxDelay)`
+
+### Event Types
+
+Events sent from Go to API server:
+
+| Event Type | Description |
+|------------|-------------|
+| `connection.connecting` | Session connecting to WhatsApp |
+| `connection.connected` | Session connected |
+| `connection.disconnected` | Session disconnected |
+| `connection.failed` | Connection attempt failed |
+| `connection.logged_out` | User logged out |
+| `session.authenticated` | QR code scanned, session authenticated |
+| `message.received` | New message received |
+| `message.sent` | Message sent successfully |
+| `message.delivered` | Message delivered |
+| `message.read` | Message read |
+| `message.failed` | Message send failed |
+| `qr.code` | New QR code generated |
+| `sync.started` | Group sync started |
+| `sync.progress` | Group sync progress |
+| `sync.completed` | Group sync completed |
+| `sync.failed` | Group sync failed |
+
 ## Error Handling Strategy
 
 ### Layer-Specific Handling
