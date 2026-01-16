@@ -15,6 +15,10 @@ import {
 } from '@pharmabroker/schemas/whatsapp';
 import { whatsappEventPublisher } from '../routers/whatsapp.router';
 import { whatsappService } from './whatsapp.service';
+import {
+  whatsappMessagesService,
+  type ParsedMessageEvent,
+} from './whatsapp-messages.service';
 import { HEALTH_CONFIG } from '../config/health.config';
 
 // ============================================================================
@@ -308,10 +312,98 @@ export class EventBridgeService {
             'disconnected',
           );
           break;
+
+        case 'message.received':
+          // Store incoming messages
+          await this.handleMessageReceived(event.session_id, event.data);
+          break;
       }
     } catch (error) {
       console.error('[EventBridge] Failed to sync session status:', error);
       // Continue processing events even if status sync fails
+    }
+  }
+
+  /**
+   * Handle message.received events - store messages in database
+   */
+  private async handleMessageReceived(
+    sessionId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      // Validate required fields
+      const messageId = data.messageId as string | undefined;
+      const chatJid = data.chatJid as string | undefined;
+      const senderJid = data.senderJid as string | undefined;
+      const messageType = data.messageType as string | undefined;
+      const messageTimestamp = data.messageTimestamp as string | undefined;
+      const source = data.source as 'realtime' | 'history' | undefined;
+
+      if (
+        !messageId ||
+        !chatJid ||
+        !senderJid ||
+        !messageType ||
+        !messageTimestamp
+      ) {
+        console.warn(
+          '[EventBridge] Invalid message event - missing required fields:',
+          {
+            hasMessageId: !!messageId,
+            hasChatJid: !!chatJid,
+            hasSenderJid: !!senderJid,
+            hasMessageType: !!messageType,
+            hasTimestamp: !!messageTimestamp,
+          },
+        );
+        return;
+      }
+
+      // Only process group messages (JIDs ending with @g.us)
+      if (!chatJid.endsWith('@g.us')) {
+        // Skip non-group messages silently
+        return;
+      }
+
+      // Build parsed message event
+      const parsedEvent: ParsedMessageEvent = {
+        messageId,
+        sessionId,
+        chatJid,
+        senderJid,
+        senderPushName: data.senderPushName as string | undefined,
+        messageType,
+        text: data.text as string | null | undefined,
+        caption: data.caption as string | null | undefined,
+        filename: data.filename as string | null | undefined,
+        mimetype: data.mimetype as string | null | undefined,
+        mediaUrl: data.mediaUrl as string | null | undefined,
+        mediaKey: data.mediaKey as number[] | null | undefined,
+        mediaSha256: data.mediaSha256 as number[] | null | undefined,
+        mediaSize: data.mediaSize as number | null | undefined,
+        latitude: data.latitude as number | null | undefined,
+        longitude: data.longitude as number | null | undefined,
+        address: data.address as string | null | undefined,
+        vcard: data.vcard as string | null | undefined,
+        pollName: data.pollName as string | null | undefined,
+        pollOptions: data.pollOptions as string[] | null | undefined,
+        reactionEmoji: data.reactionEmoji as string | null | undefined,
+        reactionMessageId: data.reactionMessageId as string | null | undefined,
+        isFromMe: (data.isFromMe as boolean) ?? false,
+        isForwarded: (data.isForwarded as boolean) ?? false,
+        isViewOnce: (data.isViewOnce as boolean) ?? false,
+        isBroadcast: (data.isBroadcast as boolean) ?? false,
+        quotedMessageId: data.quotedMessageId as string | null | undefined,
+        messageTimestamp,
+        source: source ?? 'realtime',
+        rawPayload: data.rawPayload,
+      };
+
+      await whatsappMessagesService.storeMessage(parsedEvent);
+    } catch (error) {
+      console.error('[EventBridge] Failed to store message:', error);
+      // Don't throw - continue processing other events
     }
   }
 

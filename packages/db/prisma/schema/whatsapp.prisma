@@ -208,8 +208,8 @@ model WhatsAppExtractedData {
     messageId String          @map("message_id")
     message   WhatsAppMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-    // Extraction type (extensible for different use cases)
-    dataType WhatsAppExtractedDataType @map("data_type")
+    // Extraction type (flexible string for different use cases)
+    dataType String @map("data_type")
 
     // Structured data (flexible JSON for different extraction types)
     data Json // The extracted structured data
@@ -275,18 +275,4 @@ enum WhatsAppAIStatus {
     skipped    // Skipped (e.g., media-only, system message)
 
     @@map("whatsapp_ai_status")
-}
-
-enum WhatsAppExtractedDataType {
-    intent       // User intent classification
-    entities     // Named entities (names, dates, products, etc.)
-    sentiment    // Sentiment analysis
-    order        // Order/purchase details
-    appointment  // Appointment/scheduling info
-    inquiry      // Product/service inquiry
-    complaint    // Complaint details
-    summary      // Message summary
-    custom       // Custom extraction type
-
-    @@map("whatsapp_extracted_data_type")
 }

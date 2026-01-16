@@ -15,6 +15,7 @@
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
+    "@pharmabroker/ai": "workspace:*",
     "@pharmabroker/auth": "workspace:*",
     "@pharmabroker/db": "workspace:*",
     "@pharmabroker/env": "workspace:*",

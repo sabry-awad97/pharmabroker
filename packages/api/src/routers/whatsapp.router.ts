@@ -10,6 +10,7 @@ import { o, protectedProcedure } from '..';
 import { eventIterator, EventPublisher } from '@orpc/server';
 import { whatsappService } from '../services/whatsapp.service';
 import { whatsappGroupsRouter } from './whatsapp-groups.router';
+import { whatsappMessagesRouter } from './whatsapp-messages.router';
 import {
   // Session schemas
   session,
@@ -350,6 +351,12 @@ export const whatsappRouter = o.router({
   // ─────────────────────────────────────────────────────────────────────────
 
   groups: whatsappGroupsRouter,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Messages Management (Sub-router)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  messages: whatsappMessagesRouter,
 });
 
 // ============================================================================

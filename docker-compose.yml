@@ -54,8 +54,18 @@ services:
       # WebSocket URL for EventBridge (API → Go service)
       WHATSAPP_WS_URL: ws://whatsapp:8080/ws/events
       WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-dev-api-key}
+      # AI Provider configuration
+      AI_PROVIDER: docker
     ports:
       - '3000:3000'
+    # Bind AI models to this service (Docker Model Runner injects env vars)
+    models:
+      qwen:
+        endpoint_var: DOCKER_MODEL_BASE_URL
+        model_var: DOCKER_MODEL_NAME
+      embedding:
+        endpoint_var: EMBEDDING_MODEL_URL
+        model_var: EMBEDDING_MODEL_NAME
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,8 +102,18 @@ services:
       # WebSocket URL for EventBridge (API → Go service)
       WHATSAPP_WS_URL: ws://whatsapp:8080/ws/events
       WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-dev-api-key}
+      # AI Provider configuration
+      AI_PROVIDER: docker
     ports:
       - '3000:3000'
+    # Bind AI models to this service (Docker Model Runner injects env vars)
+    models:
+      qwen:
+        endpoint_var: DOCKER_MODEL_BASE_URL
+        model_var: DOCKER_MODEL_NAME
+      embedding:
+        endpoint_var: EMBEDDING_MODEL_URL
+        model_var: EMBEDDING_MODEL_NAME
     depends_on:
       postgres:
         condition: service_healthy

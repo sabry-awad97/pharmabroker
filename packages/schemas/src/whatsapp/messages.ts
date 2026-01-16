@@ -49,18 +49,8 @@ export const aiStatus = z.enum([
   'skipped',
 ]);
 
-/** Extracted data type enum matching Prisma WhatsAppExtractedDataType */
-export const extractedDataType = z.enum([
-  'intent',
-  'entities',
-  'sentiment',
-  'order',
-  'appointment',
-  'inquiry',
-  'complaint',
-  'summary',
-  'custom',
-]);
+/** Extracted data type - flexible string for different extraction types */
+export const extractedDataType = z.string();
 
 // ============================================================================
 // Output Schemas
