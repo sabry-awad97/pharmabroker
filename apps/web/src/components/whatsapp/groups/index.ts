@@ -101,3 +101,15 @@ export {
   GroupCardErrorBoundary,
   withGroupCardErrorBoundary,
 } from './group-card-error-boundary';
+
+// Data table component
+export { GroupsDataTable } from './groups-data-table';
+
+// Grid view component
+export { GroupsGridView } from './groups-grid-view';
+
+// View toggle component
+export { GroupsViewToggle, type ViewMode } from './groups-view-toggle';
+
+// Faceted filter component
+export { GroupsFacetedFilter } from './groups-faceted-filter';

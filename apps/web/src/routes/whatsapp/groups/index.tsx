@@ -1,12 +1,12 @@
 /**
  * WhatsApp Groups List Page
  *
- * Displays groups for the currently active session.
- * Groups are now session-scoped based on the global session picker.
+ * Displays groups for the currently active session with
+ * grid/table view toggle and pagination.
  */
 
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { MessageSquare, RefreshCw, Users } from 'lucide-react';
+import { RefreshCw, Search } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
@@ -18,17 +18,21 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  GroupCard,
   SyncGroupsDialog,
   GroupErrorState,
   getErrorType,
+  GroupsEmptyState,
+  GroupsSkeleton,
+  GroupsDataTable,
+  GroupsGridView,
+  GroupsViewToggle,
+  GroupsFacetedFilter,
   type GroupQuickAction,
   type SyncStatus,
   type SyncResult,
+  type ViewMode,
 } from '@/components/whatsapp/groups';
-import { GroupsEmptyState } from '@/components/whatsapp/groups/groups-empty-state';
-import { GroupsSkeleton } from '@/components/whatsapp/groups/groups-skeleton';
-import { GroupCardErrorBoundary } from '@/components/whatsapp/groups/group-card-error-boundary';
+import { SessionRequiredState } from '@/components/session-picker';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
 import {
@@ -39,7 +43,6 @@ import {
   type GroupFilterType,
 } from '@/hooks/whatsapp-groups';
 import { useActiveSession } from '@/stores/active-session.store';
-import { SessionRequiredState } from '@/components/session-picker/session-required-state';
 
 export const Route = createFileRoute('/whatsapp/groups/')({
   component: WhatsappGroupsPage,
@@ -56,7 +59,15 @@ function WhatsappGroupsPage() {
   const navigate = useNavigate();
   const activeSession = useActiveSession();
 
-  // Local filter state (search and filter type only - session comes from global state)
+  // View mode state (persisted in localStorage)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('groups-view-mode') as ViewMode) || 'grid';
+    }
+    return 'grid';
+  });
+
+  // Local filter state
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<GroupFilterType>('all');
 
@@ -66,7 +77,7 @@ function WhatsappGroupsPage() {
   const [syncResult, setSyncResult] = useState<SyncResult | undefined>();
   const [syncError, setSyncError] = useState<Error | null>(null);
 
-  // Data fetching - always scoped to active session
+  // Data fetching
   const {
     data: groups,
     isLoading: isLoadingGroups,
@@ -83,7 +94,7 @@ function WhatsappGroupsPage() {
   const syncGroups = useSyncGroups();
   const invalidateGroups = useInvalidateGroups();
 
-  // Fetch filter counts for active session
+  // Fetch filter counts
   const { data: filterCountsData } = useGroupFilterCounts({
     sessionId: activeSession?.id,
     enabled: !!activeSession,
@@ -103,6 +114,12 @@ function WhatsappGroupsPage() {
   const hasGroups = groups && groups.length > 0;
   const hasNoResults = !hasGroups && hasFiltersApplied;
   const hasNoGroups = !hasGroups && !hasFiltersApplied;
+
+  // Handle view mode change
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem('groups-view-mode', mode);
+  };
 
   // Sync handler
   const handleSync = useCallback(async () => {
@@ -192,6 +209,11 @@ function WhatsappGroupsPage() {
     }
   };
 
+  const handleCopyJid = async (jid: string) => {
+    await navigator.clipboard.writeText(jid);
+    toast.success('JID copied to clipboard');
+  };
+
   const handleClearFilters = () => {
     setSearch('');
     setFilter('all');
@@ -215,7 +237,7 @@ function WhatsappGroupsPage() {
         sessionName={activeSession.name}
       />
 
-      {/* Header with session context */}
+      {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
@@ -230,6 +252,10 @@ function WhatsappGroupsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <GroupsViewToggle
+              view={viewMode}
+              onViewChange={handleViewModeChange}
+            />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -253,7 +279,7 @@ function WhatsappGroupsPage() {
               size="sm"
               onClick={handleQuickSync}
               disabled={syncGroups.isPending}
-              aria-label="Sync groups from WhatsApp"
+              className="bg-emerald-500 hover:bg-emerald-600"
             >
               <RefreshCw
                 className={cn(
@@ -267,42 +293,20 @@ function WhatsappGroupsPage() {
         </div>
       </div>
 
-      {/* Simplified Filter Bar */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative max-w-sm min-w-[200px] flex-1">
-          <input
-            type="text"
-            placeholder="Search groups..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="border-border bg-background placeholder:text-muted-foreground h-9 w-full rounded-md border px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-          />
-        </div>
+      {/* Faceted Filter */}
+      <GroupsFacetedFilter
+        search={search}
+        filter={filter}
+        counts={filterCounts}
+        onSearchChange={setSearch}
+        onFilterChange={setFilter}
+        onClear={handleClearFilters}
+        className="mb-6"
+      />
 
-        {/* Filter Tabs */}
-        <div className="border-border flex items-center gap-1 rounded-lg border p-1">
-          {(['all', 'admin', 'archived', 'muted'] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                filter === f
-                  ? 'bg-emerald-500 text-white'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-              )}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-              <span className="ml-1.5 opacity-70">{filterCounts[f]}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Groups Grid */}
+      {/* Content */}
       {showSkeleton ? (
-        <GroupsSkeleton count={6} />
+        <GroupsSkeleton count={viewMode === 'grid' ? 6 : 5} />
       ) : groupsError ? (
         <GroupErrorState
           errorType={getErrorType(groupsError)}
@@ -326,23 +330,22 @@ function WhatsappGroupsPage() {
         />
       ) : (
         <LoadingOverlay isLoading={isRefetching}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {groups?.map(group => (
-              <GroupCardErrorBoundary
-                key={group.id}
-                groupId={group.id}
-                onRetry={invalidateGroups}
-              >
-                <GroupCard
-                  group={group}
-                  showSessionIndicator={false}
-                  onSelect={handleGroupSelect}
-                  onQuickAction={handleQuickAction}
-                  isLoading={syncGroups.isPending}
-                />
-              </GroupCardErrorBoundary>
-            ))}
-          </div>
+          {viewMode === 'grid' ? (
+            <GroupsGridView
+              data={groups || []}
+              onSelect={handleGroupSelect}
+              onQuickAction={handleQuickAction}
+              isLoading={syncGroups.isPending}
+              pageSize={9}
+            />
+          ) : (
+            <GroupsDataTable
+              data={groups || []}
+              onRowClick={group => handleGroupSelect(group.id)}
+              onCopyJid={handleCopyJid}
+              pageSize={10}
+            />
+          )}
         </LoadingOverlay>
       )}
     </div>

@@ -129,7 +129,7 @@ func (c *WhatsmeowClient) connectInternal(ctx context.Context, sessionID string)
 
 	// Register event handler
 	client.AddEventHandler(func(evt interface{}) {
-		c.handleEvent(sessionID, evt)
+		c.handleEvent(sessionID, client, evt)
 	})
 
 	// Connect with retry
@@ -361,7 +361,7 @@ func (c *WhatsmeowClient) GetQRChannel(ctx context.Context, sessionID string) (<
 
 	// Register event handler for this session
 	client.AddEventHandler(func(evt interface{}) {
-		c.handleEvent(sessionID, evt)
+		c.handleEvent(sessionID, client, evt)
 	})
 
 	// Start QR authentication in goroutine
@@ -562,7 +562,7 @@ func (c *WhatsmeowClient) AutoReconnect(ctx context.Context) map[string]error {
 
 		// Register event handler
 		client.AddEventHandler(func(evt interface{}) {
-			c.handleEvent(sessionID, evt)
+			c.handleEvent(sessionID, client, evt)
 		})
 
 		// Try to connect
@@ -639,13 +639,13 @@ func (c *WhatsmeowClient) getOrCreateDevice(ctx context.Context, sessionID strin
 }
 
 // handleEvent processes WhatsApp events and dispatches to handlers
-func (c *WhatsmeowClient) handleEvent(sessionID string, evt interface{}) {
+func (c *WhatsmeowClient) handleEvent(sessionID string, client *whatsmeow.Client, evt interface{}) {
 	var event *entity.Event
 	var err error
 
 	switch v := evt.(type) {
 	case *events.Message:
-		event, err = c.handleMessageEvent(sessionID, v)
+		event, err = c.handleMessageEvent(sessionID, client, v)
 	case *events.Connected:
 		event, err = entity.NewEventWithPayload(
 			generateEventID(),
@@ -673,6 +673,10 @@ func (c *WhatsmeowClient) handleEvent(sessionID string, evt interface{}) {
 		c.mu.Unlock()
 	case *events.Receipt:
 		event, err = c.handleReceiptEvent(sessionID, v)
+	case *events.HistorySync:
+		// Handle history sync to extract pushnames from synced messages
+		c.handleHistorySyncEvent(client, v)
+		return // Don't emit domain event for history sync
 	default:
 		// Ignore other events
 		return
@@ -694,7 +698,18 @@ func (c *WhatsmeowClient) handleEvent(sessionID string, evt interface{}) {
 }
 
 // handleMessageEvent converts a WhatsApp message event to a domain event
-func (c *WhatsmeowClient) handleMessageEvent(sessionID string, msg *events.Message) (*entity.Event, error) {
+// Also saves the sender's pushname to the contact store for future lookups
+func (c *WhatsmeowClient) handleMessageEvent(sessionID string, client *whatsmeow.Client, msg *events.Message) (*entity.Event, error) {
+	// Save pushname to contact store if available
+	if msg.Info.PushName != "" && client != nil && client.Store != nil && client.Store.Contacts != nil {
+		// Update contact with pushname (use background context since this is async)
+		ctx := context.Background()
+		_, _, err := client.Store.Contacts.PutPushName(ctx, msg.Info.Sender, msg.Info.PushName)
+		if err != nil {
+			c.logger.Warnf("Failed to save pushname for %s: %v", msg.Info.Sender.String(), err)
+		}
+	}
+
 	payload := map[string]interface{}{
 		"message_id": msg.Info.ID,
 		"from":       msg.Info.Sender.String(),
@@ -750,6 +765,68 @@ func (c *WhatsmeowClient) handleReceiptEvent(sessionID string, receipt *events.R
 		sessionID,
 		payload,
 	)
+}
+
+// handleHistorySyncEvent processes history sync events to extract and save pushnames
+// This is called during initial connection when WhatsApp syncs message history
+func (c *WhatsmeowClient) handleHistorySyncEvent(client *whatsmeow.Client, evt *events.HistorySync) {
+	if client == nil || client.Store == nil || client.Store.Contacts == nil {
+		return
+	}
+
+	ctx := context.Background()
+	savedCount := 0
+
+	// Process conversations from history sync
+	if evt.Data != nil && evt.Data.Conversations != nil {
+		for _, conv := range evt.Data.Conversations {
+			// Extract pushname from conversation metadata
+			if conv.Name != nil && *conv.Name != "" && conv.ID != nil {
+				// Parse JID from conversation ID
+				jid, err := types.ParseJID(*conv.ID)
+				if err == nil && !jid.IsEmpty() {
+					_, _, err := client.Store.Contacts.PutPushName(ctx, jid, *conv.Name)
+					if err == nil {
+						savedCount++
+					}
+				}
+			}
+
+			// Process messages in the conversation for pushnames
+			if conv.Messages != nil {
+				for _, msg := range conv.Messages {
+					if msg.Message != nil && msg.Message.Key != nil {
+						// Get sender JID and pushname from message
+						var senderJID types.JID
+						var pushName string
+
+						if msg.Message.Key.RemoteJID != nil {
+							jid, err := types.ParseJID(*msg.Message.Key.RemoteJID)
+							if err == nil {
+								senderJID = jid
+							}
+						}
+
+						if msg.Message.PushName != nil && *msg.Message.PushName != "" {
+							pushName = *msg.Message.PushName
+						}
+
+						// Save pushname if we have both JID and pushname
+						if !senderJID.IsEmpty() && pushName != "" && senderJID.Server == types.DefaultUserServer {
+							_, _, err := client.Store.Contacts.PutPushName(ctx, senderJID, pushName)
+							if err == nil {
+								savedCount++
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if savedCount > 0 {
+		c.logger.Infof("History sync: saved %d pushnames to contact store", savedCount)
+	}
 }
 
 // GetJoinedGroups fetches all groups the session is a member of from WhatsApp
@@ -836,9 +913,10 @@ func (c *WhatsmeowClient) GetJoinedGroups(ctx context.Context, sessionID string)
 				UpdatedAt: now,
 			}
 
-			// Set display name if available
-			if waParticipant.DisplayName != "" {
-				participant.DisplayName = &waParticipant.DisplayName
+			// Try to get display name from multiple sources
+			displayName := c.getParticipantDisplayName(ctx, client, waParticipant)
+			if displayName != "" {
+				participant.DisplayName = &displayName
 			}
 
 			participants = append(participants, participant)
@@ -877,4 +955,32 @@ func convertParticipantRole(p types.GroupParticipant) entity.ParticipantRole {
 		return entity.ParticipantRoleAdmin
 	}
 	return entity.ParticipantRoleMember
+}
+
+// getParticipantDisplayName tries to get the display name from multiple sources:
+// 1. GroupParticipant.DisplayName (from group metadata)
+// 2. Contact store (pushname from previous interactions)
+// 3. Returns empty string if not found
+func (c *WhatsmeowClient) getParticipantDisplayName(ctx context.Context, client *whatsmeow.Client, p types.GroupParticipant) string {
+	// First, check if DisplayName is set in the group participant data
+	if p.DisplayName != "" {
+		return p.DisplayName
+	}
+
+	// Try to get pushname from the contact store
+	if client.Store != nil && client.Store.Contacts != nil {
+		contact, err := client.Store.Contacts.GetContact(ctx, p.JID)
+		if err == nil && contact.PushName != "" {
+			return contact.PushName
+		}
+		// Also check FullName or BusinessName as fallbacks
+		if err == nil && contact.FullName != "" {
+			return contact.FullName
+		}
+		if err == nil && contact.BusinessName != "" {
+			return contact.BusinessName
+		}
+	}
+
+	return ""
 }

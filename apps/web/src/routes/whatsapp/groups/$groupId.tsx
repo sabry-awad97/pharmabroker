@@ -125,6 +125,7 @@ function WhatsappGroupDetailPage() {
             ownerJid={group.ownerJid}
             isLoading={false}
             showSearch
+            pageSize={8}
           />
         </div>
       </div>

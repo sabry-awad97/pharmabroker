@@ -7,7 +7,15 @@
  * Requirements: 1.5, 1.6, 6.4, 6.5, 7.1, 7.2
  */
 
-import { AlertTriangle, Copy, Eye, RefreshCw, Users } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  BellOff,
+  Copy,
+  Eye,
+  RefreshCw,
+  Users,
+} from 'lucide-react';
 
 import {
   Card,
@@ -89,9 +97,17 @@ export function GroupCard({
     <Card
       className={cn(
         'group relative cursor-pointer transition-all duration-200 hover:shadow-md hover:shadow-black/5',
-        'border-l-primary/50 hover:border-l-primary border-l-4',
+        'border-l-4',
+        // Border color based on status
+        group.isArchived
+          ? 'border-l-slate-400/50 hover:border-l-slate-400'
+          : group.isMuted
+            ? 'border-l-rose-400/50 hover:border-l-rose-400'
+            : 'border-l-emerald-500/50 hover:border-l-emerald-500',
         // Stale indicator styling (Requirements 6.5)
         isStale && 'border-l-amber-500/50 opacity-75 hover:border-l-amber-500',
+        // Archived/muted opacity
+        (group.isArchived || group.isMuted) && 'opacity-80',
         className,
       )}
       onClick={handleCardClick}
@@ -103,8 +119,22 @@ export function GroupCard({
           handleCardClick();
         }
       }}
-      aria-label={`${group.name} group with ${group.memberCount} members${isStale ? ', session disconnected' : ''}`}
+      aria-label={`${group.name} group with ${group.memberCount} members${isStale ? ', session disconnected' : ''}${group.isMuted ? ', muted' : ''}${group.isArchived ? ', archived' : ''}`}
     >
+      {/* Muted/Archived ribbon */}
+      {(group.isMuted || group.isArchived) && (
+        <div className="absolute top-3 -right-8 z-10 rotate-45">
+          <div
+            className={cn(
+              'px-8 py-0.5 text-[10px] font-semibold tracking-wider text-white uppercase shadow-sm',
+              group.isArchived ? 'bg-slate-500' : 'bg-rose-500',
+            )}
+          >
+            {group.isArchived ? 'Archived' : 'Muted'}
+          </div>
+        </div>
+      )}
+
       {/* Stale indicator banner (Requirements 6.5) */}
       {isStale && (
         <div
@@ -118,13 +148,40 @@ export function GroupCard({
 
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
-          <GroupAvatar
-            name={group.name}
-            avatarUrl={group.avatarUrl}
-            size="md"
-          />
+          {/* Avatar with status overlay */}
+          <div className="relative">
+            <GroupAvatar
+              name={group.name}
+              avatarUrl={group.avatarUrl}
+              size="md"
+              className={cn(
+                (group.isArchived || group.isMuted) && 'grayscale-30',
+              )}
+            />
+            {/* Muted/Archived icon overlay */}
+            {(group.isMuted || group.isArchived) && (
+              <div
+                className={cn(
+                  'border-background absolute -right-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border-2',
+                  group.isArchived ? 'bg-slate-500' : 'bg-rose-500',
+                )}
+              >
+                {group.isArchived ? (
+                  <Archive className="h-2.5 w-2.5 text-white" />
+                ) : (
+                  <BellOff className="h-2.5 w-2.5 text-white" />
+                )}
+              </div>
+            )}
+          </div>
           <div className="min-w-0 flex-1">
-            <CardTitle className="truncate text-base" data-testid="group-name">
+            <CardTitle
+              className={cn(
+                'truncate text-base',
+                (group.isArchived || group.isMuted) && 'text-muted-foreground',
+              )}
+              data-testid="group-name"
+            >
               {group.name}
             </CardTitle>
             <div className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-sm">
@@ -170,12 +227,31 @@ export function GroupCard({
 
       <CardFooter className="bg-muted/30 py-2.5">
         <div className="flex w-full items-center justify-between">
-          <span
-            className="text-muted-foreground text-xs"
-            data-testid="last-activity"
-          >
-            {formatRelativeTime(lastActivity)}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-muted-foreground text-xs"
+              data-testid="last-activity"
+            >
+              {formatRelativeTime(lastActivity)}
+            </span>
+            {/* Muted until indicator */}
+            {group.isMuted && group.mutedUntil && (
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge
+                    variant="secondary"
+                    className="h-5 gap-1 bg-rose-500/10 px-1.5 text-[10px] text-rose-500"
+                  >
+                    <BellOff className="h-2.5 w-2.5" />
+                    {formatMutedUntil(group.mutedUntil)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Muted until {new Date(group.mutedUntil).toLocaleString()}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
 
           {/* Quick Actions - visible on hover/focus */}
           <div
@@ -235,6 +311,26 @@ export function GroupCard({
       </CardFooter>
     </Card>
   );
+}
+
+/**
+ * Format muted until time for display
+ */
+function formatMutedUntil(date: Date | string): string {
+  const mutedUntil = new Date(date);
+  const now = new Date();
+  const diffMs = mutedUntil.getTime() - now.getTime();
+
+  if (diffMs <= 0) return 'Expired';
+
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffHours < 1) return '<1h';
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays < 7) return `${diffDays}d`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 7)}w`;
+  return 'Forever';
 }
 
 /**
