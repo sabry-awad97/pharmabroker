@@ -13,6 +13,7 @@
 import pc from 'picocolors';
 import ora from 'ora';
 import prompts from 'prompts';
+import boxen from 'boxen';
 import {
   createAIClient,
   type AIProviderName,
@@ -26,6 +27,20 @@ import {
 import { medicationSystemPrompt, medicationPromptTemplate } from './prompts';
 import { env } from './env';
 import testMessages from './test-messages.json';
+
+// ============================================================================
+// Totals Tracking
+// ============================================================================
+
+interface ExtractionTotals {
+  messagesProcessed: number;
+  messagesSucceeded: number;
+  messagesFailed: number;
+  totalMedications: number;
+  totalLatencyMs: number;
+  totalInputTokens: number;
+  totalChunks: number;
+}
 
 // Create env config
 const envConfig: AIEnvConfig = {
@@ -52,22 +67,64 @@ process.on('SIGINT', () => {
 // ============================================================================
 
 function displayDebugInfo(debug: ProcessingDebugInfo) {
-  console.log(pc.dim('┌─ Debug Info ─────────────────────────────'));
-  console.log(
-    pc.dim(
-      `│ Message: ${debug.messageChars} chars, ${debug.messageLines} lines, ${debug.messageTokens} tokens`,
-    ),
-  );
-  console.log(pc.dim(`│ Prompt: ${debug.promptTokens} tokens`));
-  console.log(pc.dim(`│ Total Input: ${debug.totalInputTokens} tokens`));
+  const lines = [
+    `${pc.bold('Message:')} ${debug.messageChars} chars, ${debug.messageLines} lines, ${debug.messageTokens} tokens`,
+    `${pc.bold('Prompt:')} ${debug.promptTokens} tokens`,
+    `${pc.bold('Total Input:')} ${debug.totalInputTokens} tokens`,
+    `${pc.bold('Output:')} ${debug.outputTokens ?? 0} tokens`,
+  ];
+
   if (debug.chunksUsed > 1) {
-    console.log(
-      pc.dim(
-        `│ Chunks: ${debug.chunksUsed} (~${debug.tokensPerChunk} tokens/chunk)`,
-      ),
+    lines.push(
+      `${pc.bold('Chunks:')} ${debug.chunksUsed} (~${debug.tokensPerChunk} tokens/chunk)`,
     );
   }
-  console.log(pc.dim('└──────────────────────────────────────────'));
+
+  console.log(
+    boxen(lines.join('\n'), {
+      title: '🔍 Debug Info',
+      titleAlignment: 'left',
+      padding: { top: 0, bottom: 0, left: 1, right: 1 },
+      margin: 0,
+      borderStyle: 'round',
+      borderColor: 'gray',
+      dimBorder: true,
+    }),
+  );
+}
+
+function displayTotals(totals: ExtractionTotals, provider: string) {
+  const successRate =
+    totals.messagesProcessed > 0
+      ? ((totals.messagesSucceeded / totals.messagesProcessed) * 100).toFixed(1)
+      : '0';
+  const avgLatency =
+    totals.messagesProcessed > 0
+      ? Math.round(totals.totalLatencyMs / totals.messagesProcessed)
+      : 0;
+
+  const content = [
+    `${pc.bold('Provider:')} ${provider}`,
+    '',
+    `${pc.bold('Messages:')} ${totals.messagesSucceeded}/${totals.messagesProcessed} (${successRate}% success)`,
+    `${pc.bold('Medications Found:')} ${totals.totalMedications}`,
+    `${pc.bold('Total Chunks:')} ${totals.totalChunks}`,
+    '',
+    `${pc.bold('Total Latency:')} ${totals.totalLatencyMs}ms`,
+    `${pc.bold('Avg Latency:')} ${avgLatency}ms/message`,
+    `${pc.bold('Total Input Tokens:')} ${totals.totalInputTokens}`,
+  ].join('\n');
+
+  console.log(
+    boxen(content, {
+      title: '📊 Extraction Summary',
+      titleAlignment: 'center',
+      padding: 1,
+      margin: 1,
+      borderStyle: 'round',
+      borderColor: 'cyan',
+    }),
+  );
 }
 
 function displayExtraction(
@@ -141,6 +198,16 @@ async function extractFromTestMessages(provider: AIProviderName) {
 
   const client = createAIClient({ provider, envConfig });
 
+  const totals: ExtractionTotals = {
+    messagesProcessed: 0,
+    messagesSucceeded: 0,
+    messagesFailed: 0,
+    totalMedications: 0,
+    totalLatencyMs: 0,
+    totalInputTokens: 0,
+    totalChunks: 0,
+  };
+
   for (const msg of testMessages.messages) {
     console.log(pc.bold(pc.cyan(`\n📝 ${msg.name}`)));
     console.log(pc.gray(`ID: ${msg.id}`));
@@ -148,6 +215,7 @@ async function extractFromTestMessages(provider: AIProviderName) {
     console.log();
 
     const startTime = Date.now();
+    totals.messagesProcessed++;
 
     try {
       const result = await client.processMessage(
@@ -166,10 +234,19 @@ async function extractFromTestMessages(provider: AIProviderName) {
       );
 
       const latency = Date.now() - startTime;
+      totals.totalLatencyMs += latency;
+
+      if (result.debug) {
+        totals.totalInputTokens += result.debug.totalInputTokens;
+        totals.totalChunks += result.debug.chunksUsed;
+      }
 
       if (result.data) {
+        totals.messagesSucceeded++;
+        totals.totalMedications += result.data.medications.length;
         displayExtraction(result.data, latency, result.debug);
       } else {
+        totals.messagesFailed++;
         console.log(pc.red('Failed to extract'));
         if (result.error) {
           console.log(pc.red('Error:'), result.error);
@@ -181,6 +258,7 @@ async function extractFromTestMessages(provider: AIProviderName) {
         console.log(pc.gray(`Latency: ${latency}ms`));
       }
     } catch (error) {
+      totals.messagesFailed++;
       console.log(
         pc.red('Error:'),
         error instanceof Error ? error.message : String(error),
@@ -189,6 +267,9 @@ async function extractFromTestMessages(provider: AIProviderName) {
 
     console.log(pc.dim('─'.repeat(60)));
   }
+
+  // Display totals summary
+  displayTotals(totals, provider);
 }
 
 async function extractSingleMessage(provider: AIProviderName, text: string) {
