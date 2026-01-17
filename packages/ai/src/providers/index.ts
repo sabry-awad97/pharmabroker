@@ -16,10 +16,7 @@ export {
 } from './docker';
 
 import type { AIProvider, AIProviderName } from '../types';
-import { createGeminiProvider } from './gemini';
-import { createOllamaProvider } from './ollama';
-import { createOpenAIProvider } from './openai';
-import { createDockerModelProvider } from './docker';
+import { createProvider, validateProviderConfig } from './validation';
 
 /**
  * Environment configuration for AI providers.
@@ -70,55 +67,4 @@ export function getDefaultProvider(envConfig?: AIEnvConfig): AIProvider {
   return createProvider(config.AI_PROVIDER, envConfig);
 }
 
-/**
- * Create an AI provider by name using environment configuration
- *
- * @param name - Provider name
- * @param envConfig - Optional environment config. If not provided, uses @pharmabroker/env/server
- */
-export function createProvider(
-  name: AIProviderName,
-  envConfig?: AIEnvConfig,
-): AIProvider {
-  const config = envConfig ?? getEnv();
-
-  switch (name) {
-    case 'gemini': {
-      const apiKey = config.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY is required for Gemini provider');
-      }
-      return createGeminiProvider({
-        apiKey,
-        model: config.GEMINI_MODEL,
-      });
-    }
-
-    case 'ollama':
-      return createOllamaProvider({
-        baseUrl: config.OLLAMA_BASE_URL,
-        model: config.OLLAMA_MODEL,
-      });
-
-    case 'openai': {
-      const apiKey = config.OPENAI_API_KEY;
-      if (!apiKey) {
-        throw new Error('OPENAI_API_KEY is required for OpenAI provider');
-      }
-      return createOpenAIProvider({
-        apiKey,
-        baseUrl: config.OPENAI_BASE_URL,
-        model: config.OPENAI_MODEL,
-      });
-    }
-
-    case 'docker':
-      return createDockerModelProvider({
-        baseUrl: config.DOCKER_MODEL_BASE_URL,
-        model: config.DOCKER_MODEL_NAME,
-      });
-
-    default:
-      throw new Error(`Unknown AI provider: ${name}`);
-  }
-}
+export { validateProviderConfig, createProvider };
