@@ -1,180 +1,89 @@
-#!/usr/bin/env bun
 /**
- * Apply Vector Indexes Migration
- * Adds HNSW indexes for fast approximate nearest neighbor search
+ * Apply All Database Indexes Script
+ *
+ * Manually applies all database indexes including:
+ *   - HNSW vector indexes for semantic similarity search
+ *   - Trigram indexes for fast text search
+ *   - Composite indexes for common query patterns
+ *
+ * Run this script after Prisma migrations to optimize query performance.
  *
  * Usage:
- *   bun run apply-indexes.ts
- *
- * This script is useful for:
- * - Applying indexes to existing databases
- * - Re-creating indexes after schema changes
- * - Manual index management
+ *   bun run packages/db/apply-indexes.ts
  */
 
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from './prisma/generated/client';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import prisma from './src';
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  'postgresql://postgres:password@localhost:5432/pharmabroker';
-const adapter = new PrismaPg({ connectionString: DATABASE_URL });
-const prisma = new PrismaClient({ adapter });
-
-async function applyVectorIndexes() {
-  console.log('🚀 Applying Vector Indexes...\n');
+async function applyIndexes() {
+  console.log('📊 Applying all database indexes...\n');
 
   try {
-    // Check if tables exist
-    console.log('🔍 Checking if tables exist...');
+    // Enable required extensions
+    console.log('1. Enabling PostgreSQL extensions...');
+    await prisma.$executeRawUnsafe(`
+      CREATE EXTENSION IF NOT EXISTS vector;
+      CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    `);
+    console.log('✓ Extensions enabled (vector, pg_trgm)\n');
 
-    const tables = await prisma.$queryRaw<Array<{ tablename: string }>>`
-      SELECT tablename 
-      FROM pg_tables 
-      WHERE schemaname = 'public' 
-        AND tablename IN ('whatsapp_message', 'message_embedding')
-      ORDER BY tablename;
-    `;
+    // Read and execute the combined SQL file
+    console.log('2. Applying all indexes from SQL file...');
+    const sqlPath = join(__dirname, 'init-db', '002-add-indexes.sql');
+    const sql = readFileSync(sqlPath, 'utf-8');
 
-    if (tables.length === 0) {
-      console.log('⚠️  No tables found. Please run Prisma migrations first:');
-      console.log('   bun run db:push');
-      process.exit(1);
-    }
+    await prisma.$executeRawUnsafe(sql);
+    console.log('✓ All indexes applied\n');
 
-    console.log(
-      `✅ Found ${tables.length} tables: ${tables.map(t => t.tablename).join(', ')}\n`,
-    );
-
-    // Apply HNSW index for whatsapp_message
-    if (tables.some(t => t.tablename === 'whatsapp_message')) {
-      console.log('⏳ Creating HNSW index for whatsapp_message.embedding...');
-
-      try {
-        await prisma.$executeRaw`
-          CREATE INDEX IF NOT EXISTS whatsapp_message_embedding_hnsw_idx 
-          ON whatsapp_message 
-          USING hnsw (embedding vector_cosine_ops)
-          WITH (m = 16, ef_construction = 64);
-        `;
-        console.log('✅ HNSW index created for whatsapp_message\n');
-      } catch (error: any) {
-        if (error.message?.includes('already exists')) {
-          console.log('ℹ️  Index already exists for whatsapp_message\n');
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    // Apply HNSW index for message_embedding
-    if (tables.some(t => t.tablename === 'message_embedding')) {
-      console.log('⏳ Creating HNSW index for message_embedding.embedding...');
-
-      try {
-        await prisma.$executeRaw`
-          CREATE INDEX IF NOT EXISTS message_embedding_embedding_hnsw_idx 
-          ON message_embedding 
-          USING hnsw (embedding vector_cosine_ops)
-          WITH (m = 16, ef_construction = 64);
-        `;
-        console.log('✅ HNSW index created for message_embedding\n');
-      } catch (error: any) {
-        if (error.message?.includes('already exists')) {
-          console.log('ℹ️  Index already exists for message_embedding\n');
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    // Verify indexes were created
-    console.log('🔍 Verifying indexes...\n');
-
-    const indexes = await prisma.$queryRaw<
-      Array<{
-        schemaname: string;
-        tablename: string;
-        indexname: string;
-        indexdef: string;
-      }>
+    // Verify HNSW indexes
+    console.log('3. Verifying HNSW vector indexes...');
+    const hnsw = await prisma.$queryRaw<
+      Array<{ tablename: string; indexname: string }>
     >`
-      SELECT 
-        schemaname,
-        tablename,
-        indexname,
-        indexdef
+      SELECT tablename, indexname
       FROM pg_indexes
       WHERE tablename IN ('whatsapp_message', 'message_embedding')
+        AND indexname LIKE '%hnsw%'
       ORDER BY tablename, indexname;
     `;
 
-    console.log('📊 Current Indexes:\n');
-    console.log(
-      'Table                | Index Name                                    | Type',
-    );
-    console.log(
-      '---------------------|-----------------------------------------------|--------',
-    );
-
-    indexes.forEach(idx => {
-      const indexType = idx.indexdef.includes('hnsw')
-        ? 'HNSW'
-        : idx.indexdef.includes('ivfflat')
-          ? 'IVFFlat'
-          : idx.indexdef.includes('UNIQUE')
-            ? 'UNIQUE'
-            : 'BTREE';
-
-      console.log(
-        `${idx.tablename.padEnd(20)} | ${idx.indexname.padEnd(45)} | ${indexType}`,
-      );
-    });
-
-    // Check for HNSW indexes specifically
-    const hnswIndexes = indexes.filter(idx => idx.indexdef.includes('hnsw'));
-    const compositeIndexes = indexes.filter(
-      idx =>
-        idx.indexname.includes('message_timestamp') ||
-        idx.indexdef.includes('message_timestamp'),
-    );
-
-    console.log(`\n✨ Index application completed!`);
-    console.log(`   - Total indexes: ${indexes.length}`);
-    console.log(`   - HNSW indexes: ${hnswIndexes.length}`);
-    console.log(`   - Composite indexes: ${compositeIndexes.length}`);
-
-    if (hnswIndexes.length > 0) {
-      console.log('\n🎯 HNSW Vector Indexes:');
-      hnswIndexes.forEach(idx => {
-        console.log(`   ✓ ${idx.indexname} on ${idx.tablename}`);
-      });
+    console.log(`✓ Found ${hnsw.length} HNSW vector indexes:\n`);
+    for (const idx of hnsw) {
+      console.log(`  - ${idx.tablename}.${idx.indexname}`);
     }
 
-    if (compositeIndexes.length > 0) {
-      console.log('\n📅 Composite Time-based Indexes:');
-      compositeIndexes.forEach(idx => {
-        console.log(`   ✓ ${idx.indexname} on ${idx.tablename}`);
-      });
+    // Verify performance indexes
+    console.log('\n4. Verifying performance indexes...');
+    const perf = await prisma.$queryRaw<
+      Array<{ tablename: string; indexname: string }>
+    >`
+      SELECT tablename, indexname
+      FROM pg_indexes
+      WHERE tablename IN ('whatsapp_message', 'whatsapp_group', 'whatsapp_group_participant')
+        AND (indexname LIKE '%trgm%' OR indexname LIKE '%timestamp%' OR indexname LIKE '%ai_status%')
+      ORDER BY tablename, indexname;
+    `;
+
+    console.log(`✓ Found ${perf.length} performance indexes:\n`);
+    for (const idx of perf) {
+      console.log(`  - ${idx.tablename}.${idx.indexname}`);
     }
 
-    console.log('\n📈 Performance Benefits:');
-    console.log('   - Semantic search: O(log n) vs O(n) sequential scan');
-    console.log(
-      '   - Time-based queries: Composite indexes on (sessionId, timestamp) and (groupId, timestamp)',
-    );
-    console.log('   - Optimized for > 10k messages with embeddings');
-
-    console.log('\n💡 Next Steps:');
-    console.log('   1. Run query analysis: bun run analyze-queries.ts');
-    console.log('   2. Monitor query performance with real data');
-    console.log('   3. Adjust HNSW parameters if needed (m, ef_construction)');
+    console.log('\n✅ All indexes applied successfully!');
+    console.log(`\n📊 Total indexes created: ${hnsw.length + perf.length}`);
+    console.log('\n📈 Expected improvements:');
+    console.log('  - Semantic similarity search: Enabled (HNSW)');
+    console.log('  - Text search (ILIKE) queries: 10-100x faster');
+    console.log('  - Filtered list queries: 5-20x faster');
+    console.log('  - Date range queries: 3-10x faster');
+    console.log('  - AI status filtering: 5-15x faster');
   } catch (error) {
-    console.error('\n❌ Index application failed:', error);
-    process.exit(1);
+    console.error('❌ Error applying indexes:', error);
+    throw error;
   } finally {
     await prisma.$disconnect();
   }
 }
 
-applyVectorIndexes();
+applyIndexes();

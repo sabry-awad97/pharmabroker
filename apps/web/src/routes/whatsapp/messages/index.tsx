@@ -237,14 +237,6 @@ function WhatsappMessagesPage() {
     setCursor(undefined); // Reset pagination when clearing filters
   }, []);
 
-  const handleDateChange = useCallback(
-    (from: Date | undefined, to: Date | undefined) => {
-      setDateFrom(from);
-      setDateTo(to);
-    },
-    [],
-  );
-
   const handleViewMessage = useCallback((message: WhatsAppMessageWithGroup) => {
     setSelectedMessage(message);
     setDetailSheetOpen(true);

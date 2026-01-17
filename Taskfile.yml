@@ -128,6 +128,17 @@ tasks:
     cmds:
       - 'cd packages/db && bunx prisma db push --force-reset'
 
+  db:indexes:
+    desc: '⚡ Apply performance indexes (HNSW + text search + composite)'
+    cmds:
+      - '{{.BUN}} packages/db/apply-indexes.ts'
+      - 'echo ""'
+      - 'echo "✅ Indexes applied successfully!"'
+      - 'echo "📈 Expected improvements:"'
+      - 'echo "   - Text search: 10-100x faster"'
+      - 'echo "   - Filtered queries: 5-20x faster"'
+      - 'echo "   - Semantic search: Enabled (HNSW)"'
+
   # ═══════════════════════════════════════════════════════════════════════════
   #  🐳 Infrastructure (Docker)
   # ═══════════════════════════════════════════════════════════════════════════
@@ -292,7 +303,7 @@ tasks:
   # ═══════════════════════════════════════════════════════════════════════════
 
   setup:
-    desc: '🎯 First-time setup (install + infra + db)'
+    desc: '🎯 First-time setup (install + infra + db + indexes)'
     cmds:
       - task: install
       - task: infra:up
@@ -300,6 +311,7 @@ tasks:
         silent: true
       - task: db:push
       - task: db:generate
+      - task: db:indexes
       - 'echo "✨ Setup complete! Run ''task dev'' to start"'
 
   fresh:

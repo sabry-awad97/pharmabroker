@@ -8,6 +8,12 @@ import { appRouter } from '@pharmabroker/api/routers/index';
 import { getWhatsAppWebSocketService } from '@pharmabroker/api/services/whatsapp-ws.service';
 import { syncSessionsOnStartup } from '@pharmabroker/api/services/session-sync.service';
 import { requestFilterMiddleware } from '@pharmabroker/api/middleware/request-filter';
+import {
+  apiRateLimit,
+  authRateLimit,
+  readRateLimit,
+  writeRateLimit,
+} from '@pharmabroker/api/middleware/rate-limit';
 import { auth } from '@pharmabroker/auth';
 import { env } from '@pharmabroker/env/server';
 import { Hono } from 'hono';
@@ -22,6 +28,19 @@ app.use(logger());
 // Request filter middleware - blocks suspicious scanner requests
 // Feature: websocket-architecture-refactor, Requirements: 7.1
 app.use('/*', requestFilterMiddleware);
+
+// Rate limiting middleware - prevents abuse and DoS attacks
+app.use('/api/auth/*', authRateLimit); // Strict: 5 req/15min
+app.use('/rpc/whatsapp/messages/list', readRateLimit); // Relaxed: 300 req/min
+app.use('/rpc/whatsapp/messages/get', readRateLimit);
+app.use('/rpc/whatsapp/messages/stats', readRateLimit);
+app.use('/rpc/whatsapp/groups/list', readRateLimit);
+app.use('/rpc/whatsapp/groups/get', readRateLimit);
+app.use('/rpc/whatsapp/messages/delete', writeRateLimit); // Strict: 30 req/min
+app.use('/rpc/whatsapp/messages/bulkDelete', writeRateLimit);
+app.use('/rpc/whatsapp/messages/processAI', writeRateLimit);
+app.use('/rpc/whatsapp/messages/bulkProcessAI', writeRateLimit);
+app.use('/rpc/*', apiRateLimit); // Default: 100 req/min
 
 app.use(
   '/*',

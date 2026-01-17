@@ -61,6 +61,7 @@ This starts:
 ```bash
 task db:push
 task db:generate
+task db:indexes
 ```
 
 ---
