@@ -219,8 +219,12 @@ model WhatsAppMessage {
     // Content-based deduplication
     contentHash String @map("content_hash") // SHA-256 hash (32 chars) for deduplication
 
+    // Vector embedding for semantic search (768 dimensions for common models)
+    embedding Unsupported("vector(768)")? // Vector embedding of message content
+
     // Relations
-    extractedData WhatsAppExtractedData[]
+    extractedData     WhatsAppExtractedData[]
+    messageEmbeddings MessageEmbedding[]
 
     @@unique([sessionId, messageId])
     @@index([sessionId])
@@ -265,6 +269,37 @@ model WhatsAppExtractedData {
     @@index([dataType])
     @@index([confidence])
     @@map("whatsapp_extracted_data")
+}
+
+// ============================================================================
+// Message Embeddings - Vector embeddings for semantic search
+// ============================================================================
+
+model MessageEmbedding {
+    id String @id @default(uuid())
+
+    // Message relation
+    messageId String          @map("message_id")
+    message   WhatsAppMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+    // Vector embedding (768 dimensions for models like text-embedding-3-small, all-MiniLM-L6-v2)
+    // Can be adjusted to 1536 for text-embedding-3-large or other models
+    embedding Unsupported("vector(768)")
+
+    // Embedding metadata
+    model         String  @map("model") // Model used (e.g., "ai/embeddinggemma:latest")
+    embeddingType String  @default("content") @map("embedding_type") // Type: "content", "summary", "medication"
+    textSource    String? @map("text_source") // What was embedded: "text", "caption", "text+caption"
+
+    // Metadata
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@unique([messageId, embeddingType, model])
+    @@index([messageId])
+    @@index([embeddingType])
+    @@index([model])
+    @@map("message_embedding")
 }
 
 // ============================================================================

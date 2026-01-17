@@ -8,3 +8,6 @@ const prisma = new PrismaClient({ adapter });
 
 export default prisma;
 export { Prisma };
+
+// Export vector utilities
+export * from './vector-utils';
