@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { extractPhoneFromJid } from '@/utils/jid';
+import type { Session } from '@/hooks/whatsapp';
 
 type DialogType = 'qr' | 'delete' | 'testMessage' | 'settings' | null;
 
@@ -15,13 +16,13 @@ interface SelectedSession {
 interface WhatsappSessionState {
   // Dialog state
   activeDialog: DialogType;
-  selectedSession: SelectedSession | null;
+  selectedSession: Session | null;
 
   // Actions
-  openQRDialog: (session: SelectedSession) => void;
-  openDeleteDialog: (session: SelectedSession) => void;
-  openTestMessageDialog: (session: SelectedSession) => void;
-  openSettingsDialog: (session: SelectedSession) => void;
+  openQRDialog: (session: Session) => void;
+  openDeleteDialog: (session: Session) => void;
+  openTestMessageDialog: (session: Session) => void;
+  openSettingsDialog: (session: Session) => void;
   closeDialog: () => void;
 
   // Test message form state

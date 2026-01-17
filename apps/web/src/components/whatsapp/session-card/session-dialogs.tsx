@@ -54,11 +54,7 @@ export function WhatsappSessionDialogs() {
       />
 
       <SessionSettingsDialog
-        session={{
-          id: selectedSession.id,
-          name: selectedSession.name,
-          auto_connect: selectedSession.auto_connect ?? false,
-        }}
+        session={selectedSession}
         open={activeDialog === 'settings'}
         onOpenChange={open => !open && closeDialog()}
       />

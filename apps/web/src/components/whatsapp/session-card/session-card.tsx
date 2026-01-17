@@ -70,12 +70,7 @@ export function WhatsappSessionCard({ session }: WhatsappSessionCardProps) {
   const hasJid = Boolean(session.jid);
   const isLoading = reconnectSession.isPending || disconnectSession.isPending;
 
-  const sessionData = {
-    id: session.id,
-    name: session.name,
-    jid: session.jid,
-    auto_connect: session.auto_connect,
-  };
+  const sessionData = session;
 
   const handleReconnect = () => {
     reconnectSession.mutate({ id: session.id });

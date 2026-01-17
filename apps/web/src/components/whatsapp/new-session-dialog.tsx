@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, History } from 'lucide-react';
 
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useCreateWhatsappSession } from '@/hooks/whatsapp';
 
 interface WhatsappNewSessionDialogProps {
@@ -35,6 +36,7 @@ export function WhatsappNewSessionDialog({
     onOpenChange?.(newOpen);
   };
   const [name, setName] = useState('');
+  const [enableHistorySync, setEnableHistorySync] = useState(false);
   const createSession = useCreateWhatsappSession();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,11 +44,15 @@ export function WhatsappNewSessionDialog({
     if (!name.trim()) return;
 
     createSession.mutate(
-      { name: name.trim() },
+      {
+        name: name.trim(),
+        enable_history_sync: enableHistorySync,
+      },
       {
         onSuccess: () => {
           handleOpenChange(false);
           setName('');
+          setEnableHistorySync(false);
         },
       },
     );
@@ -80,6 +86,36 @@ export function WhatsappNewSessionDialog({
             />
             <p className="text-muted-foreground mt-1.5 text-xs">
               Give your session a memorable name to identify it later
+            </p>
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-500/10">
+                  <History className="h-4 w-4 text-blue-500" />
+                </div>
+                <div>
+                  <Label
+                    htmlFor="enable-history-sync"
+                    className="text-sm font-medium"
+                  >
+                    Enable History Sync
+                  </Label>
+                  <p className="text-muted-foreground text-xs">
+                    Download message history on first connection
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="enable-history-sync"
+                checked={enableHistorySync}
+                onCheckedChange={setEnableHistorySync}
+              />
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              This may take several minutes for large histories (40,000+
+              messages). You can always sync history later from settings.
             </p>
           </div>
 

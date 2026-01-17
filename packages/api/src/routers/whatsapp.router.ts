@@ -26,7 +26,7 @@ import {
   triggerSyncInput,
   cancelSyncInput,
   historySyncStatusResponse,
-  successResponse,
+  sessionSuccessResponse,
   // Message schemas
   sendMessageInput,
   sendMessageResponse,
@@ -236,7 +236,7 @@ export const whatsappRouter = o.router({
       },
     })
     .input(triggerSyncInput)
-    .output(successResponse)
+    .output(sessionSuccessResponse)
     .handler(async ({ input, context }) => {
       const userId = context.session!.user.id;
 
@@ -281,7 +281,7 @@ export const whatsappRouter = o.router({
       },
     })
     .input(cancelSyncInput)
-    .output(successResponse)
+    .output(sessionSuccessResponse)
     .handler(async ({ input, context }) => {
       const userId = context.session!.user.id;
 

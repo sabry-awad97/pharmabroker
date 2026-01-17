@@ -236,12 +236,34 @@ export const syncFailedEvent = z.object({
     .optional(),
 });
 
+/** Sync skipped event */
+export const syncSkippedEvent = z.object({
+  type: z.literal('sync.skipped'),
+  session_id: unbranded.uuid,
+  timestamp: z.string().optional(),
+  data: z
+    .object({
+      reason: z.string().optional(),
+    })
+    .optional(),
+});
+
+/** Sync cancelled event */
+export const syncCancelledEvent = z.object({
+  type: z.literal('sync.cancelled'),
+  session_id: unbranded.uuid,
+  timestamp: z.string().optional(),
+  data: z.object({}).optional(),
+});
+
 /** Union of all sync events */
 export const syncEvent = z.discriminatedUnion('type', [
   syncStartedEvent,
   syncProgressEvent,
   syncCompletedEvent,
   syncFailedEvent,
+  syncSkippedEvent,
+  syncCancelledEvent,
 ]);
 
 // ============================================================================
@@ -271,6 +293,8 @@ export const whatsappEvent = z.discriminatedUnion('type', [
   syncProgressEvent,
   syncCompletedEvent,
   syncFailedEvent,
+  syncSkippedEvent,
+  syncCancelledEvent,
 ]);
 
 /** Event types for type-safe event handling */
@@ -292,6 +316,8 @@ export const whatsappEventType = z.enum([
   'sync.progress',
   'sync.completed',
   'sync.failed',
+  'sync.skipped',
+  'sync.cancelled',
 ]);
 
 // ============================================================================
@@ -348,6 +374,8 @@ export type SyncStartedEvent = z.infer<typeof syncStartedEvent>;
 export type SyncProgressEvent = z.infer<typeof syncProgressEvent>;
 export type SyncCompletedEvent = z.infer<typeof syncCompletedEvent>;
 export type SyncFailedEvent = z.infer<typeof syncFailedEvent>;
+export type SyncSkippedEvent = z.infer<typeof syncSkippedEvent>;
+export type SyncCancelledEvent = z.infer<typeof syncCancelledEvent>;
 export type SyncEvent = z.infer<typeof syncEvent>;
 
 export type WhatsAppEvent = z.infer<typeof whatsappEvent>;

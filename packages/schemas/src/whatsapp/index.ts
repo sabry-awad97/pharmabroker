@@ -21,7 +21,7 @@ export {
   triggerSyncInput,
   cancelSyncInput,
   historySyncStatusResponse,
-  successResponse,
+  sessionSuccessResponse,
   type SessionStatus,
   type HistorySyncStatus,
   type Session,
@@ -33,7 +33,7 @@ export {
   type TriggerSyncInput,
   type CancelSyncInput,
   type HistorySyncStatusResponse,
-  type SuccessResponse,
+  type SessionSuccessResponse,
 } from './session';
 
 // Message schemas

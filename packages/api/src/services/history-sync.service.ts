@@ -148,7 +148,7 @@ class HistorySyncService {
     whatsappEventPublisher.publish('whatsapp-event', {
       type: 'sync.started',
       session_id: sessionId,
-      data: { syncType: 'full_history' },
+      data: {},
       timestamp: new Date().toISOString(),
     });
 
@@ -172,10 +172,7 @@ class HistorySyncService {
     whatsappEventPublisher.publish('whatsapp-event', {
       type: 'sync.started',
       session_id: sessionId,
-      data: {
-        syncType: 'incremental',
-        since: since.toISOString(),
-      },
+      data: {},
       timestamp: new Date().toISOString(),
     });
   }
@@ -193,7 +190,7 @@ class HistorySyncService {
     whatsappEventPublisher.publish('whatsapp-event', {
       type: 'sync.skipped',
       session_id: sessionId,
-      data: { reason: 'history_sync_disabled' },
+      data: {},
       timestamp: new Date().toISOString(),
     });
   }
@@ -215,7 +212,10 @@ class HistorySyncService {
     whatsappEventPublisher.publish('whatsapp-event', {
       type: 'sync.completed',
       session_id: sessionId,
-      data: stats,
+      data: {
+        messagesProcessed: stats.stored,
+        messagesDropped: stats.dropped,
+      },
       timestamp: new Date().toISOString(),
     });
   }

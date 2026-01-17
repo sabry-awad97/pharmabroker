@@ -125,7 +125,7 @@ export const historySyncStatusResponse = z.object({
 });
 
 /** Generic success response */
-export const successResponse = z.object({
+export const sessionSuccessResponse = z.object({
   success: z.literal(true),
   message: z.string().optional(),
 });
@@ -147,4 +147,4 @@ export type CancelSyncInput = z.infer<typeof cancelSyncInput>;
 export type HistorySyncStatusResponse = z.infer<
   typeof historySyncStatusResponse
 >;
-export type SuccessResponse = z.infer<typeof successResponse>;
+export type SessionSuccessResponse = z.infer<typeof sessionSuccessResponse>;

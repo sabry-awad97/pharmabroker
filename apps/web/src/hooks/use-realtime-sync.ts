@@ -165,6 +165,37 @@ export const EVENT_INVALIDATION_MAP: Record<
       ? [[...messageKeys.list({ sessionId, limit: 50, cursor: undefined })]]
       : []),
   ],
+
+  // History sync events: invalidate sessions list and detail
+  'sync.started': sessionId => [
+    [...whatsappKeys.sessions.list()],
+    ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
+  ],
+
+  'sync.progress': sessionId => [
+    [...whatsappKeys.sessions.list()],
+    ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
+  ],
+
+  'sync.completed': sessionId => [
+    [...whatsappKeys.sessions.list()],
+    ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
+  ],
+
+  'sync.failed': sessionId => [
+    [...whatsappKeys.sessions.list()],
+    ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
+  ],
+
+  'sync.cancelled': sessionId => [
+    [...whatsappKeys.sessions.list()],
+    ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
+  ],
+
+  'sync.skipped': sessionId => [
+    [...whatsappKeys.sessions.list()],
+    ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
+  ],
 };
 
 /**
