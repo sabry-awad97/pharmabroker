@@ -236,6 +236,9 @@ model WhatsAppMessage {
     @@index([aiStatus])
     @@index([contentHash])
     @@index([sessionId, contentHash])
+    // Composite indexes for time-based queries
+    @@index([sessionId, messageTimestamp])
+    @@index([groupId, messageTimestamp])
     @@map("whatsapp_message")
 }
 
