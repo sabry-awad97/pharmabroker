@@ -3,6 +3,16 @@
  *
  * Displays messages for the currently active session with
  * filtering, sorting, and AI processing capabilities.
+ *
+ * Pagination Implementation:
+ * - Uses cursor-based pagination for efficient large dataset handling
+ * - Backend returns nextCursor for forward navigation
+ * - Cursor resets to undefined (first page) when filters change
+ * - Page size changes also reset to first page
+ * - Previous page navigation returns to first page (simplified bidirectional)
+ * - Total count is always accurate from backend
+ * - Loading states prevent duplicate requests
+ * - placeholderData keeps previous data visible during page transitions
  */
 
 import { createFileRoute, redirect } from '@tanstack/react-router';
@@ -82,6 +92,7 @@ function WhatsappMessagesPage() {
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [pageSize, setPageSize] = useState(20);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
 
   // UI state
   const [selectedMessage, setSelectedMessage] =
@@ -117,6 +128,7 @@ function WhatsappMessagesPage() {
     dateFrom,
     dateTo,
     limit: pageSize,
+    cursor,
   });
 
   const { data: messageDetail, isLoading: isLoadingDetail } =
@@ -135,6 +147,9 @@ function WhatsappMessagesPage() {
   // Derived state
   const messages = messagesData?.messages || [];
   const totalCount = messagesData?.total || 0;
+  const nextCursor = messagesData?.nextCursor;
+  const hasNextPage = !!nextCursor;
+  const hasPreviousPage = !!cursor;
   const hasFiltersApplied =
     search.length > 0 ||
     messageType !== 'all' ||
@@ -180,6 +195,28 @@ function WhatsappMessagesPage() {
     { enableOnFormTags: false },
   );
 
+  useHotkeys(
+    'ArrowLeft',
+    (e: KeyboardEvent) => {
+      if (hasPreviousPage && !isFetching) {
+        e.preventDefault();
+        handlePreviousPage();
+      }
+    },
+    { enableOnFormTags: false },
+  );
+
+  useHotkeys(
+    'ArrowRight',
+    (e: KeyboardEvent) => {
+      if (hasNextPage && !isFetching) {
+        e.preventDefault();
+        handleNextPage();
+      }
+    },
+    { enableOnFormTags: false },
+  );
+
   useHotkeys('escape', () => {
     setDetailSheetOpen(false);
     setDeleteDialogOpen(false);
@@ -197,6 +234,7 @@ function WhatsappMessagesPage() {
     setSource('all');
     setDateFrom(undefined);
     setDateTo(undefined);
+    setCursor(undefined); // Reset pagination when clearing filters
   }, []);
 
   const handleDateChange = useCallback(
@@ -382,6 +420,53 @@ function WhatsappMessagesPage() {
     handleBulkProcess(pendingMessages);
   }, [messages, handleBulkProcess]);
 
+  const handleNextPage = useCallback(() => {
+    if (nextCursor) {
+      setCursor(nextCursor);
+    }
+  }, [nextCursor]);
+
+  const handlePreviousPage = useCallback(() => {
+    // For previous page, we need to reset to undefined (first page)
+    // Note: True bidirectional cursor pagination would require tracking cursor history
+    setCursor(undefined);
+  }, []);
+
+  const handlePageSizeChange = useCallback((newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCursor(undefined); // Reset to first page when changing page size
+  }, []);
+
+  // Reset cursor when filters change
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    setCursor(undefined);
+  }, []);
+
+  const handleMessageTypeChange = useCallback((value: MessageType | 'all') => {
+    setMessageType(value);
+    setCursor(undefined);
+  }, []);
+
+  const handleAIStatusChange = useCallback((value: AIStatus | 'all') => {
+    setAIStatus(value);
+    setCursor(undefined);
+  }, []);
+
+  const handleSourceChange = useCallback((value: MessageSource) => {
+    setSource(value);
+    setCursor(undefined);
+  }, []);
+
+  const handleDateChangeWithReset = useCallback(
+    (from: Date | undefined, to: Date | undefined) => {
+      setDateFrom(from);
+      setDateTo(to);
+      setCursor(undefined);
+    },
+    [],
+  );
+
   // Show session required state if no active session
   if (!activeSession) {
     return <SessionRequiredState />;
@@ -532,10 +617,10 @@ function WhatsappMessagesPage() {
           messageType={messageType}
           aiStatus={aiStatus}
           source={source}
-          onSearchChange={setSearch}
-          onMessageTypeChange={setMessageType}
-          onAIStatusChange={setAIStatus}
-          onSourceChange={setSource}
+          onSearchChange={handleSearchChange}
+          onMessageTypeChange={handleMessageTypeChange}
+          onAIStatusChange={handleAIStatusChange}
+          onSourceChange={handleSourceChange}
           onClear={handleClearFilters}
           totalCount={totalCount}
           filteredCount={messages.length}
@@ -544,7 +629,7 @@ function WhatsappMessagesPage() {
           <DateRangeFilter
             dateFrom={dateFrom}
             dateTo={dateTo}
-            onDateChange={handleDateChange}
+            onDateChange={handleDateChangeWithReset}
           />
           <div className="flex-1" />
           <Tooltip>
@@ -567,6 +652,12 @@ function WhatsappMessagesPage() {
                 </p>
                 <p>
                   <kbd className="bg-muted rounded px-1">Ctrl+R</kbd> Refresh
+                </p>
+                <p>
+                  <kbd className="bg-muted rounded px-1">←</kbd> Previous page
+                </p>
+                <p>
+                  <kbd className="bg-muted rounded px-1">→</kbd> Next page
                 </p>
                 <p>
                   <kbd className="bg-muted rounded px-1">Esc</kbd> Close dialogs
@@ -607,6 +698,13 @@ function WhatsappMessagesPage() {
             isProcessing={isProcessing}
             processingMessageId={processingMessageId}
             pageSize={pageSize}
+            onPageSizeChange={handlePageSizeChange}
+            totalCount={totalCount}
+            hasNextPage={hasNextPage}
+            hasPreviousPage={hasPreviousPage}
+            onNextPage={handleNextPage}
+            onPreviousPage={handlePreviousPage}
+            isLoadingPage={isFetching}
           />
         </LoadingOverlay>
       )}

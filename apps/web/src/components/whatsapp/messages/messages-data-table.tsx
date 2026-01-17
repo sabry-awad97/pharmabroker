@@ -8,7 +8,6 @@
 import type {
   ColumnDef,
   SortingState,
-  PaginationState,
   RowSelectionState,
 } from '@tanstack/react-table';
 
@@ -16,7 +15,6 @@ import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
-  getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import {
@@ -80,6 +78,13 @@ interface MessagesDataTableProps {
   onBulkDelete?: (messages: WhatsAppMessageWithGroup[]) => void;
   onScheduleAI?: (messages: WhatsAppMessageWithGroup[]) => void;
   pageSize?: number;
+  onPageSizeChange?: (pageSize: number) => void;
+  totalCount?: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
+  onNextPage?: () => void;
+  onPreviousPage?: () => void;
+  isLoadingPage?: boolean;
   isProcessing?: boolean;
   processingMessageId?: string | null;
 }
@@ -95,16 +100,19 @@ export function MessagesDataTable({
   onBulkDelete,
   onScheduleAI,
   pageSize = 20,
+  onPageSizeChange,
+  totalCount = 0,
+  hasNextPage = false,
+  hasPreviousPage = false,
+  onNextPage,
+  onPreviousPage,
+  isLoadingPage = false,
   isProcessing = false,
   processingMessageId = null,
 }: MessagesDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'messageTimestamp', desc: true },
   ]);
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize,
-  });
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   // Define actions for each row
@@ -393,16 +401,16 @@ export function MessagesDataTable({
     columns,
     state: {
       sorting,
-      pagination,
       rowSelection,
     },
     onSortingChange: setSorting,
-    onPaginationChange: setPagination,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     enableRowSelection: true,
+    // Server-side pagination - don't use getPaginationRowModel
+    manualPagination: true,
+    pageCount: -1, // Unknown page count with cursor pagination
   });
 
   const selectedRows = table.getFilteredSelectedRowModel().rows;
@@ -514,29 +522,72 @@ export function MessagesDataTable({
       </div>
 
       {/* Pagination */}
-      <DataTablePagination table={table} />
+      <DataTablePagination
+        currentPageSize={pageSize}
+        onPageSizeChange={onPageSizeChange}
+        totalCount={totalCount}
+        currentPageCount={data.length}
+        hasNextPage={hasNextPage}
+        hasPreviousPage={hasPreviousPage}
+        onNextPage={onNextPage}
+        onPreviousPage={onPreviousPage}
+        isLoading={isLoadingPage}
+      />
     </div>
   );
 }
 
-function DataTablePagination<TData>({
-  table,
-}: {
-  table: ReturnType<typeof useReactTable<TData>>;
-}) {
+interface DataTablePaginationProps {
+  currentPageSize: number;
+  onPageSizeChange?: (pageSize: number) => void;
+  totalCount: number;
+  currentPageCount: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  onNextPage?: () => void;
+  onPreviousPage?: () => void;
+  isLoading: boolean;
+}
+
+function DataTablePagination({
+  currentPageSize,
+  onPageSizeChange,
+  totalCount,
+  currentPageCount,
+  hasNextPage,
+  hasPreviousPage,
+  onNextPage,
+  onPreviousPage,
+  isLoading,
+}: DataTablePaginationProps) {
+  const pageInfo = hasPreviousPage
+    ? 'Page 2+'
+    : currentPageCount > 0
+      ? 'Page 1'
+      : 'No results';
+
   return (
     <div className="flex items-center justify-between">
-      <p className="text-muted-foreground text-xs">
-        {table.getFilteredRowModel().rows.length} message(s) total
-      </p>
+      <div className="flex items-center gap-4">
+        <p className="text-muted-foreground text-xs">
+          Showing {currentPageCount} of {totalCount.toLocaleString()} message(s)
+        </p>
+        {isLoading && (
+          <div className="flex items-center gap-1.5 text-xs text-violet-500">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Loading...</span>
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground text-xs">Rows per page</span>
           <select
-            value={table.getState().pagination.pageSize}
-            onChange={e => table.setPageSize(Number(e.target.value))}
-            className="border-border bg-background h-8 rounded-md border px-2 text-xs"
+            value={currentPageSize}
+            onChange={e => onPageSizeChange?.(Number(e.target.value))}
+            disabled={isLoading}
+            className="border-border bg-background h-8 rounded-md border px-2 text-xs disabled:opacity-50"
           >
             {[10, 20, 50, 100].map(size => (
               <option key={size} value={size}>
@@ -546,44 +597,81 @@ function DataTablePagination<TData>({
           </select>
         </div>
 
-        <span className="text-xs">
-          Page {table.getState().pagination.pageIndex + 1} of{' '}
-          {table.getPageCount()}
-        </span>
+        <span className="text-muted-foreground text-xs">{pageInfo}</span>
 
         <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.setPageIndex(0)}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronsLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onPreviousPage}
+                  disabled={!hasPreviousPage || isLoading}
+                  aria-label="First page"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {hasPreviousPage ? 'First page' : 'Already on first page'}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onPreviousPage}
+                  disabled={!hasPreviousPage || isLoading}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {hasPreviousPage ? 'Previous page' : 'Already on first page'}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onNextPage}
+                  disabled={!hasNextPage || isLoading}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {hasNextPage ? 'Next page' : 'No more pages'}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onNextPage}
+                  disabled={!hasNextPage || isLoading}
+                  aria-label="Last page (next)"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {hasNextPage ? 'Next page' : 'No more pages'}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>

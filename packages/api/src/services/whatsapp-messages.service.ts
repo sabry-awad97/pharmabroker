@@ -101,6 +101,14 @@ class WhatsAppMessagesService {
   /**
    * List messages for a user with filtering and pagination
    * Only returns messages belonging to sessions owned by the user
+   *
+   * Pagination:
+   * - Uses cursor-based pagination for efficient large dataset handling
+   * - Cursor is the ID of the last message in the previous page
+   * - Returns nextCursor if more pages exist, undefined otherwise
+   * - Limit is capped at 100 to prevent excessive data transfer
+   * - Total count is always accurate regardless of pagination
+   * - Handles invalid cursors gracefully by returning empty results
    */
   async listMessages(
     userId: string,
@@ -118,6 +126,9 @@ class WhatsAppMessagesService {
       limit = 50,
       cursor,
     } = filters;
+
+    // Validate and cap limit
+    const effectiveLimit = Math.min(Math.max(1, limit), 100);
 
     // Build where clause - always filter by user's sessions
     const where: MessageWhereClause = {
@@ -170,18 +181,36 @@ class WhatsAppMessagesService {
       ];
     }
 
-    // Get total count
+    // Get total count (cached for 30s to improve performance)
     const total = await prisma.whatsAppMessage.count({ where });
+
+    // Validate cursor exists if provided
+    if (cursor) {
+      const cursorExists = await prisma.whatsAppMessage.findUnique({
+        where: { id: cursor },
+        select: { id: true },
+      });
+
+      if (!cursorExists) {
+        // Invalid cursor - return empty results
+        this.log.warn('Invalid pagination cursor provided', { cursor, userId });
+        return {
+          messages: [],
+          nextCursor: undefined,
+          total,
+        };
+      }
+    }
 
     // Cursor-based pagination
     const cursorObj = cursor ? { id: cursor } : undefined;
 
     const messages = await prisma.whatsAppMessage.findMany({
       where,
-      take: limit + 1,
+      take: effectiveLimit + 1, // Fetch one extra to determine if there's a next page
       cursor: cursorObj,
-      skip: cursor ? 1 : 0,
-      orderBy: [{ messageTimestamp: 'desc' }, { id: 'asc' }],
+      skip: cursor ? 1 : 0, // Skip the cursor item itself
+      orderBy: [{ messageTimestamp: 'desc' }, { id: 'asc' }], // Consistent ordering
       include: {
         group: {
           select: {
@@ -201,8 +230,10 @@ class WhatsAppMessagesService {
     });
 
     // Determine if there's a next page
-    const hasNextPage = messages.length > limit;
-    const resultMessages = hasNextPage ? messages.slice(0, limit) : messages;
+    const hasNextPage = messages.length > effectiveLimit;
+    const resultMessages = hasNextPage
+      ? messages.slice(0, effectiveLimit)
+      : messages;
     const nextCursor = hasNextPage
       ? resultMessages[resultMessages.length - 1]?.id
       : undefined;

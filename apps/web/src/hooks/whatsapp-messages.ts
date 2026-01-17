@@ -135,6 +135,8 @@ export function useWhatsappMessages(filters: MessageFilters) {
     },
     enabled: !!filters.sessionId,
     staleTime: 30 * 1000,
+    // Keep previous data while fetching next page to prevent UI flicker
+    placeholderData: previousData => previousData,
   });
 }
 
