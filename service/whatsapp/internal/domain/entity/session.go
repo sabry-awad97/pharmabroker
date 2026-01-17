@@ -38,6 +38,11 @@ type Session struct {
 	Status    Status    `json:"status"` // connected, disconnected, etc.
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// History Sync Configuration
+	HistorySyncEnabled bool   `json:"history_sync_enabled"` // Whether to sync history on first connection
+	FullSync           bool   `json:"full_sync"`            // Whether to perform full history sync
+	SyncSince          string `json:"sync_since"`           // ISO 8601 timestamp for incremental sync
 }
 
 // NewSession creates a new Session with the given ID and name
@@ -61,6 +66,14 @@ func (s *Session) SetStatus(status Status) {
 // SetJID sets the WhatsApp JID for the session
 func (s *Session) SetJID(jid string) {
 	s.JID = jid
+	s.UpdatedAt = time.Now()
+}
+
+// SetHistorySyncConfig sets the history sync configuration for the session
+func (s *Session) SetHistorySyncConfig(enabled, fullSync bool, since string) {
+	s.HistorySyncEnabled = enabled
+	s.FullSync = fullSync
+	s.SyncSince = since
 	s.UpdatedAt = time.Now()
 }
 

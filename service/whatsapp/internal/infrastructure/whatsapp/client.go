@@ -60,6 +60,17 @@ type WhatsmeowClient struct {
 	circuitBreaker *CircuitBreaker
 	mediaUploader  *WhatsmeowMediaUploader
 	messageParser  *MessageParser
+
+	// History sync configuration per session
+	historySyncConfig map[string]HistorySyncConfig
+	historySyncMu     sync.RWMutex
+}
+
+// HistorySyncConfig holds history sync configuration for a session
+type HistorySyncConfig struct {
+	Enabled  bool
+	FullSync bool
+	Since    string // ISO 8601 timestamp for incremental sync
 }
 
 // NewWhatsmeowClient creates a new WhatsApp client
@@ -81,13 +92,14 @@ func NewWhatsmeowClient(ctx context.Context, config ClientConfig) (*WhatsmeowCli
 	}
 
 	client := &WhatsmeowClient{
-		config:        config,
-		container:     container,
-		clients:       make(map[string]*whatsmeow.Client),
-		sessionToJID:  make(map[string]string),
-		handlers:      make([]repository.EventHandler, 0),
-		logger:        logger,
-		messageParser: NewMessageParser(),
+		config:            config,
+		container:         container,
+		clients:           make(map[string]*whatsmeow.Client),
+		sessionToJID:      make(map[string]string),
+		handlers:          make([]repository.EventHandler, 0),
+		logger:            logger,
+		messageParser:     NewMessageParser(),
+		historySyncConfig: make(map[string]HistorySyncConfig),
 	}
 
 	// Initialize circuit breaker if enabled
@@ -773,9 +785,30 @@ func (c *WhatsmeowClient) handleHistorySyncEvent(sessionID string, client *whats
 		return
 	}
 
+	// Check if history sync is enabled for this session
+	enabled, fullSync, sinceStr := c.GetHistorySyncConfig(sessionID)
+	if !enabled {
+		c.logger.Infof("History sync disabled for session %s, skipping", sessionID)
+		return
+	}
+
 	ctx := context.Background()
 	savedCount := 0
 	messageCount := 0
+	droppedCount := 0
+
+	// Parse the "since" timestamp for incremental sync
+	var sinceTime time.Time
+	if !fullSync && sinceStr != "" {
+		var err error
+		sinceTime, err = time.Parse(time.RFC3339, sinceStr)
+		if err != nil {
+			c.logger.Warnf("Failed to parse since timestamp '%s': %v, falling back to full sync", sinceStr, err)
+			fullSync = true
+		} else {
+			c.logger.Infof("Incremental sync: filtering messages since %s", sinceTime.Format(time.RFC3339))
+		}
+	}
 
 	// Get handlers for emitting events
 	c.mu.RLock()
@@ -811,6 +844,15 @@ func (c *WhatsmeowClient) handleHistorySyncEvent(sessionID string, client *whats
 						continue
 					}
 
+					// Get message timestamp
+					msgTimestamp := time.Unix(int64(histMsg.Message.GetMessageTimestamp()), 0)
+
+					// Filter by timestamp for incremental sync
+					if !fullSync && !sinceTime.IsZero() && msgTimestamp.Before(sinceTime) {
+						droppedCount++
+						continue
+					}
+
 					// Get sender JID and pushname from message
 					var senderJID types.JID
 					var pushName string
@@ -839,7 +881,7 @@ func (c *WhatsmeowClient) handleHistorySyncEvent(sessionID string, client *whats
 					if histMsg.Message.Key != nil {
 						msgInfo = &types.MessageInfo{
 							ID:        types.MessageID(histMsg.Message.Key.GetID()),
-							Timestamp: time.Unix(int64(histMsg.Message.GetMessageTimestamp()), 0),
+							Timestamp: msgTimestamp,
 							MessageSource: types.MessageSource{
 								Sender:   senderJID,
 								IsFromMe: histMsg.Message.Key.GetFromMe(),
@@ -890,11 +932,50 @@ func (c *WhatsmeowClient) handleHistorySyncEvent(sessionID string, client *whats
 		}
 	}
 
+	// Log sync statistics
+	syncType := "full"
+	if !fullSync {
+		syncType = "incremental"
+	}
+
 	if savedCount > 0 {
-		c.logger.Infof("History sync: saved %d pushnames to contact store", savedCount)
+		c.logger.Infof("History sync (%s): saved %d pushnames to contact store", syncType, savedCount)
 	}
 	if messageCount > 0 {
-		c.logger.Infof("History sync: emitted %d message events", messageCount)
+		c.logger.Infof("History sync (%s): emitted %d message events", syncType, messageCount)
+	}
+	if droppedCount > 0 {
+		c.logger.Infof("History sync (%s): dropped %d messages (before %s)", syncType, droppedCount, sinceTime.Format(time.RFC3339))
+	}
+
+	// Emit sync progress event
+	c.emitSyncProgressEvent(sessionID, messageCount, messageCount+droppedCount)
+}
+
+// emitSyncProgressEvent emits a sync progress event to track history sync progress
+func (c *WhatsmeowClient) emitSyncProgressEvent(sessionID string, stored, total int) {
+	c.mu.RLock()
+	handlers := make([]repository.EventHandler, len(c.handlers))
+	copy(handlers, c.handlers)
+	c.mu.RUnlock()
+
+	event, err := entity.NewEventWithPayload(
+		generateEventID(),
+		entity.EventTypeSyncProgress,
+		sessionID,
+		map[string]interface{}{
+			"stored":  stored,
+			"dropped": total - stored,
+			"total":   total,
+		},
+	)
+	if err != nil {
+		c.logger.Warnf("Failed to create sync progress event: %v", err)
+		return
+	}
+
+	for _, handler := range handlers {
+		handler(event)
 	}
 }
 
@@ -1052,4 +1133,33 @@ func (c *WhatsmeowClient) getParticipantDisplayName(ctx context.Context, client 
 	}
 
 	return ""
+}
+
+// SetHistorySyncConfig sets the history sync configuration for a session
+func (c *WhatsmeowClient) SetHistorySyncConfig(sessionID string, enabled, fullSync bool, since string) {
+	c.historySyncMu.Lock()
+	defer c.historySyncMu.Unlock()
+
+	c.historySyncConfig[sessionID] = HistorySyncConfig{
+		Enabled:  enabled,
+		FullSync: fullSync,
+		Since:    since,
+	}
+
+	c.logger.Infof("SetHistorySyncConfig: sessionID=%s, enabled=%v, fullSync=%v, since=%s",
+		sessionID, enabled, fullSync, since)
+}
+
+// GetHistorySyncConfig gets the history sync configuration for a session
+func (c *WhatsmeowClient) GetHistorySyncConfig(sessionID string) (enabled, fullSync bool, since string) {
+	c.historySyncMu.RLock()
+	defer c.historySyncMu.RUnlock()
+
+	config, exists := c.historySyncConfig[sessionID]
+	if !exists {
+		// Default: history sync disabled
+		return false, false, ""
+	}
+
+	return config.Enabled, config.FullSync, config.Since
 }

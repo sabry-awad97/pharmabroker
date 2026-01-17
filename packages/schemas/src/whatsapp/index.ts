@@ -9,6 +9,7 @@
 // Session schemas
 export {
   sessionStatus,
+  historySyncStatus,
   session,
   createSessionInput,
   updateSessionInput,
@@ -16,12 +17,23 @@ export {
   sessionList,
   deleteSessionResponse,
   reconnectSessionResponse,
+  updateHistorySyncInput,
+  triggerSyncInput,
+  cancelSyncInput,
+  historySyncStatusResponse,
+  successResponse,
   type SessionStatus,
+  type HistorySyncStatus,
   type Session,
   type CreateSessionInput,
   type UpdateSessionInput,
   type SessionIdInput,
   type ReconnectSessionResponse,
+  type UpdateHistorySyncInput,
+  type TriggerSyncInput,
+  type CancelSyncInput,
+  type HistorySyncStatusResponse,
+  type SuccessResponse,
 } from './session';
 
 // Message schemas

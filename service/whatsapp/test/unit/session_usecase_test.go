@@ -35,7 +35,7 @@ func TestSessionUseCase_CreateSessionWithID(t *testing.T) {
 
 func TestSessionUseCase_CreateSessionWithID_RepositoryError(t *testing.T) {
 	repo := NewSessionRepositoryMock()
-	repo.createFn = func(ctx context.Context, session *entity.Session) error {
+	repo.CreateFn = func(ctx context.Context, session *entity.Session) error {
 		return errors.ErrDatabaseError
 	}
 
@@ -53,7 +53,7 @@ func TestSessionUseCase_DeleteSession(t *testing.T) {
 	publisher := NewEventPublisherMock()
 
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -85,7 +85,7 @@ func TestSessionUseCase_StartQRAuth(t *testing.T) {
 	waClient := NewWhatsAppClientMock()
 
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, waClient, nil)
 
@@ -119,7 +119,7 @@ func TestSessionUseCase_StartQRAuth_CreatesSessionIfNotExists(t *testing.T) {
 func TestSessionUseCase_StartQRAuth_NoClient(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, nil, nil)
 
@@ -132,7 +132,7 @@ func TestSessionUseCase_StartQRAuth_NoClient(t *testing.T) {
 func TestSessionUseCase_UpdateSessionStatus(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, nil, nil)
 
@@ -164,7 +164,7 @@ func TestSessionUseCase_UpdateSessionJID(t *testing.T) {
 	publisher := NewEventPublisherMock()
 
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, nil, publisher)
 
@@ -203,7 +203,7 @@ func TestSessionUseCase_ReconnectSession_Success(t *testing.T) {
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
 	existingSession.SetJID("1234567890@s.whatsapp.net")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -226,7 +226,7 @@ func TestSessionUseCase_ReconnectSession_AlreadyConnected(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusConnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -245,7 +245,7 @@ func TestSessionUseCase_ReconnectSession_NoClient(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, nil, nil)
 
@@ -265,7 +265,7 @@ func TestSessionUseCase_ReconnectSession_ConnectionFailed(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	// Make connect fail
 	waClient.ConnectFn = func(ctx context.Context, sessionID string) error {
@@ -290,7 +290,7 @@ func TestSessionUseCase_ReconnectSession_UpdatesJID(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -313,7 +313,7 @@ func TestSessionUseCase_DisconnectSession_Success(t *testing.T) {
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusConnected)
 	existingSession.SetJID("1234567890@s.whatsapp.net")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -337,7 +337,7 @@ func TestSessionUseCase_DisconnectSession_AlreadyDisconnected(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -359,7 +359,7 @@ func TestSessionUseCase_DisconnectSession_PreservesJID(t *testing.T) {
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusConnected)
 	existingSession.SetJID("1234567890@s.whatsapp.net")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	uc := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -378,7 +378,7 @@ func TestSessionUseCase_DisconnectSession_NoClient(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusConnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	uc := usecase.NewSessionUseCase(repo, nil, nil)
 

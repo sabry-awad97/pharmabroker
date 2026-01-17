@@ -38,6 +38,11 @@ const (
 	EventTypeQRCode EventType = "qr.code"
 )
 
+// Sync events
+const (
+	EventTypeSyncProgress EventType = "sync.progress"
+)
+
 // IsValid checks if the event type is valid
 func (et EventType) IsValid() bool {
 	switch et {
@@ -45,7 +50,7 @@ func (et EventType) IsValid() bool {
 		EventTypeMessageRead, EventTypeMessageFailed, EventTypeConnectionConnecting,
 		EventTypeConnected, EventTypeDisconnected, EventTypeLoggedOut,
 		EventTypeConnectionFailed, EventTypeQRScanned, EventTypeAuthenticated,
-		EventTypeSessionExpired, EventTypeQRCode:
+		EventTypeSessionExpired, EventTypeQRCode, EventTypeSyncProgress:
 		return true
 	}
 	return false

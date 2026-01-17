@@ -214,6 +214,36 @@ func (h *Handler) DisconnectSession(c *gin.Context) {
 	})
 }
 
+// ConfigureHistorySync handles POST /api/internal/sessions/:id/history-sync
+// Configures history sync settings for a session
+func (h *Handler) ConfigureHistorySync(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		respondWithError(c, http.StatusBadRequest, "INVALID_ID", "Session ID is required", nil)
+		return
+	}
+
+	var req struct {
+		Enabled  bool   `json:"enabled"`
+		FullSync bool   `json:"full_sync"`
+		Since    string `json:"since,omitempty"` // ISO 8601 timestamp for incremental sync
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, "INVALID_JSON", "Invalid request body", nil)
+		return
+	}
+
+	if err := h.sessionUC.ConfigureHistorySync(c.Request.Context(), id, req.Enabled, req.FullSync, req.Since); err != nil {
+		handleDomainError(c, err)
+		return
+	}
+
+	respondWithSuccess(c, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "History sync configured successfully",
+	})
+}
+
 // Health handles GET /health (liveness probe)
 func (h *Handler) Health(c *gin.Context) {
 	if h.healthUC != nil {

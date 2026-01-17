@@ -102,7 +102,7 @@ func TestUnregisterSession_Success(t *testing.T) {
 	publisher := NewEventPublisherMock()
 
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -123,7 +123,7 @@ func TestUnregisterSession_Success(t *testing.T) {
 	assert.Equal(t, "Session unregistered successfully", response.Data["message"])
 
 	// Verify session was deleted
-	_, exists := repo.sessions["test-id"]
+	_, exists := repo.Sessions["test-id"]
 	assert.False(t, exists)
 }
 
@@ -147,7 +147,7 @@ func TestUnregisterSession_NotFound_NoError(t *testing.T) {
 func TestUpdateSessionStatus_Success(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
 	router := setupTestRouter(sessionUC)
 
@@ -169,7 +169,7 @@ func TestUpdateSessionStatus_Success(t *testing.T) {
 	assert.True(t, response.Success)
 
 	// Verify status was updated
-	assert.Equal(t, entity.StatusConnected, repo.sessions["test-id"].Status)
+	assert.Equal(t, entity.StatusConnected, repo.Sessions["test-id"].Status)
 }
 
 func TestUpdateSessionStatus_WithJID(t *testing.T) {
@@ -177,7 +177,7 @@ func TestUpdateSessionStatus_WithJID(t *testing.T) {
 	waClient := NewWhatsAppClientMock()
 	publisher := NewEventPublisherMock()
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 	router := setupTestRouter(sessionUC)
 
@@ -193,13 +193,13 @@ func TestUpdateSessionStatus_WithJID(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify JID was updated
-	assert.Equal(t, "1234567890@s.whatsapp.net", repo.sessions["test-id"].JID)
+	assert.Equal(t, "1234567890@s.whatsapp.net", repo.Sessions["test-id"].JID)
 }
 
 func TestUpdateSessionStatus_InvalidStatus(t *testing.T) {
 	repo := NewSessionRepositoryMock()
 	existingSession := entity.NewSession("test-id", "Test Session")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	sessionUC := usecase.NewSessionUseCase(repo, nil, nil)
 	router := setupTestRouter(sessionUC)
 
@@ -239,7 +239,7 @@ func TestUpdateSessionStatus_CreatesSessionIfNotExists(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify session was created
-	_, exists := repo.sessions["new-session"]
+	_, exists := repo.Sessions["new-session"]
 	assert.True(t, exists)
 }
 
@@ -253,7 +253,7 @@ func TestReconnectSession_Success(t *testing.T) {
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
 	existingSession.SetJID("1234567890@s.whatsapp.net")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 	router := setupTestRouter(sessionUC)
@@ -276,7 +276,7 @@ func TestReconnectSession_Success(t *testing.T) {
 	assert.True(t, waClient.Connected["test-id"])
 
 	// Verify status was updated to connected
-	assert.Equal(t, entity.StatusConnected, repo.sessions["test-id"].Status)
+	assert.Equal(t, entity.StatusConnected, repo.Sessions["test-id"].Status)
 }
 
 func TestReconnectSession_AlreadyConnected(t *testing.T) {
@@ -286,7 +286,7 @@ func TestReconnectSession_AlreadyConnected(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusConnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -308,7 +308,7 @@ func TestReconnectSession_ConnectionFailed(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	// Make connect fail
 	waClient.ConnectFn = func(ctx context.Context, sessionID string) error {
@@ -326,7 +326,7 @@ func TestReconnectSession_ConnectionFailed(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
 	// Verify status was reverted to disconnected
-	assert.Equal(t, entity.StatusDisconnected, repo.sessions["test-id"].Status)
+	assert.Equal(t, entity.StatusDisconnected, repo.Sessions["test-id"].Status)
 }
 
 func TestReconnectSession_MissingID(t *testing.T) {
@@ -353,7 +353,7 @@ func TestDisconnectSession_Success(t *testing.T) {
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusConnected)
 	existingSession.SetJID("1234567890@s.whatsapp.net")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -377,7 +377,7 @@ func TestDisconnectSession_Success(t *testing.T) {
 	assert.False(t, waClient.Connected["test-id"])
 
 	// Verify status was updated to disconnected
-	assert.Equal(t, entity.StatusDisconnected, repo.sessions["test-id"].Status)
+	assert.Equal(t, entity.StatusDisconnected, repo.Sessions["test-id"].Status)
 }
 
 func TestDisconnectSession_AlreadyDisconnected(t *testing.T) {
@@ -387,7 +387,7 @@ func TestDisconnectSession_AlreadyDisconnected(t *testing.T) {
 
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusDisconnected)
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 	router := setupTestRouter(sessionUC)
@@ -401,7 +401,7 @@ func TestDisconnectSession_AlreadyDisconnected(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Status should remain disconnected
-	assert.Equal(t, entity.StatusDisconnected, repo.sessions["test-id"].Status)
+	assert.Equal(t, entity.StatusDisconnected, repo.Sessions["test-id"].Status)
 }
 
 func TestDisconnectSession_PreservesJID(t *testing.T) {
@@ -412,7 +412,7 @@ func TestDisconnectSession_PreservesJID(t *testing.T) {
 	existingSession := entity.NewSession("test-id", "Test Session")
 	existingSession.SetStatus(entity.StatusConnected)
 	existingSession.SetJID("1234567890@s.whatsapp.net")
-	repo.sessions["test-id"] = existingSession
+	repo.Sessions["test-id"] = existingSession
 	waClient.Connected["test-id"] = true
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
@@ -426,7 +426,7 @@ func TestDisconnectSession_PreservesJID(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify JID is preserved after disconnect
-	assert.Equal(t, "1234567890@s.whatsapp.net", repo.sessions["test-id"].JID)
+	assert.Equal(t, "1234567890@s.whatsapp.net", repo.Sessions["test-id"].JID)
 }
 
 func TestDisconnectSession_MissingID(t *testing.T) {

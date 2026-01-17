@@ -251,3 +251,32 @@ func (uc *SessionUseCase) UpdateSessionJID(ctx context.Context, sessionID, jid s
 
 	return nil
 }
+
+// ConfigureHistorySync configures history sync settings for a session
+func (uc *SessionUseCase) ConfigureHistorySync(ctx context.Context, sessionID string, enabled, fullSync bool, since string) error {
+	// Get or create session
+	session, err := uc.repo.GetByID(ctx, sessionID)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create session with history sync config
+			session = entity.NewSession(sessionID, "")
+			session.SetHistorySyncConfig(enabled, fullSync, since)
+			return uc.repo.Create(ctx, session)
+		}
+		return errors.ErrDatabaseError.WithCause(err)
+	}
+
+	// Update history sync configuration
+	session.SetHistorySyncConfig(enabled, fullSync, since)
+
+	if err := uc.repo.Update(ctx, session); err != nil {
+		return errors.ErrDatabaseError.WithCause(err)
+	}
+
+	// If WhatsApp client is available, update its configuration
+	if uc.waClient != nil {
+		uc.waClient.SetHistorySyncConfig(sessionID, enabled, fullSync, since)
+	}
+
+	return nil
+}

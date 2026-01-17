@@ -91,6 +91,12 @@ type WhatsAppClient interface {
 
 	// SetSessionJIDMapping sets the JID mapping for a session (used for reconnection after restart)
 	SetSessionJIDMapping(sessionID, jid string)
+
+	// SetHistorySyncConfig sets the history sync configuration for a session
+	SetHistorySyncConfig(sessionID string, enabled, fullSync bool, since string)
+
+	// GetHistorySyncConfig gets the history sync configuration for a session
+	GetHistorySyncConfig(sessionID string) (enabled, fullSync bool, since string)
 }
 
 // EventPublisher defines event propagation operations to the API server

@@ -46,7 +46,7 @@ func TestWebSocket_QRFlow_Success(t *testing.T) {
 
 	// Create a session
 	session := entity.NewSession("test-session", "Test Session")
-	repo.sessions["test-session"] = session
+	repo.Sessions["test-session"] = session
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -89,7 +89,7 @@ func TestWebSocket_QRFlow_Authentication(t *testing.T) {
 
 	// Create a session
 	session := entity.NewSession("test-session", "Test Session")
-	repo.sessions["test-session"] = session
+	repo.Sessions["test-session"] = session
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -161,7 +161,7 @@ func TestWebSocket_QRFlow_DuplicateConnection(t *testing.T) {
 
 	// Create a session
 	session := entity.NewSession("test-session", "Test Session")
-	repo.sessions["test-session"] = session
+	repo.Sessions["test-session"] = session
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -206,7 +206,7 @@ func TestWebSocket_QRFlow_ErrorEvent(t *testing.T) {
 
 	// Create a session
 	session := entity.NewSession("test-session", "Test Session")
-	repo.sessions["test-session"] = session
+	repo.Sessions["test-session"] = session
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -247,7 +247,7 @@ func TestWebSocket_OriginValidation_Allowed(t *testing.T) {
 	publisher := NewEventPublisherMock()
 
 	session := entity.NewSession("test-session", "Test Session")
-	repo.sessions["test-session"] = session
+	repo.Sessions["test-session"] = session
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -274,7 +274,7 @@ func TestWebSocket_OriginValidation_Wildcard(t *testing.T) {
 	publisher := NewEventPublisherMock()
 
 	session := entity.NewSession("test-session", "Test Session")
-	repo.sessions["test-session"] = session
+	repo.Sessions["test-session"] = session
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 
@@ -301,8 +301,8 @@ func TestWebSocket_ActiveConnectionCount(t *testing.T) {
 	publisher := NewEventPublisherMock()
 
 	// Create multiple sessions
-	repo.sessions["session-1"] = entity.NewSession("session-1", "Session 1")
-	repo.sessions["session-2"] = entity.NewSession("session-2", "Session 2")
+	repo.Sessions["session-1"] = entity.NewSession("session-1", "Session 1")
+	repo.Sessions["session-2"] = entity.NewSession("session-2", "Session 2")
 
 	sessionUC := usecase.NewSessionUseCase(repo, waClient, publisher)
 

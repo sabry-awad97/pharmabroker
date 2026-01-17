@@ -61,6 +61,11 @@ func (m *MockWhatsAppClient) RegisterEventHandler(handler repository.EventHandle
 func (m *MockWhatsAppClient) IsConnected(sessionID string) bool                    { return m.connected }
 func (m *MockWhatsAppClient) GetSessionJID(sessionID string) (string, error)       { return "", nil }
 func (m *MockWhatsAppClient) SetSessionJIDMapping(sessionID, jid string)           {}
+func (m *MockWhatsAppClient) SetHistorySyncConfig(sessionID string, enabled, fullSync bool, since string) {
+}
+func (m *MockWhatsAppClient) GetHistorySyncConfig(sessionID string) (enabled, fullSync bool, since string) {
+	return false, false, ""
+}
 
 func TestWhatsAppClientHealthChecker_Healthy(t *testing.T) {
 	client := &MockWhatsAppClient{connected: true}

@@ -4,170 +4,22 @@ import (
 	"context"
 
 	"github.com/pharmabroker/whatsapp/internal/domain/entity"
-	"github.com/pharmabroker/whatsapp/internal/domain/errors"
-	"github.com/pharmabroker/whatsapp/internal/domain/repository"
 	"github.com/pharmabroker/whatsapp/internal/domain/valueobject"
+	"github.com/pharmabroker/whatsapp/test/mocks"
 )
 
-// ==================== Session Repository Mock ====================
+// ==================== Re-export Shared Mocks ====================
 
-// SessionRepositoryMock is a mock implementation of SessionRepository
-type SessionRepositoryMock struct {
-	sessions map[string]*entity.Session
-	createFn func(ctx context.Context, session *entity.Session) error
-	getFn    func(ctx context.Context, id string) (*entity.Session, error)
-	updateFn func(ctx context.Context, session *entity.Session) error
-	deleteFn func(ctx context.Context, id string) error
-}
+// Re-export shared mocks for backward compatibility
+type SessionRepositoryMock = mocks.SessionRepositoryMock
+type WhatsAppClientMock = mocks.WhatsAppClientMock
+type EventPublisherMock = mocks.EventPublisherMock
 
-func NewSessionRepositoryMock() *SessionRepositoryMock {
-	return &SessionRepositoryMock{
-		sessions: make(map[string]*entity.Session),
-	}
-}
-
-func (m *SessionRepositoryMock) Create(ctx context.Context, session *entity.Session) error {
-	if m.createFn != nil {
-		return m.createFn(ctx, session)
-	}
-	m.sessions[session.ID] = session
-	return nil
-}
-
-func (m *SessionRepositoryMock) GetByID(ctx context.Context, id string) (*entity.Session, error) {
-	if m.getFn != nil {
-		return m.getFn(ctx, id)
-	}
-	return m.sessions[id], nil
-}
-
-func (m *SessionRepositoryMock) Update(ctx context.Context, session *entity.Session) error {
-	if m.updateFn != nil {
-		return m.updateFn(ctx, session)
-	}
-	m.sessions[session.ID] = session
-	return nil
-}
-
-func (m *SessionRepositoryMock) Delete(ctx context.Context, id string) error {
-	if m.deleteFn != nil {
-		return m.deleteFn(ctx, id)
-	}
-	delete(m.sessions, id)
-	return nil
-}
-
-func (m *SessionRepositoryMock) UpdateStatus(ctx context.Context, id string, status entity.Status) error {
-	if s, ok := m.sessions[id]; ok {
-		s.SetStatus(status)
-		return nil
-	}
-	return errors.ErrSessionNotFound
-}
-
-// ==================== WhatsApp Client Mock ====================
-
-// WhatsAppClientMock is a mock implementation of WhatsAppClient
-type WhatsAppClientMock struct {
-	Connected    map[string]bool
-	ConnectFn    func(ctx context.Context, sessionID string) error
-	DisconnectFn func(ctx context.Context, sessionID string) error
-	SendFn       func(ctx context.Context, msg *entity.Message) error
-	QRChan       chan repository.QREvent
-}
-
-func NewWhatsAppClientMock() *WhatsAppClientMock {
-	return &WhatsAppClientMock{
-		Connected: make(map[string]bool),
-		QRChan:    make(chan repository.QREvent, 10),
-	}
-}
-
-func (m *WhatsAppClientMock) Connect(ctx context.Context, sessionID string) error {
-	if m.ConnectFn != nil {
-		return m.ConnectFn(ctx, sessionID)
-	}
-	m.Connected[sessionID] = true
-	return nil
-}
-
-func (m *WhatsAppClientMock) Disconnect(ctx context.Context, sessionID string) error {
-	if m.DisconnectFn != nil {
-		return m.DisconnectFn(ctx, sessionID)
-	}
-	delete(m.Connected, sessionID)
-	return nil
-}
-
-func (m *WhatsAppClientMock) SendMessage(ctx context.Context, msg *entity.Message) error {
-	if m.SendFn != nil {
-		return m.SendFn(ctx, msg)
-	}
-	return nil
-}
-
-func (m *WhatsAppClientMock) GetQRChannel(ctx context.Context, sessionID string) (<-chan repository.QREvent, error) {
-	return m.QRChan, nil
-}
-
-func (m *WhatsAppClientMock) RegisterEventHandler(handler repository.EventHandler) {}
-
-func (m *WhatsAppClientMock) IsConnected(sessionID string) bool {
-	return m.Connected[sessionID]
-}
-
-func (m *WhatsAppClientMock) GetSessionJID(sessionID string) (string, error) {
-	if m.Connected[sessionID] {
-		return sessionID + "@s.whatsapp.net", nil
-	}
-	return "", errors.ErrSessionNotFound
-}
-
-func (m *WhatsAppClientMock) SetSessionJIDMapping(sessionID, jid string) {
-	// No-op for mock
-}
-
-// ==================== Event Publisher Mock ====================
-
-// EventPublisherMock is a mock implementation of EventPublisher
-type EventPublisherMock struct {
-	IsConnectedVal bool
-	Events         []*entity.Event
-	PublishFn      func(ctx context.Context, event *entity.Event) error
-}
-
-func NewEventPublisherMock() *EventPublisherMock {
-	return &EventPublisherMock{
-		IsConnectedVal: true,
-		Events:         make([]*entity.Event, 0),
-	}
-}
-
-func (m *EventPublisherMock) Publish(ctx context.Context, event *entity.Event) error {
-	if m.PublishFn != nil {
-		return m.PublishFn(ctx, event)
-	}
-	m.Events = append(m.Events, event)
-	return nil
-}
-
-func (m *EventPublisherMock) Connect(ctx context.Context) error {
-	m.IsConnectedVal = true
-	return nil
-}
-
-func (m *EventPublisherMock) Disconnect(ctx context.Context) error {
-	m.IsConnectedVal = false
-	return nil
-}
-
-func (m *EventPublisherMock) IsConnected() bool {
-	return m.IsConnectedVal
-}
-
-func (m *EventPublisherMock) QueueSize() int {
-	return len(m.Events)
-}
+var (
+	NewSessionRepositoryMock = mocks.NewSessionRepositoryMock
+	NewWhatsAppClientMock    = mocks.NewWhatsAppClientMock
+	NewEventPublisherMock    = mocks.NewEventPublisherMock
+)
 
 // ==================== Media Uploader Mock ====================
 

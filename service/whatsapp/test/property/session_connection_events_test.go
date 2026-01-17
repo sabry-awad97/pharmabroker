@@ -19,13 +19,17 @@ import (
 
 // WhatsAppClientMock is a mock implementation of WhatsAppClient
 type WhatsAppClientMock struct {
-	mu           sync.Mutex
-	Connected    map[string]bool
-	ConnectFn    func(ctx context.Context, sessionID string) error
-	DisconnectFn func(ctx context.Context, sessionID string) error
-	SendFn       func(ctx context.Context, msg *entity.Message) error
-	QRChan       chan repository.QREvent
-	JIDMappings  map[string]string
+	mu                sync.Mutex
+	Connected         map[string]bool
+	ConnectFn         func(ctx context.Context, sessionID string) error
+	DisconnectFn      func(ctx context.Context, sessionID string) error
+	SendFn            func(ctx context.Context, msg *entity.Message) error
+	QRChan            chan repository.QREvent
+	JIDMappings       map[string]string
+	historySyncConfig map[string]struct {
+		enabled, fullSync bool
+		since             string
+	}
 }
 
 func NewWhatsAppClientMock() *WhatsAppClientMock {
@@ -33,6 +37,10 @@ func NewWhatsAppClientMock() *WhatsAppClientMock {
 		Connected:   make(map[string]bool),
 		QRChan:      make(chan repository.QREvent, 10),
 		JIDMappings: make(map[string]string),
+		historySyncConfig: make(map[string]struct {
+			enabled, fullSync bool
+			since             string
+		}),
 	}
 }
 
@@ -91,6 +99,29 @@ func (m *WhatsAppClientMock) SetSessionJIDMapping(sessionID, jid string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.JIDMappings[sessionID] = jid
+}
+
+func (m *WhatsAppClientMock) SetHistorySyncConfig(sessionID string, enabled, fullSync bool, since string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.historySyncConfig[sessionID] = struct {
+		enabled, fullSync bool
+		since             string
+	}{
+		enabled:  enabled,
+		fullSync: fullSync,
+		since:    since,
+	}
+}
+
+func (m *WhatsAppClientMock) GetHistorySyncConfig(sessionID string) (enabled, fullSync bool, since string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	config, exists := m.historySyncConfig[sessionID]
+	if !exists {
+		return false, false, ""
+	}
+	return config.enabled, config.fullSync, config.since
 }
 
 // EventPublisherMock is a mock implementation of EventPublisher

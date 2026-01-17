@@ -99,6 +99,37 @@ export const sessionIdInput = z.object({
   id: sessionId,
 });
 
+/** Update history sync setting input */
+export const updateHistorySyncInput = z.object({
+  id: sessionId,
+  enable_history_sync: z.boolean(),
+});
+
+/** Manual sync trigger input */
+export const triggerSyncInput = z.object({
+  id: sessionId,
+});
+
+/** Cancel sync input */
+export const cancelSyncInput = z.object({
+  id: sessionId,
+});
+
+/** Sync status response */
+export const historySyncStatusResponse = z.object({
+  status: historySyncStatus,
+  progress: z.number().int().min(0),
+  total: z.number().int().min(0).optional(),
+  started_at: unbranded.datetime.optional(),
+  completed_at: unbranded.datetime.optional(),
+});
+
+/** Generic success response */
+export const successResponse = z.object({
+  success: z.literal(true),
+  message: z.string().optional(),
+});
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -110,3 +141,10 @@ export type CreateSessionInput = z.infer<typeof createSessionInput>;
 export type UpdateSessionInput = z.infer<typeof updateSessionInput>;
 export type SessionIdInput = z.infer<typeof sessionIdInput>;
 export type ReconnectSessionResponse = z.infer<typeof reconnectSessionResponse>;
+export type UpdateHistorySyncInput = z.infer<typeof updateHistorySyncInput>;
+export type TriggerSyncInput = z.infer<typeof triggerSyncInput>;
+export type CancelSyncInput = z.infer<typeof cancelSyncInput>;
+export type HistorySyncStatusResponse = z.infer<
+  typeof historySyncStatusResponse
+>;
+export type SuccessResponse = z.infer<typeof successResponse>;

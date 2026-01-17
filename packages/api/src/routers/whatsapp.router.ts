@@ -9,6 +9,7 @@
 import { o, protectedProcedure } from '..';
 import { eventIterator, EventPublisher } from '@orpc/server';
 import { whatsappService } from '../services/whatsapp.service';
+import { historySyncService } from '../services/history-sync.service';
 import { whatsappGroupsRouter } from './whatsapp-groups.router';
 import { whatsappMessagesRouter } from './whatsapp-messages.router';
 import {
@@ -20,6 +21,12 @@ import {
   sessionList,
   deleteSessionResponse,
   reconnectSessionResponse,
+  // History sync schemas
+  updateHistorySyncInput,
+  triggerSyncInput,
+  cancelSyncInput,
+  historySyncStatusResponse,
+  successResponse,
   // Message schemas
   sendMessageInput,
   sendMessageResponse,
@@ -176,6 +183,149 @@ export const whatsappRouter = o.router({
     .handler(async ({ input, context }) => {
       const userId = context.session!.user.id;
       return whatsappService.disconnectSession(userId, input.id);
+    }),
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // History Sync Management
+  // ─────────────────────────────────────────────────────────────────────────
+
+  updateHistorySync: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'PATCH',
+        path: '/whatsapp/sessions/{id}/history-sync',
+        tags: ['WhatsApp Sessions'],
+        summary: 'Update history sync setting',
+        description:
+          'Enable or disable history sync for a session. Can only be changed before first connection.',
+      },
+    })
+    .input(updateHistorySyncInput)
+    .output(session)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+
+      // Verify session belongs to user and get current state
+      const existingSession = await whatsappService.getSession(
+        userId,
+        input.id,
+      );
+
+      // Prevent changing setting after first connection
+      if (existingSession.first_connected_at) {
+        throw new Error(
+          'Cannot change history sync setting after first connection',
+        );
+      }
+
+      return whatsappService.updateSession(userId, {
+        id: input.id,
+        enable_history_sync: input.enable_history_sync,
+      });
+    }),
+
+  triggerHistorySync: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/sessions/{id}/sync-history',
+        tags: ['WhatsApp Sessions'],
+        summary: 'Manually trigger history sync',
+        description:
+          'Manually trigger a history sync for a connected session. Useful for re-syncing after errors.',
+      },
+    })
+    .input(triggerSyncInput)
+    .output(successResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+
+      // Verify session belongs to user and is connected
+      const session = await whatsappService.getSession(userId, input.id);
+
+      if (session.status !== 'connected') {
+        throw new Error('Session must be connected to trigger sync');
+      }
+
+      if (session.history_sync_status === 'in_progress') {
+        throw new Error('Sync already in progress');
+      }
+
+      // Determine sync type based on history
+      if (!session.first_connected_at) {
+        await historySyncService.triggerFullHistorySync(input.id);
+      } else if (session.last_disconnected_at) {
+        await historySyncService.triggerIncrementalSync(
+          input.id,
+          new Date(session.last_disconnected_at),
+        );
+      } else {
+        throw new Error('No sync needed - session has not been disconnected');
+      }
+
+      return {
+        success: true as const,
+        message: 'History sync triggered successfully',
+      };
+    }),
+
+  cancelHistorySync: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'POST',
+        path: '/whatsapp/sessions/{id}/cancel-sync',
+        tags: ['WhatsApp Sessions'],
+        summary: 'Cancel ongoing history sync',
+        description:
+          'Cancel an in-progress history sync. Already synced messages will be preserved.',
+      },
+    })
+    .input(cancelSyncInput)
+    .output(successResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+
+      // Verify session belongs to user
+      const session = await whatsappService.getSession(userId, input.id);
+
+      if (session.history_sync_status !== 'in_progress') {
+        throw new Error('No sync in progress to cancel');
+      }
+
+      await historySyncService.cancelSync(input.id);
+
+      return {
+        success: true as const,
+        message: 'History sync cancelled successfully',
+      };
+    }),
+
+  getHistorySyncStatus: protectedProcedure
+    .meta({
+      openapi: {
+        method: 'GET',
+        path: '/whatsapp/sessions/{id}/sync-status',
+        tags: ['WhatsApp Sessions'],
+        summary: 'Get history sync status',
+        description:
+          'Get the current history sync status and progress for a session.',
+      },
+    })
+    .input(sessionIdInput)
+    .output(historySyncStatusResponse)
+    .handler(async ({ input, context }) => {
+      const userId = context.session!.user.id;
+
+      // Verify session belongs to user
+      const session = await whatsappService.getSession(userId, input.id);
+
+      return {
+        status: session.history_sync_status,
+        progress: session.history_sync_progress,
+        total: session.history_sync_total,
+        started_at: session.history_sync_started_at,
+        completed_at: session.history_sync_completed_at,
+      };
     }),
 
   // ─────────────────────────────────────────────────────────────────────────
