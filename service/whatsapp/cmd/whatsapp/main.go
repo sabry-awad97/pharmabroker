@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,15 +18,42 @@ import (
 )
 
 func main() {
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
 	fxApp := fx.New(
 		// Include all application modules
 		app.Module,
 
 		// Invoke the server startup
 		fx.Invoke(startServer),
+
+		// Configure graceful shutdown timeout
+		fx.StopTimeout(45*time.Second), // Allow 45 seconds for graceful shutdown
 	)
 
-	fxApp.Run()
+	// Start the application
+	startCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := fxApp.Start(startCtx); err != nil {
+		log.Fatalf("❌ Failed to start application: %v", err)
+	}
+
+	// Wait for shutdown signal
+	sig := <-sigChan
+	log.Printf("🛑 Received signal: %v - initiating graceful shutdown...", sig)
+
+	// Stop the application gracefully
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer stopCancel()
+
+	if err := fxApp.Stop(stopCtx); err != nil {
+		log.Fatalf("❌ Failed to stop application gracefully: %v", err)
+	}
+
+	log.Println("✅ Application stopped gracefully")
 }
 
 // startServer starts the HTTP server with graceful shutdown
@@ -53,7 +83,7 @@ func startServer(
 		OnStart: func(ctx context.Context) error {
 			log.Printf("🚀 WhatsApp service starting on %s", cfg.Server.Address())
 			log.Printf("📁 Whatsmeow database: %s", cfg.WhatsApp.DBPath)
-			log.Printf("� WebSoceket API URL: %s", cfg.WebSocket.URL)
+			log.Printf("🔌 WebSocket API URL: %s", cfg.WebSocket.URL)
 
 			// Start server in a goroutine
 			go func() {
@@ -65,17 +95,18 @@ func startServer(
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			log.Println("🛑 Shutting down WhatsApp service...")
+			log.Println("🛑 Shutting down HTTP server...")
 
 			// Create a deadline for graceful shutdown
 			shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 
 			if err := srv.Shutdown(shutdownCtx); err != nil {
+				log.Printf("⚠️  HTTP server shutdown error: %v", err)
 				return fmt.Errorf("server shutdown error: %w", err)
 			}
 
-			log.Println("✅ WhatsApp service stopped gracefully")
+			log.Println("✅ HTTP server stopped gracefully")
 			return nil
 		},
 	})

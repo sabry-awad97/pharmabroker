@@ -2,6 +2,8 @@ package infrastructure
 
 import (
 	"context"
+	"log"
+	"time"
 
 	"github.com/pharmabroker/whatsapp/internal/domain/entity"
 	"github.com/pharmabroker/whatsapp/internal/domain/repository"
@@ -28,6 +30,7 @@ var Module = fx.Module("infrastructure",
 			fx.As(new(repository.GroupFetcher)),
 		),
 		NewGorillaEventPublisher,
+		NewEventHub,
 		NewHealthCheckers,
 		NewMediaUploader,
 	),
@@ -58,7 +61,16 @@ func NewWhatsmeowClient(lc fx.Lifecycle, cfg *config.Config) (*whatsapp.Whatsmeo
 
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			return client.Close()
+			log.Println("🛑 Shutting down WhatsApp client...")
+
+			// Close all WhatsApp connections gracefully
+			if err := client.Close(); err != nil {
+				log.Printf("⚠️  WhatsApp client shutdown error: %v", err)
+				return err
+			}
+
+			log.Println("✅ WhatsApp client stopped gracefully")
+			return nil
 		},
 	})
 
@@ -88,7 +100,22 @@ func NewGorillaEventPublisher(lc fx.Lifecycle, cfg *config.Config) repository.Ev
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			return publisher.Disconnect(ctx)
+			log.Println("🛑 Shutting down WebSocket publisher...")
+
+			// Log queue status before shutdown
+			queueSize := publisher.QueueSize()
+			if queueSize > 0 {
+				log.Printf("📤 Flushing %d queued events before shutdown...", queueSize)
+			}
+
+			// Disconnect will flush the queue automatically
+			if err := publisher.Disconnect(ctx); err != nil {
+				log.Printf("⚠️  WebSocket publisher shutdown error: %v", err)
+				return err
+			}
+
+			log.Println("✅ WebSocket publisher stopped gracefully")
+			return nil
 		},
 	})
 
@@ -155,4 +182,41 @@ func WireEventHubToWhatsAppClient(
 			}
 		}()
 	})
+}
+
+// NewEventHub creates a new WebSocket event hub for broadcasting events to connected clients
+func NewEventHub(lc fx.Lifecycle, cfg *config.Config) *websocket.EventHub {
+	hubConfig := websocket.EventHubConfig{
+		APIKey:       cfg.WebSocket.APIKey,
+		PingInterval: cfg.WebSocket.PingInterval,
+		WriteTimeout: 10 * time.Second,
+		AuthTimeout:  10 * time.Second,
+	}
+
+	hub := websocket.NewEventHub(hubConfig)
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			// Start event hub in background
+			go hub.Run()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			log.Println("🛑 Shutting down WebSocket event hub...")
+
+			// Log connected clients
+			clientCount := hub.ClientCount()
+			if clientCount > 0 {
+				log.Printf("📡 Closing %d WebSocket client connections...", clientCount)
+			}
+
+			// Stop the hub (will close all client connections)
+			hub.Stop()
+
+			log.Println("✅ WebSocket event hub stopped gracefully")
+			return nil
+		},
+	})
+
+	return hub
 }

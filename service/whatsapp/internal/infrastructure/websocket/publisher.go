@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sync"
 	"time"
 
@@ -147,27 +148,41 @@ func (p *GorillaEventPublisher) connectWithRetry(ctx context.Context) error {
 // Disconnect closes the WebSocket connection
 func (p *GorillaEventPublisher) Disconnect(ctx context.Context) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	if !p.connected {
+		p.mu.Unlock()
 		return nil
 	}
 
 	// Signal workers to stop
 	close(p.done)
+	p.mu.Unlock()
+
+	// Wait for workers to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Workers finished gracefully
+	case <-ctx.Done():
+		// Timeout - force close
+		log.Println("⚠️  WebSocket publisher shutdown timeout - forcing close")
+	}
 
 	// Close connection
+	p.mu.Lock()
 	if p.conn != nil {
 		_ = p.conn.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 		_ = p.conn.Close()
 		p.conn = nil
 	}
-
 	p.connected = false
-
-	// Wait for workers to finish
-	p.wg.Wait()
+	p.mu.Unlock()
 
 	return nil
 }
