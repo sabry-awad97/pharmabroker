@@ -35,6 +35,50 @@ import { logger } from '@pharmabroker/logger';
 import { whatsappMessagesReceived, recordError } from '@pharmabroker/metrics';
 
 // ============================================================================
+// Count Cache for Performance
+// ============================================================================
+
+interface CountCacheEntry {
+  count: number;
+  timestamp: number;
+}
+
+const COUNT_CACHE_TTL = 60000; // 60 seconds
+const countCache = new Map<string, CountCacheEntry>();
+
+function getCachedCount(cacheKey: string): number | null {
+  const entry = countCache.get(cacheKey);
+  if (!entry) return null;
+
+  const now = Date.now();
+  if (now - entry.timestamp > COUNT_CACHE_TTL) {
+    countCache.delete(cacheKey);
+    return null;
+  }
+
+  return entry.count;
+}
+
+function setCachedCount(cacheKey: string, count: number): void {
+  countCache.set(cacheKey, {
+    count,
+    timestamp: Date.now(),
+  });
+}
+
+function generateCountCacheKey(
+  userId: string,
+  filters: MessageFilterInput,
+): string {
+  return JSON.stringify({
+    userId,
+    ...filters,
+    limit: undefined,
+    cursor: undefined,
+  });
+}
+
+// ============================================================================
 // Types for Prisma queries
 // ============================================================================
 
@@ -171,18 +215,74 @@ class WhatsAppMessagesService {
       }
     }
 
-    // Search in text, caption, and sender name
+    // Search in text, caption, and sender name using Full Text Search
     if (search) {
-      const escapedSearch = escapeSqlWildcards(search);
-      where.OR = [
-        { text: { contains: escapedSearch, mode: 'insensitive' } },
-        { caption: { contains: escapedSearch, mode: 'insensitive' } },
-        { senderPushName: { contains: escapedSearch, mode: 'insensitive' } },
+      // Use PostgreSQL Full Text Search for better performance
+      // Convert search query to tsquery format (handles multiple words)
+      const searchQuery = search
+        .trim()
+        .split(/\s+/)
+        .filter(word => word.length > 0)
+        .map(word => `${word}:*`) // Prefix matching
+        .join(' & '); // AND operator
+
+      // Use raw query for FTS - much faster than ILIKE on large tables
+      // Note: This requires the search_vector column and trigger to be set up
+      const ftsCondition = Prisma.sql`search_vector @@ to_tsquery('english', ${searchQuery})`;
+
+      // Add FTS condition to where clause
+      // We'll use a raw query approach for this specific case
+      (where as any).AND = [
+        {
+          OR: [
+            { text: { not: null } },
+            { caption: { not: null } },
+            { senderPushName: { not: null } },
+          ],
+        },
       ];
+
+      // Store search query for raw SQL usage
+      (where as any)._ftsQuery = searchQuery;
     }
 
-    // Get total count (cached for 30s to improve performance)
-    const total = await prisma.whatsAppMessage.count({ where });
+    // Generate cache key for count
+    const cacheKey = generateCountCacheKey(userId, filters);
+
+    // Try to get cached count first
+    let total = getCachedCount(cacheKey);
+
+    if (total === null) {
+      // Count not in cache, fetch from database
+      if (search && (where as any)._ftsQuery) {
+        // Use raw query for FTS count
+        const searchQuery = (where as any)._ftsQuery;
+        delete (where as any)._ftsQuery;
+        delete (where as any).AND;
+
+        const countResult = await prisma.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(*) as count
+          FROM whatsapp_message wm
+          INNER JOIN whatsapp_session ws ON wm.session_id = ws.id
+          WHERE ws.user_id = ${userId}
+            ${sessionId ? Prisma.sql`AND wm.session_id = ${sessionId}` : Prisma.empty}
+            ${groupId ? Prisma.sql`AND wm.group_id = ${groupId}` : Prisma.empty}
+            ${messageType ? Prisma.sql`AND wm.message_type = ${messageType}` : Prisma.empty}
+            ${aiStatus ? Prisma.sql`AND wm.ai_status = ${aiStatus}` : Prisma.empty}
+            ${source ? Prisma.sql`AND wm.source = ${source}` : Prisma.empty}
+            ${dateFrom ? Prisma.sql`AND wm.message_timestamp >= ${dateFrom}` : Prisma.empty}
+            ${dateTo ? Prisma.sql`AND wm.message_timestamp <= ${dateTo}` : Prisma.empty}
+            AND wm.search_vector @@ to_tsquery('english', ${searchQuery})
+        `;
+        total = Number(countResult[0].count);
+      } else {
+        // Regular count query
+        total = await prisma.whatsAppMessage.count({ where });
+      }
+
+      // Cache the count
+      setCachedCount(cacheKey, total);
+    }
 
     // Validate cursor exists if provided
     if (cursor) {
@@ -205,29 +305,91 @@ class WhatsAppMessagesService {
     // Cursor-based pagination
     const cursorObj = cursor ? { id: cursor } : undefined;
 
-    const messages = await prisma.whatsAppMessage.findMany({
-      where,
-      take: effectiveLimit + 1, // Fetch one extra to determine if there's a next page
-      cursor: cursorObj,
-      skip: cursor ? 1 : 0, // Skip the cursor item itself
-      orderBy: [{ messageTimestamp: 'desc' }, { id: 'asc' }], // Consistent ordering
-      include: {
-        group: {
-          select: {
-            id: true,
-            name: true,
-            jid: true,
+    let messages;
+
+    if (search && (where as any)._ftsQuery) {
+      // Use raw query for FTS search with pagination
+      const searchQuery = (where as any)._ftsQuery;
+      delete (where as any)._ftsQuery;
+      delete (where as any).AND;
+
+      // Build the FTS query with all filters
+      messages = await prisma.$queryRaw<any[]>`
+        SELECT 
+          wm.*,
+          json_build_object(
+            'id', wg.id,
+            'name', wg.name,
+            'jid', wg.jid
+          ) as group,
+          CASE 
+            WHEN wgp.id IS NOT NULL THEN json_build_object(
+              'id', wgp.id,
+              'displayName', wgp.display_name,
+              'jid', wgp.jid
+            )
+            ELSE NULL
+          END as participant
+        FROM whatsapp_message wm
+        INNER JOIN whatsapp_session ws ON wm.session_id = ws.id
+        INNER JOIN whatsapp_group wg ON wm.group_id = wg.id
+        LEFT JOIN whatsapp_group_participant wgp ON wm.participant_id = wgp.id
+        WHERE ws.user_id = ${userId}
+          ${sessionId ? Prisma.sql`AND wm.session_id = ${sessionId}` : Prisma.empty}
+          ${groupId ? Prisma.sql`AND wm.group_id = ${groupId}` : Prisma.empty}
+          ${messageType ? Prisma.sql`AND wm.message_type = ${messageType}` : Prisma.empty}
+          ${aiStatus ? Prisma.sql`AND wm.ai_status = ${aiStatus}` : Prisma.empty}
+          ${source ? Prisma.sql`AND wm.source = ${source}` : Prisma.empty}
+          ${dateFrom ? Prisma.sql`AND wm.message_timestamp >= ${dateFrom}` : Prisma.empty}
+          ${dateTo ? Prisma.sql`AND wm.message_timestamp <= ${dateTo}` : Prisma.empty}
+          AND wm.search_vector @@ to_tsquery('english', ${searchQuery})
+          ${
+            cursor
+              ? Prisma.sql`AND (wm.message_timestamp, wm.id) < (
+            SELECT message_timestamp, id FROM whatsapp_message WHERE id = ${cursor}
+          )`
+              : Prisma.empty
+          }
+        ORDER BY wm.message_timestamp DESC, wm.id ASC
+        LIMIT ${effectiveLimit + 1}
+      `;
+
+      // Parse JSON fields from raw query
+      messages = messages.map(msg => ({
+        ...msg,
+        group:
+          typeof msg.group === 'string' ? JSON.parse(msg.group) : msg.group,
+        participant:
+          msg.participant && typeof msg.participant === 'string'
+            ? JSON.parse(msg.participant)
+            : msg.participant,
+      }));
+    } else {
+      // Regular Prisma query for non-search cases
+      messages = await prisma.whatsAppMessage.findMany({
+        where,
+        take: effectiveLimit + 1,
+        cursor: cursorObj,
+        skip: cursor ? 1 : 0,
+        orderBy: [{ messageTimestamp: 'desc' }, { id: 'asc' }],
+        include: {
+          group: {
+            select: {
+              id: true,
+              name: true,
+              jid: true,
+            },
+          },
+          participant: {
+            select: {
+              id: true,
+              displayName: true,
+              jid: true,
+            },
           },
         },
-        participant: {
-          select: {
-            id: true,
-            displayName: true,
-            jid: true,
-          },
-        },
-      },
-    });
+      });
+    }
 
     // Determine if there's a next page
     const hasNextPage = messages.length > effectiveLimit;

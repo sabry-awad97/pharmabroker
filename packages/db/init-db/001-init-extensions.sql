@@ -8,7 +8,11 @@
 -- Enable pgvector extension for vector similarity search
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Verify extension is installed
+-- Enable pg_trgm extension for trigram text search
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Verify extensions are installed
 SELECT extname, extversion 
 FROM pg_extension 
-WHERE extname = 'vector';
+WHERE extname IN ('vector', 'pg_trgm')
+ORDER BY extname;

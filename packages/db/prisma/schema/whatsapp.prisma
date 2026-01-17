@@ -219,6 +219,9 @@ model WhatsAppMessage {
     // Content-based deduplication
     contentHash String @map("content_hash") // SHA-256 hash (32 chars) for deduplication
 
+    // Full Text Search vector (auto-updated by trigger)
+    searchVector Unsupported("tsvector")? @map("search_vector")
+
     // Vector embedding for semantic search (768 dimensions for common models)
     embedding Unsupported("vector(768)")? // Vector embedding of message content
 
