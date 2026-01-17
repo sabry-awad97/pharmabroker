@@ -31,6 +31,8 @@ import type {
 import { escapeSqlWildcards } from '../utils/prisma';
 import { messageQueueService } from './message-queue.service';
 import { generateContentHash } from '../utils/content-hash';
+import { logger } from '@pharmabroker/logger';
+import { whatsappMessagesReceived, recordError } from '@pharmabroker/metrics';
 
 // ============================================================================
 // Types for Prisma queries
@@ -94,6 +96,8 @@ export interface ParsedMessageEvent {
 // ============================================================================
 
 class WhatsAppMessagesService {
+  private log = logger.child('whatsapp-messages');
+
   /**
    * List messages for a user with filtering and pagination
    * Only returns messages belonging to sessions owned by the user
@@ -421,15 +425,20 @@ class WhatsAppMessagesService {
       // Queue message for later processing instead of dropping
       messageQueueService.enqueue(sessionId, event);
       const queueSize = messageQueueService.getQueueSize(sessionId);
-      console.log(
-        `[WhatsApp Messages] Queued message ${messageId} for unknown group ${chatJid} (session: ${sessionId}, queue size: ${queueSize})`,
-      );
+      this.log.info('Queued message for unknown group', {
+        messageId,
+        chatJid,
+        sessionId,
+        queueSize,
+      });
       return;
     }
 
-    console.log(
-      `[WhatsApp Messages] Storing message ${messageId} in group ${group.name} (${chatJid})`,
-    );
+    this.log.debug('Storing message in group', {
+      messageId,
+      groupName: group.name,
+      chatJid,
+    });
 
     // Try to find participant by JID
     const participant = await prisma.whatsAppGroupParticipant.findFirst({
@@ -500,9 +509,17 @@ class WhatsAppMessagesService {
       },
     });
 
-    console.log(
-      `[WhatsApp Messages] ✓ Stored message ${messageId} (source: ${source}, type: ${messageType})`,
-    );
+    // Record metrics
+    whatsappMessagesReceived.inc({
+      session_id: sessionId,
+      type: messageType,
+    });
+
+    this.log.info('Stored message', {
+      messageId,
+      source,
+      messageType,
+    });
   }
 
   /**
@@ -514,9 +531,9 @@ class WhatsAppMessagesService {
   async processQueuedMessages(
     messages: ParsedMessageEvent[],
   ): Promise<{ stored: number; dropped: number }> {
-    console.log(
-      `[WhatsApp Messages] Processing batch of ${messages.length} queued messages`,
-    );
+    this.log.info('Processing batch of queued messages', {
+      messageCount: messages.length,
+    });
 
     let stored = 0;
     let dropped = 0;
@@ -527,9 +544,12 @@ class WhatsAppMessagesService {
 
       // Log progress every 100 messages
       if (batchCount % 100 === 0) {
-        console.log(
-          `[WhatsApp Messages] Batch progress: ${batchCount}/${messages.length} (${stored} stored, ${dropped} dropped)`,
-        );
+        this.log.debug('Batch progress', {
+          current: batchCount,
+          total: messages.length,
+          stored,
+          dropped,
+        });
       }
       const { sessionId, chatJid, messageId } = event;
 
@@ -544,9 +564,10 @@ class WhatsAppMessagesService {
 
       if (!group) {
         // Group still doesn't exist after sync - drop the message
-        console.warn(
-          `[WhatsApp Messages] Dropping orphan message ${messageId} for unknown group: ${chatJid}`,
-        );
+        this.log.warn('Dropping orphan message for unknown group', {
+          messageId,
+          chatJid,
+        });
         dropped++;
         continue;
       }
@@ -628,22 +649,23 @@ class WhatsAppMessagesService {
 
         // Log every 50th successful store
         if (stored % 50 === 0) {
-          console.log(
-            `[WhatsApp Messages] Stored ${stored} messages so far...`,
-          );
+          this.log.debug('Stored messages progress', { stored });
         }
       } catch (error) {
-        console.error(
-          `[WhatsApp Messages] Failed to store queued message ${messageId}:`,
-          error,
-        );
+        this.log.error('Failed to store queued message', {
+          messageId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        recordError('message_store', 'medium');
         dropped++;
       }
     }
 
-    console.log(
-      `[WhatsApp Messages] ✓ Batch complete: ${stored} stored, ${dropped} dropped out of ${messages.length} total`,
-    );
+    this.log.info('Batch complete', {
+      stored,
+      dropped,
+      total: messages.length,
+    });
 
     return { stored, dropped };
   }

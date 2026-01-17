@@ -16,6 +16,8 @@
 import { whatsappService } from './whatsapp.service';
 import { loadHealthConfig } from '../config/health.config';
 import { calculateBackoff } from '../utils/backoff';
+import { logger } from '@pharmabroker/logger';
+import { recordError } from '@pharmabroker/metrics';
 
 export interface SyncResult {
   totalSessions: number;
@@ -38,6 +40,7 @@ export { calculateBackoff } from '../utils/backoff';
  * - autoConnect=false: update status to 'disconnected'
  */
 export async function syncSessionsOnStartup(): Promise<SyncResult> {
+  const log = logger.child('session-sync');
   const config = loadHealthConfig();
   const result: SyncResult = {
     totalSessions: 0,
@@ -52,12 +55,12 @@ export async function syncSessionsOnStartup(): Promise<SyncResult> {
   const sessions = await whatsappService.getSessionsRequiringSync();
   result.totalSessions = sessions.length;
 
-  console.log(
-    `[SessionSync] Starting sync for ${sessions.length} session(s) with stale status`,
-  );
+  log.info('Starting session sync', {
+    sessionCount: sessions.length,
+  });
 
   if (sessions.length === 0) {
-    console.log('[SessionSync] No sessions require synchronization');
+    log.info('No sessions require synchronization');
     return result;
   }
 
@@ -70,18 +73,20 @@ export async function syncSessionsOnStartup(): Promise<SyncResult> {
         result,
         config.SYNC_MAX_RETRIES,
         config.SYNC_RETRY_DELAY_MS,
+        log,
       );
     } else {
       // Mark non-auto-connect sessions as disconnected
-      await processNonAutoConnectSession(session, result);
+      await processNonAutoConnectSession(session, result, log);
     }
   }
 
-  console.log(
-    `[SessionSync] Sync complete: ${result.reconnectSucceeded} reconnect succeeded, ` +
-      `${result.reconnectFailed} reconnect failed, ` +
-      `${result.markedDisconnected} marked disconnected, ${result.errors.length} errors`,
-  );
+  log.info('Session sync complete', {
+    reconnectSucceeded: result.reconnectSucceeded,
+    reconnectFailed: result.reconnectFailed,
+    markedDisconnected: result.markedDisconnected,
+    errors: result.errors.length,
+  });
 
   return result;
 }
@@ -95,37 +100,45 @@ async function processAutoConnectSession(
   result: SyncResult,
   maxRetries: number,
   initialDelayMs: number,
+  log: ReturnType<typeof logger.child>,
 ): Promise<void> {
   const maxDelayMs = 30_000; // Cap at 30 seconds
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      console.log(
-        `[SessionSync] Attempting reconnection for session ${session.id} (${session.name}) - attempt ${attempt + 1}/${maxRetries + 1}`,
-      );
+      log.info('Attempting reconnection', {
+        sessionId: session.id,
+        sessionName: session.name,
+        attempt: attempt + 1,
+        maxAttempts: maxRetries + 1,
+      });
 
       await whatsappService.reconnectSessionInternal(session.id);
       result.reconnectAttempted++;
       result.reconnectSucceeded++;
 
-      console.log(
-        `[SessionSync] Reconnection initiated for session ${session.id}`,
-      );
+      log.info('Reconnection initiated', {
+        sessionId: session.id,
+      });
       return; // Success - exit retry loop
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.error(
-        `[SessionSync] Reconnection attempt ${attempt + 1} failed for session ${session.id}:`,
-        lastError.message,
-      );
+      log.error('Reconnection attempt failed', {
+        sessionId: session.id,
+        attempt: attempt + 1,
+        error: lastError.message,
+      });
+      recordError('session_reconnect', 'high');
 
       // If we have more retries, wait with exponential backoff
       if (attempt < maxRetries) {
         const delay = calculateBackoff(attempt, initialDelayMs, maxDelayMs);
-        console.log(
-          `[SessionSync] Retrying session ${session.id} in ${delay}ms...`,
-        );
+        log.info('Retrying reconnection', {
+          sessionId: session.id,
+          delayMs: delay,
+          nextAttempt: attempt + 2,
+        });
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -135,23 +148,25 @@ async function processAutoConnectSession(
   result.reconnectAttempted++;
   result.reconnectFailed++;
 
-  console.error(
-    `[SessionSync] All ${maxRetries + 1} reconnection attempts failed for session ${session.id}`,
-  );
+  log.error('All reconnection attempts failed', {
+    sessionId: session.id,
+    attempts: maxRetries + 1,
+  });
 
   try {
     await whatsappService.updateSessionStatusDirect(session.id, 'disconnected');
     result.markedDisconnected++;
-    console.log(
-      `[SessionSync] Marked session ${session.id} as disconnected after all retries failed`,
-    );
+    log.info('Marked session as disconnected after failed retries', {
+      sessionId: session.id,
+    });
   } catch (updateError) {
     const errorMsg =
       updateError instanceof Error ? updateError.message : String(updateError);
-    console.error(
-      `[SessionSync] Failed to update status for session ${session.id}:`,
-      errorMsg,
-    );
+    log.error('Failed to update session status', {
+      sessionId: session.id,
+      error: errorMsg,
+    });
+    recordError('session_status_update', 'medium');
     result.errors.push({ sessionId: session.id, error: errorMsg });
   }
 }
@@ -162,22 +177,27 @@ async function processAutoConnectSession(
 async function processNonAutoConnectSession(
   session: { id: string; name: string },
   result: SyncResult,
+  log: ReturnType<typeof logger.child>,
 ): Promise<void> {
   try {
-    console.log(
-      `[SessionSync] Marking session ${session.id} (${session.name}) as disconnected`,
-    );
+    log.info('Marking session as disconnected', {
+      sessionId: session.id,
+      sessionName: session.name,
+    });
 
     await whatsappService.updateSessionStatusDirect(session.id, 'disconnected');
     result.markedDisconnected++;
 
-    console.log(`[SessionSync] Session ${session.id} marked as disconnected`);
+    log.info('Session marked as disconnected', {
+      sessionId: session.id,
+    });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(
-      `[SessionSync] Failed to update status for session ${session.id}:`,
-      errorMsg,
-    );
+    log.error('Failed to update session status', {
+      sessionId: session.id,
+      error: errorMsg,
+    });
+    recordError('session_status_update', 'medium');
     result.errors.push({ sessionId: session.id, error: errorMsg });
   }
 }
@@ -190,6 +210,7 @@ async function processNonAutoConnectSession(
  * no sessions can actually be connected.
  */
 export async function markAllSessionsDisconnected(): Promise<SyncResult> {
+  const log = logger.child('session-sync');
   const result: SyncResult = {
     totalSessions: 0,
     reconnectAttempted: 0,
@@ -204,12 +225,12 @@ export async function markAllSessionsDisconnected(): Promise<SyncResult> {
     const sessions = await whatsappService.getSessionsRequiringSync();
     result.totalSessions = sessions.length;
 
-    console.log(
-      `[SessionSync] Go service unavailable - marking ${sessions.length} session(s) as disconnected`,
-    );
+    log.warn('Go service unavailable - marking sessions as disconnected', {
+      sessionCount: sessions.length,
+    });
 
     if (sessions.length === 0) {
-      console.log('[SessionSync] No sessions require status update');
+      log.info('No sessions require status update');
       return result;
     }
 
@@ -221,24 +242,30 @@ export async function markAllSessionsDisconnected(): Promise<SyncResult> {
           'disconnected',
         );
         result.markedDisconnected++;
-        console.log(
-          `[SessionSync] Marked session ${session.id} (${session.name}) as disconnected`,
-        );
+        log.info('Marked session as disconnected', {
+          sessionId: session.id,
+          sessionName: session.name,
+        });
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(
-          `[SessionSync] Failed to update status for session ${session.id}:`,
-          errorMsg,
-        );
+        log.error('Failed to update session status', {
+          sessionId: session.id,
+          error: errorMsg,
+        });
+        recordError('session_status_update', 'medium');
         result.errors.push({ sessionId: session.id, error: errorMsg });
       }
     }
 
-    console.log(
-      `[SessionSync] Completed: ${result.markedDisconnected} marked disconnected, ${result.errors.length} errors`,
-    );
+    log.info('Completed marking sessions as disconnected', {
+      markedDisconnected: result.markedDisconnected,
+      errors: result.errors.length,
+    });
   } catch (error) {
-    console.error('[SessionSync] Failed to query sessions:', error);
+    log.error('Failed to query sessions', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    recordError('session_query', 'high');
   }
 
   return result;

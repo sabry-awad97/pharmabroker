@@ -22,6 +22,13 @@ import type {
   AIStatus,
   WhatsAppMessageWithGroup,
 } from '@pharmabroker/schemas/whatsapp';
+import { logger } from '@pharmabroker/logger';
+import {
+  aiProcessingTotal,
+  aiProcessingDuration,
+  aiDeduplicationRate,
+  recordError,
+} from '@pharmabroker/metrics';
 
 // ============================================================================
 // Types
@@ -58,6 +65,7 @@ export interface CancelScheduleResult {
 
 class AIProcessorService {
   private client: AIClient;
+  private log = logger.child('ai-processor');
 
   constructor() {
     this.client = getAIClient();
@@ -121,9 +129,11 @@ class AIProcessorService {
       );
 
       if (existingResult) {
-        console.log(
-          `[AI Processor] Reusing AI result for content hash ${message.contentHash} (message: ${messageId})`,
-        );
+        this.log.info('Reusing AI result for content hash', {
+          contentHash: message.contentHash,
+          messageId,
+          sourceMessageId: existingResult.sourceMessageId,
+        });
 
         // Copy extracted data from existing message
         const copiedCount = await this.copyExtractedData(
@@ -159,6 +169,8 @@ class AIProcessorService {
       data: { aiStatus: 'processing' },
     });
 
+    const startTime = Date.now();
+
     try {
       // Build message input for AI
       const input: MessageInput = {
@@ -169,6 +181,12 @@ class AIProcessorService {
         timestamp: message.messageTimestamp,
       };
 
+      this.log.debug('Processing message with AI', {
+        messageId,
+        messageType: message.messageType,
+        groupName: message.group.name,
+      });
+
       // Process with AI using medication extraction schema
       const result = await this.client.processMessage(input, {
         schema: messageExtractionSchema,
@@ -176,7 +194,25 @@ class AIProcessorService {
         promptTemplate: medicationPromptTemplate,
       });
 
+      const duration = Date.now() - startTime;
+
       if (result.status === 'failed' || !result.data) {
+        // Record failure metrics
+        aiProcessingTotal.inc({
+          provider: this.client.modelName,
+          status: 'failed',
+        });
+        aiProcessingDuration.observe(
+          { provider: this.client.modelName, status: 'failed' },
+          duration / 1000,
+        );
+
+        this.log.error('AI processing failed', {
+          messageId,
+          error: result.error,
+          duration,
+        });
+
         await this.handleProcessingFailure(
           messageId,
           result.error ?? 'Unknown error',
@@ -188,6 +224,23 @@ class AIProcessorService {
           extractedCount: 0,
         };
       }
+
+      // Record success metrics
+      aiProcessingTotal.inc({
+        provider: this.client.modelName,
+        status: 'success',
+      });
+      aiProcessingDuration.observe(
+        { provider: this.client.modelName, status: 'success' },
+        duration / 1000,
+      );
+
+      this.log.info('AI processing completed', {
+        messageId,
+        model: result.model,
+        extractedCount: result.data.medications.length,
+        duration,
+      });
 
       // Store extracted data and update status in a transaction
       const extractedCount = await prisma.$transaction(async tx => {
@@ -222,7 +275,26 @@ class AIProcessorService {
         data: result.data,
       };
     } catch (error) {
+      const duration = Date.now() - startTime;
       const errorMessage = this.formatErrorWithStack(error);
+
+      // Record error metrics
+      aiProcessingTotal.inc({
+        provider: this.client.modelName,
+        status: 'error',
+      });
+      aiProcessingDuration.observe(
+        { provider: this.client.modelName, status: 'error' },
+        duration / 1000,
+      );
+      recordError('ai_processing', 'high');
+
+      this.log.error('AI processing exception', {
+        messageId,
+        error: errorMessage,
+        duration,
+      });
+
       await this.handleProcessingFailure(messageId, errorMessage);
 
       return {
@@ -305,7 +377,8 @@ class AIProcessorService {
         .filter(m => m.aiStatus === 'pending' && (m.text || m.caption))
         .map(m => m.id),
     ).catch(err => {
-      console.error('[AI Processor] Bulk processing error:', err);
+      this.log.error('Bulk processing error', { error: err.message });
+      recordError('bulk_processing', 'medium');
     });
 
     return { queued, skipped, errors };
@@ -422,9 +495,12 @@ class AIProcessorService {
       }
     }
 
-    console.log(
-      `[AI Processor] Bulk processing complete: ${queued} processed, ${deduplicated} deduplicated, ${skipped} skipped`,
-    );
+    this.log.info('Bulk processing complete', {
+      queued,
+      deduplicated,
+      skipped,
+      totalMessages: messages.length,
+    });
 
     // Calculate deduplication metrics
     const totalProcessed = queued + deduplicated;
@@ -432,9 +508,16 @@ class AIProcessorService {
       totalProcessed > 0 ? (deduplicated / totalProcessed) * 100 : 0;
     const apiCallsSaved = deduplicated;
 
-    console.log(
-      `[AI Processor] Deduplication metrics: ${deduplicationRate.toFixed(1)}% rate, ${apiCallsSaved} API calls saved`,
-    );
+    // Update deduplication rate metric
+    if (totalProcessed > 0) {
+      aiDeduplicationRate.set(deduplicated / totalProcessed);
+    }
+
+    this.log.info('Deduplication metrics', {
+      deduplicationRate: `${deduplicationRate.toFixed(1)}%`,
+      apiCallsSaved,
+      totalProcessed,
+    });
 
     return { queued, skipped, deduplicated, errors };
   }
@@ -942,7 +1025,11 @@ class AIProcessorService {
       try {
         await this.processMessage(userId, id);
       } catch (error) {
-        console.error(`[AI Processor] Failed to process message ${id}:`, error);
+        this.log.error('Failed to process message', {
+          messageId: id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        recordError('message_processing', 'medium');
       }
     }
   }

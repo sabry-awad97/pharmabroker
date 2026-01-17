@@ -24,8 +24,14 @@ vi.mock('../routers/whatsapp.router', () => ({
   },
 }));
 
+// Mock metrics
+vi.mock('@pharmabroker/metrics', () => ({
+  recordHistorySync: vi.fn(),
+}));
+
 import prisma from '@pharmabroker/db';
 import { whatsappEventPublisher } from '../routers/whatsapp.router';
+import { recordHistorySync } from '@pharmabroker/metrics';
 
 describe('HistorySyncService', () => {
   beforeEach(() => {
@@ -356,6 +362,150 @@ describe('HistorySyncService', () => {
           session_id: sessionId,
         }),
       );
+    });
+  });
+
+  describe('Metrics Tracking', () => {
+    it('should record metrics for successful full history sync', async () => {
+      const sessionId = 'test-session-id';
+      const stats = { stored: 1000, dropped: 50 };
+
+      (prisma.whatsAppSession.update as any).mockResolvedValue({});
+
+      // Start sync
+      await historySyncService.triggerFullHistorySync(sessionId);
+
+      // Complete sync
+      await historySyncService.completeSync(sessionId, stats);
+
+      expect(recordHistorySync).toHaveBeenCalledWith(
+        sessionId,
+        'full_history',
+        'success',
+        expect.any(Number), // duration
+        1000, // messages processed
+      );
+    });
+
+    it('should record metrics for successful incremental sync', async () => {
+      const sessionId = 'test-session-id';
+      const since = new Date('2024-01-01');
+      const stats = { stored: 100, dropped: 5 };
+
+      (prisma.whatsAppSession.update as any).mockResolvedValue({});
+
+      // Start sync
+      await historySyncService.triggerIncrementalSync(sessionId, since);
+
+      // Complete sync
+      await historySyncService.completeSync(sessionId, stats);
+
+      expect(recordHistorySync).toHaveBeenCalledWith(
+        sessionId,
+        'incremental',
+        'success',
+        expect.any(Number), // duration
+        100, // messages processed
+      );
+    });
+
+    it('should record metrics for failed sync', async () => {
+      const sessionId = 'test-session-id';
+      const error = 'Connection timeout';
+
+      (prisma.whatsAppSession.update as any).mockResolvedValue({});
+
+      // Start sync
+      await historySyncService.triggerFullHistorySync(sessionId);
+
+      // Fail sync
+      await historySyncService.failSync(sessionId, error);
+
+      expect(recordHistorySync).toHaveBeenCalledWith(
+        sessionId,
+        'full_history',
+        'failure',
+        expect.any(Number), // duration
+        0, // no messages processed
+      );
+    });
+
+    it('should record metrics for cancelled sync', async () => {
+      const sessionId = 'test-session-id';
+
+      (prisma.whatsAppSession.update as any).mockResolvedValue({});
+
+      // Start sync
+      await historySyncService.triggerFullHistorySync(sessionId);
+
+      // Cancel sync
+      await historySyncService.cancelSync(sessionId);
+
+      expect(recordHistorySync).toHaveBeenCalledWith(
+        sessionId,
+        'full_history',
+        'cancelled',
+        expect.any(Number), // duration
+        0, // no messages processed
+      );
+    });
+
+    it('should record metrics for skipped sync', async () => {
+      const sessionId = 'test-session-id';
+
+      (prisma.whatsAppSession.update as any).mockResolvedValue({});
+
+      await historySyncService.skipHistorySync(sessionId);
+
+      expect(recordHistorySync).toHaveBeenCalledWith(
+        sessionId,
+        'skip',
+        'skipped',
+        0, // no duration for skipped
+        0, // no messages processed
+      );
+    });
+
+    it('should track sync duration accurately', async () => {
+      const sessionId = 'test-session-id';
+      const stats = { stored: 500, dropped: 10 };
+
+      (prisma.whatsAppSession.update as any).mockResolvedValue({});
+
+      // Start sync
+      await historySyncService.triggerFullHistorySync(sessionId);
+
+      // Wait a bit to simulate sync duration
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Complete sync
+      await historySyncService.completeSync(sessionId, stats);
+
+      expect(recordHistorySync).toHaveBeenCalledWith(
+        sessionId,
+        'full_history',
+        'success',
+        expect.any(Number),
+        500,
+      );
+
+      // Verify duration is at least 100ms
+      const callArgs = (recordHistorySync as any).mock.calls[0];
+      const duration = callArgs[3];
+      expect(duration).toBeGreaterThanOrEqual(100);
+    });
+
+    it('should not record metrics if sync was never started', async () => {
+      const sessionId = 'test-session-id';
+      const stats = { stored: 100, dropped: 5 };
+
+      (prisma.whatsAppSession.update as any).mockResolvedValue({});
+
+      // Complete sync without starting it first
+      await historySyncService.completeSync(sessionId, stats);
+
+      // Should not call recordHistorySync since no metadata exists
+      expect(recordHistorySync).not.toHaveBeenCalled();
     });
   });
 });

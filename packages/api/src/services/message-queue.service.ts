@@ -12,6 +12,8 @@
  * - Metrics tracking for monitoring
  */
 
+import { logger } from '@pharmabroker/logger';
+import { queueSize, queueProcessingDuration } from '@pharmabroker/metrics';
 import type { ParsedMessageEvent } from './whatsapp-messages.service';
 import { queueMetricsTracker } from '../utils/queue-metrics';
 
@@ -58,9 +60,14 @@ export class MessageQueueService {
   private queues: Map<string, QueuedMessage[]> = new Map();
   private config: MessageQueueConfig;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+  private logger = logger.child('MessageQueueService');
 
   constructor(config: Partial<MessageQueueConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.logger.info('Message queue service initialized', {
+      messageTimeoutMs: this.config.messageTimeoutMs,
+      maxMessagesPerSession: this.config.maxMessagesPerSession,
+    });
   }
 
   /**
@@ -98,20 +105,25 @@ export class MessageQueueService {
     if (!queue) {
       queue = [];
       this.queues.set(sessionId, queue);
-      console.log(`[MessageQueue] Created new queue for session ${sessionId}`);
+      this.logger.info('Created new queue for session', { sessionId });
     }
 
     // Check if queue is full
     if (queue.length >= this.config.maxMessagesPerSession) {
-      console.warn(
-        `[MessageQueue] Queue full for session ${sessionId} (${queue.length}/${this.config.maxMessagesPerSession}), dropping oldest message`,
-      );
+      this.logger.warn('Queue full, dropping oldest message', {
+        sessionId,
+        queueLength: queue.length,
+        maxMessages: this.config.maxMessagesPerSession,
+      });
+
       // Drop oldest message to make room
       const dropped = queue.shift();
       if (dropped) {
-        console.warn(
-          `[MessageQueue] Dropped message ${dropped.event.messageId} from group ${dropped.event.chatJid}`,
-        );
+        this.logger.warn('Dropped message from queue', {
+          sessionId,
+          messageId: dropped.event.messageId,
+          chatJid: dropped.event.chatJid,
+        });
         queueMetricsTracker.recordDropped(sessionId);
       }
     }
@@ -125,11 +137,15 @@ export class MessageQueueService {
     queue.push(queuedMessage);
     queueMetricsTracker.recordQueued(sessionId, queue.length);
 
+    // Update Prometheus metrics
+    queueSize.set({ queue_name: `session_${sessionId}` }, queue.length);
+
     // Log every 100 messages
     if (queue.length % 100 === 0) {
-      console.log(
-        `[MessageQueue] Session ${sessionId}: ${queue.length} messages queued`,
-      );
+      this.logger.info('Queue progress', {
+        sessionId,
+        queueLength: queue.length,
+      });
     }
 
     return true;
@@ -142,18 +158,18 @@ export class MessageQueueService {
    * @returns Array of parsed message events (non-expired only)
    */
   drain(sessionId: string): ParsedMessageEvent[] {
+    const startTime = Date.now();
     const queue = this.queues.get(sessionId);
 
     if (!queue || queue.length === 0) {
-      console.log(
-        `[MessageQueue] No messages to drain for session ${sessionId}`,
-      );
+      this.logger.debug('No messages to drain', { sessionId });
       return [];
     }
 
-    console.log(
-      `[MessageQueue] Draining ${queue.length} messages for session ${sessionId}`,
-    );
+    this.logger.info('Draining queue', {
+      sessionId,
+      queueLength: queue.length,
+    });
 
     // Remove the queue for this session
     this.queues.delete(sessionId);
@@ -169,22 +185,35 @@ export class MessageQueueService {
         validMessages.push(queuedMsg.event);
       } else {
         expiredCount++;
-        console.warn(
-          `[MessageQueue] Expired message ${queuedMsg.event.messageId} (age: ${Math.round(age / 1000)}s)`,
-        );
+        this.logger.warn('Expired message', {
+          sessionId,
+          messageId: queuedMsg.event.messageId,
+          ageSeconds: Math.round(age / 1000),
+        });
       }
     }
 
     if (expiredCount > 0) {
       queueMetricsTracker.recordExpired(sessionId, expiredCount);
-      console.warn(
-        `[MessageQueue] Dropped ${expiredCount} expired messages for session ${sessionId}`,
-      );
+      this.logger.warn('Dropped expired messages', {
+        sessionId,
+        expiredCount,
+      });
     }
 
-    console.log(
-      `[MessageQueue] Drained ${validMessages.length} valid messages, ${expiredCount} expired for session ${sessionId}`,
+    const duration = Date.now() - startTime;
+    queueProcessingDuration.observe(
+      { queue_name: `session_${sessionId}` },
+      duration / 1000,
     );
+    queueSize.set({ queue_name: `session_${sessionId}` }, 0);
+
+    this.logger.info('Queue drained', {
+      sessionId,
+      validMessages: validMessages.length,
+      expiredMessages: expiredCount,
+      duration,
+    });
 
     return validMessages;
   }
@@ -211,9 +240,10 @@ export class MessageQueueService {
 
       if (removed > 0) {
         queueMetricsTracker.recordExpired(sessionId, removed);
-        console.warn(
-          `[MessageQueue] Cleaned up ${removed} expired messages for session ${sessionId}`,
-        );
+        this.logger.warn('Cleaned up expired messages', {
+          sessionId,
+          removed,
+        });
       }
 
       if (validMessages.length === 0) {

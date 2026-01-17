@@ -26,6 +26,12 @@ import { queueMetricsTracker } from '../utils/queue-metrics';
 import { historySyncService } from './history-sync.service';
 import { env } from '@pharmabroker/env/server';
 import prisma from '@pharmabroker/db';
+import { logger } from '@pharmabroker/logger';
+import {
+  whatsappMessagesReceived,
+  whatsappSyncDuration,
+  recordError,
+} from '@pharmabroker/metrics';
 
 // ============================================================================
 // Types
@@ -90,6 +96,7 @@ const AUTO_SYNC_CONFIG = {
 // ============================================================================
 
 export class WhatsAppWebSocketService {
+  private log = logger.child('whatsapp-ws');
   private currentClient: WebSocketClient | null = null;
   private apiKey: string;
   private onConnectedCallback?: () => void | Promise<void>;
@@ -145,10 +152,11 @@ export class WhatsAppWebSocketService {
    * Emit sync status event to frontend clients
    */
   private emitSyncStatusEvent(event: SyncStatusEvent): void {
-    console.log(
-      `[WhatsAppWS] Emitting sync event: ${event.type} for session ${event.session_id}`,
-      event.data,
-    );
+    this.log.debug('Emitting sync event', {
+      type: event.type,
+      sessionId: event.session_id,
+      data: event.data,
+    });
     whatsappEventPublisher.publish('whatsapp-event', {
       type: event.type as any,
       session_id: event.session_id,
@@ -163,7 +171,7 @@ export class WhatsAppWebSocketService {
   handleOpen(ws: WSContext): void {
     // Close any existing connection
     if (this.currentClient) {
-      console.log('[WhatsAppWS] Replacing existing connection');
+      this.log.info('Replacing existing connection');
     }
 
     this.currentClient = {
@@ -171,7 +179,7 @@ export class WhatsAppWebSocketService {
       authenticated: false,
       connectedAt: new Date(),
     };
-    console.log('[WhatsAppWS] New connection from Go service');
+    this.log.info('New connection from Go service');
   }
 
   /**
@@ -181,7 +189,7 @@ export class WhatsAppWebSocketService {
     // Use current client regardless of ws reference (Hono gives different refs per callback)
     const client = this.currentClient;
     if (!client) {
-      console.warn('[WhatsAppWS] Message but no active client');
+      this.log.warn('Message but no active client');
       return;
     }
 
@@ -202,14 +210,17 @@ export class WhatsAppWebSocketService {
 
       // Reject messages from unauthenticated clients
       if (!client.authenticated) {
-        console.warn('[WhatsAppWS] Message from unauthenticated client');
+        this.log.warn('Message from unauthenticated client');
         return;
       }
 
       // Handle WhatsApp events
       await this.handleWhatsAppEvent(parsed);
     } catch (error) {
-      console.error('[WhatsAppWS] Failed to parse message:', error);
+      this.log.error('Failed to parse message', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      recordError('ws_message_parse', 'medium');
     }
   }
 
@@ -218,7 +229,7 @@ export class WhatsAppWebSocketService {
    */
   handleClose(_ws: WSContext): void {
     this.currentClient = null;
-    console.log('[WhatsAppWS] Connection closed');
+    this.log.info('Connection closed');
   }
 
   /**
@@ -236,21 +247,27 @@ export class WhatsAppWebSocketService {
         message: 'Authentication successful',
       };
       client.ws.send(JSON.stringify(response));
-      console.log('[WhatsAppWS] Client authenticated successfully');
+      this.log.info('Client authenticated successfully');
 
       // Call onConnected callback for session sync (only on initial connection)
       if (this.onConnectedCallback && !this.hasRunInitialSync) {
         this.hasRunInitialSync = true;
-        console.log('[WhatsAppWS] Running initial session sync...');
+        this.log.info('Running initial session sync');
         try {
           const result = this.onConnectedCallback();
           if (result instanceof Promise) {
-            result.catch(err =>
-              console.error('[WhatsAppWS] onConnected callback error:', err),
-            );
+            result.catch(err => {
+              this.log.error('onConnected callback error', {
+                error: err instanceof Error ? err.message : String(err),
+              });
+              recordError('ws_callback', 'high');
+            });
           }
         } catch (err) {
-          console.error('[WhatsAppWS] onConnected callback error:', err);
+          this.log.error('onConnected callback error', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          recordError('ws_callback', 'high');
         }
       }
     } else {
@@ -260,7 +277,7 @@ export class WhatsAppWebSocketService {
         message: 'Invalid API key',
       };
       client.ws.send(JSON.stringify(response));
-      console.warn('[WhatsAppWS] Authentication failed: invalid API key');
+      this.log.warn('Authentication failed: invalid API key');
       // Close connection after failed auth
       setTimeout(() => client.ws.close(4001, 'Invalid API key'), 100);
     }
@@ -281,10 +298,9 @@ export class WhatsAppWebSocketService {
     const result = whatsappEvent.safeParse(message);
 
     if (!result.success) {
-      console.warn(
-        '[WhatsAppWS] Invalid event received:',
-        result.error.message,
-      );
+      this.log.warn('Invalid event received', {
+        error: result.error.message,
+      });
       return;
     }
 
@@ -296,7 +312,7 @@ export class WhatsAppWebSocketService {
     // Publish to EventPublisher for frontend clients
     whatsappEventPublisher.publish('whatsapp-event', event);
 
-    console.log(`[WhatsAppWS] Event received: ${event.type}`);
+    this.log.debug('Event received', { type: event.type });
   }
 
   /**
@@ -359,10 +375,11 @@ export class WhatsAppWebSocketService {
 
           // Trigger group sync
           this.triggerGroupSync(event.session_id).catch(err => {
-            console.error(
-              `[WhatsAppWS] Auto-sync failed for session ${event.session_id}:`,
-              err,
-            );
+            this.log.error('Auto-sync failed', {
+              sessionId: event.session_id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            recordError('auto_sync', 'high');
           });
           break;
 
@@ -425,10 +442,11 @@ export class WhatsAppWebSocketService {
 
           // Trigger group sync
           this.triggerGroupSync(event.session_id).catch(err => {
-            console.error(
-              `[WhatsAppWS] Auto-sync failed for session ${event.session_id}:`,
-              err,
-            );
+            this.log.error('Auto-sync failed', {
+              sessionId: event.session_id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            recordError('auto_sync', 'high');
           });
           break;
 
@@ -452,7 +470,10 @@ export class WhatsAppWebSocketService {
         await this.updateStatusIdempotent(event.session_id, newStatus, jid);
       }
     } catch (error) {
-      console.error('[WhatsAppWS] Failed to sync session status:', error);
+      this.log.error('Failed to sync session status', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      recordError('session_status_sync', 'medium');
     }
   }
 
@@ -467,9 +488,7 @@ export class WhatsAppWebSocketService {
       currentState.status === 'syncing_groups' ||
       currentState.status === 'processing_queue'
     ) {
-      console.log(
-        `[WhatsAppWS] Sync already in progress for session ${sessionId}`,
-      );
+      this.log.info('Sync already in progress', { sessionId });
       return;
     }
 
@@ -479,9 +498,7 @@ export class WhatsAppWebSocketService {
       currentState.lastSyncAt &&
       Date.now() - currentState.lastSyncAt.getTime() < 5 * 60 * 1000
     ) {
-      console.log(
-        `[WhatsAppWS] Skipping sync for session ${sessionId} - recently completed`,
-      );
+      this.log.info('Skipping sync - recently completed', { sessionId });
       return;
     }
 
@@ -503,9 +520,11 @@ export class WhatsAppWebSocketService {
 
     for (let attempt = 0; attempt <= AUTO_SYNC_CONFIG.maxRetries; attempt++) {
       try {
-        console.log(
-          `[WhatsAppWS] Starting group sync for session ${sessionId} (attempt ${attempt + 1})`,
-        );
+        this.log.info('Starting group sync', {
+          sessionId,
+          attempt: attempt + 1,
+          maxRetries: AUTO_SYNC_CONFIG.maxRetries + 1,
+        });
 
         const result =
           await whatsappGroupsService.syncGroupsInternal(sessionId);
@@ -530,9 +549,10 @@ export class WhatsAppWebSocketService {
           },
         });
 
-        console.log(
-          `[WhatsAppWS] Group sync completed for session ${sessionId}: ${result.synced} groups synced`,
-        );
+        this.log.info('Group sync completed', {
+          sessionId,
+          groupsSynced: result.synced,
+        });
 
         // Process the message queue after successful sync
         await this.processMessageQueue(sessionId);
@@ -540,10 +560,12 @@ export class WhatsAppWebSocketService {
         return;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        console.error(
-          `[WhatsAppWS] Group sync failed for session ${sessionId} (attempt ${attempt + 1}):`,
-          lastError.message,
-        );
+        this.log.error('Group sync failed', {
+          sessionId,
+          attempt: attempt + 1,
+          error: lastError.message,
+        });
+        recordError('group_sync', 'high');
 
         this.setSyncState(sessionId, {
           retryCount: attempt + 1,
@@ -554,7 +576,11 @@ export class WhatsAppWebSocketService {
           const delay =
             AUTO_SYNC_CONFIG.retryDelayMs *
             Math.pow(AUTO_SYNC_CONFIG.retryBackoffMultiplier, attempt);
-          console.log(`[WhatsAppWS] Retrying group sync in ${delay}ms...`);
+          this.log.info('Retrying group sync', {
+            sessionId,
+            delayMs: delay,
+            nextAttempt: attempt + 2,
+          });
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -578,9 +604,10 @@ export class WhatsAppWebSocketService {
     // Clear the message queue since we can't process it
     const droppedCount = messageQueueService.clear(sessionId);
     if (droppedCount > 0) {
-      console.warn(
-        `[WhatsAppWS] Dropped ${droppedCount} queued messages for session ${sessionId} due to sync failure`,
-      );
+      this.log.warn('Dropped queued messages due to sync failure', {
+        sessionId,
+        droppedCount,
+      });
     }
   }
 
@@ -588,21 +615,20 @@ export class WhatsAppWebSocketService {
    * Process queued messages after group sync completes
    */
   async processMessageQueue(sessionId: string): Promise<void> {
-    console.log(
-      `[WhatsAppWS] Starting message queue processing for session ${sessionId}`,
-    );
+    const startTime = Date.now();
+
+    this.log.info('Starting message queue processing', { sessionId });
 
     const queueSizeBefore = messageQueueService.size(sessionId);
-    console.log(
-      `[WhatsAppWS] Queue size before drain: ${queueSizeBefore} messages`,
-    );
+    this.log.debug('Queue size before drain', {
+      sessionId,
+      queueSize: queueSizeBefore,
+    });
 
     const messages = messageQueueService.drain(sessionId);
 
     if (messages.length === 0) {
-      console.log(
-        `[WhatsAppWS] No messages to process for session ${sessionId}`,
-      );
+      this.log.info('No messages to process', { sessionId });
 
       // No messages to process - mark as ready
       this.setSyncState(sessionId, {
@@ -626,9 +652,10 @@ export class WhatsAppWebSocketService {
       return;
     }
 
-    console.log(
-      `[WhatsAppWS] Drained ${messages.length} messages from queue for session ${sessionId}`,
-    );
+    this.log.info('Drained messages from queue', {
+      sessionId,
+      messageCount: messages.length,
+    });
 
     // Emit progress event for message processing phase
     this.emitSyncStatusEvent({
@@ -642,17 +669,23 @@ export class WhatsAppWebSocketService {
     });
 
     // Process messages through the messages service
-    const startTime = Date.now();
     const result =
       await whatsappMessagesService.processQueuedMessages(messages);
     const duration = Date.now() - startTime;
 
     // Record metrics
     queueMetricsTracker.recordProcessed(sessionId, result.stored, duration);
-
-    console.log(
-      `[WhatsAppWS] Queue processing completed in ${duration}ms for session ${sessionId}`,
+    whatsappSyncDuration.observe(
+      { session_id: sessionId, sync_type: 'message_queue' },
+      duration / 1000,
     );
+
+    this.log.info('Queue processing completed', {
+      sessionId,
+      durationMs: duration,
+      stored: result.stored,
+      dropped: result.dropped,
+    });
 
     // Log session metrics
     queueMetricsTracker.logSessionMetrics(sessionId);
@@ -679,9 +712,12 @@ export class WhatsAppWebSocketService {
       },
     });
 
-    console.log(
-      `[WhatsAppWS] ✓ Message queue processed for session ${sessionId}: ${result.stored} stored, ${result.dropped} dropped (${duration}ms)`,
-    );
+    this.log.info('Message queue processed successfully', {
+      sessionId,
+      stored: result.stored,
+      dropped: result.dropped,
+      durationMs: duration,
+    });
   }
 
   /**
@@ -707,16 +743,13 @@ export class WhatsAppWebSocketService {
         !messageType ||
         !messageTimestamp
       ) {
-        console.warn(
-          '[WhatsAppWS] Invalid message event - missing required fields:',
-          {
-            hasMessageId: !!messageId,
-            hasChatJid: !!chatJid,
-            hasSenderJid: !!senderJid,
-            hasMessageType: !!messageType,
-            hasTimestamp: !!messageTimestamp,
-          },
-        );
+        this.log.warn('Invalid message event - missing required fields', {
+          hasMessageId: !!messageId,
+          hasChatJid: !!chatJid,
+          hasSenderJid: !!senderJid,
+          hasMessageType: !!messageType,
+          hasTimestamp: !!messageTimestamp,
+        });
         return;
       }
 
@@ -726,9 +759,10 @@ export class WhatsAppWebSocketService {
       const lastProcessed = this.processedMessages.get(dedupKey);
 
       if (lastProcessed && now - lastProcessed < this.MESSAGE_DEDUP_TTL) {
-        console.log(
-          `[WhatsAppWS] Skipping duplicate message: ${messageId} (session: ${sessionId})`,
-        );
+        this.log.debug('Skipping duplicate message', {
+          messageId,
+          sessionId,
+        });
         return;
       }
 
@@ -781,8 +815,17 @@ export class WhatsAppWebSocketService {
       };
 
       await whatsappMessagesService.storeMessage(parsedEvent);
+
+      // Record metrics
+      whatsappMessagesReceived.inc({
+        session_id: sessionId,
+        type: messageType,
+      });
     } catch (error) {
-      console.error('[WhatsAppWS] Failed to store message:', error);
+      this.log.error('Failed to store message', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      recordError('message_store', 'medium');
       // Don't throw - continue processing other events
     }
   }
@@ -801,20 +844,25 @@ export class WhatsAppWebSocketService {
 
       // Skip update if status already matches (idempotent)
       if (currentSession?.status === newStatus && !jid) {
-        console.log(
-          `[WhatsAppWS] Status unchanged: ${sessionId} already ${currentSession.status}`,
-        );
+        this.log.debug('Status unchanged', {
+          sessionId,
+          status: currentSession.status,
+        });
         return;
       }
 
       // Perform the update
       await whatsappService.updateSessionStatus(sessionId, newStatus, jid);
-      console.log(`[WhatsAppWS] Status updated: ${sessionId} → ${newStatus}`);
+      this.log.info('Status updated', {
+        sessionId,
+        newStatus,
+      });
     } catch (error) {
-      console.error(
-        `[WhatsAppWS] Failed to update status for ${sessionId}:`,
-        error,
-      );
+      this.log.error('Failed to update status', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      recordError('status_update', 'medium');
     }
   }
 
@@ -836,9 +884,9 @@ export class WhatsAppWebSocketService {
     }
 
     if (toDelete.length > 0) {
-      console.log(
-        `[WhatsAppWS] Cleaned up ${toDelete.length} expired deduplication entries`,
-      );
+      this.log.debug('Cleaned up expired deduplication entries', {
+        count: toDelete.length,
+      });
     }
   }
 

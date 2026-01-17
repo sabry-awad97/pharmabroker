@@ -24,6 +24,12 @@ import type {
   FilterCountsResponse,
 } from '@pharmabroker/schemas/whatsapp';
 import { escapeSqlWildcards } from '../utils/prisma';
+import { logger } from '@pharmabroker/logger';
+import {
+  whatsappGroupsSynced,
+  whatsappSyncDuration,
+  recordError,
+} from '@pharmabroker/metrics';
 
 // ============================================================================
 // Sync Configuration
@@ -103,6 +109,8 @@ type ParticipantWhereClause = {
 // ============================================================================
 
 class WhatsAppGroupsService {
+  private log = logger.child('whatsapp-groups');
+
   /**
    * List groups for a user with filtering and pagination
    * Only returns groups belonging to sessions owned by the user
@@ -493,16 +501,39 @@ class WhatsAppGroupsService {
       // Log performance warning if sync took too long
       const duration = Date.now() - startTime;
       if (duration > SYNC_CONFIG.PERFORMANCE_WARN_MS) {
-        console.warn(
-          `[WhatsApp Groups Sync] Performance warning: sync took ${duration}ms for ${groups.length} groups`,
-        );
+        this.log.warn('Performance warning: sync took too long', {
+          duration,
+          groupCount: groups.length,
+          method: 'syncGroups',
+        });
       }
+
+      // Record metrics
+      whatsappSyncDuration.observe(
+        { session_id: sessionId, sync_type: 'groups' },
+        duration / 1000,
+      );
+      whatsappGroupsSynced.inc({ session_id: sessionId }, totalSynced);
+
+      this.log.info('Groups synced successfully', {
+        sessionId,
+        userId,
+        synced: totalSynced,
+        duration,
+      });
 
       return {
         synced: totalSynced,
         errors,
       };
     } catch (error) {
+      recordError('group_sync', 'high');
+      this.log.error('Failed to sync groups', {
+        sessionId,
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       if (error instanceof ORPCError) {
         throw error;
       }
@@ -765,16 +796,37 @@ class WhatsAppGroupsService {
       // Log performance warning if sync took too long
       const duration = Date.now() - startTime;
       if (duration > SYNC_CONFIG.PERFORMANCE_WARN_MS) {
-        console.warn(
-          `[WhatsApp Groups Sync] Performance warning: sync took ${duration}ms for ${groups.length} groups`,
-        );
+        this.log.warn('Performance warning: sync took too long', {
+          duration,
+          groupCount: groups.length,
+          method: 'syncGroupsInternal',
+        });
       }
+
+      // Record metrics
+      whatsappSyncDuration.observe(
+        { session_id: sessionId, sync_type: 'groups' },
+        duration / 1000,
+      );
+      whatsappGroupsSynced.inc({ session_id: sessionId }, totalSynced);
+
+      this.log.info('Groups synced successfully (internal)', {
+        sessionId,
+        synced: totalSynced,
+        duration,
+      });
 
       return {
         synced: totalSynced,
         errors,
       };
     } catch (error) {
+      recordError('group_sync_internal', 'high');
+      this.log.error('Failed to sync groups (internal)', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       if (error instanceof ORPCError) {
         throw error;
       }

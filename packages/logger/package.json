@@ -1,0 +1,17 @@
+{
+  "name": "@pharmabroker/logger",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "@pharmabroker/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

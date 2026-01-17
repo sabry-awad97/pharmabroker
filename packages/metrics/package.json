@@ -1,0 +1,17 @@
+{
+  "name": "@pharmabroker/metrics",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "prom-client": "^15.1.3"
+  },
+  "devDependencies": {
+    "@pharmabroker/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

@@ -11,6 +11,12 @@
 import { ORPCError } from '@orpc/server';
 import { env } from '@pharmabroker/env/server';
 import prisma from '@pharmabroker/db';
+import { logger } from '@pharmabroker/logger';
+import {
+  dbQueriesTotal,
+  dbQueryDuration,
+  recordError,
+} from '@pharmabroker/metrics';
 import type {
   Session,
   CreateSessionInput,
@@ -36,6 +42,7 @@ import {
 class WhatsAppGoClient {
   private baseUrl: string;
   private circuitBreaker: CircuitBreaker;
+  private logger = logger.child('WhatsAppGoClient');
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -44,6 +51,7 @@ class WhatsAppGoClient {
       resetTimeoutMs: 30_000,
       name: 'WhatsAppGoClient',
     });
+    this.logger.info('WhatsApp Go client initialized', { baseUrl });
   }
 
   /**
@@ -71,16 +79,22 @@ class WhatsAppGoClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
+    const startTime = Date.now();
+
     // Wrap the HTTP request with circuit breaker
     return this.circuitBreaker
       .execute(async () => {
         const url = `${this.baseUrl}${path}`;
+
+        this.logger.debug('Making request to Go service', { method, path });
 
         const response = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json' },
           body: body ? JSON.stringify(body) : undefined,
         });
+
+        const duration = Date.now() - startTime;
 
         const json = (await response.json()) as {
           success: boolean;
@@ -94,6 +108,16 @@ class WhatsAppGoClient {
 
         // 4xx errors are client errors, don't count as circuit breaker failures
         if (!json.success) {
+          this.logger.warn('Go service request failed', {
+            method,
+            path,
+            status: response.status,
+            error: json.error,
+            duration,
+          });
+
+          recordError('go_service_request_failed', 'medium');
+
           const error = new ORPCError(json.error?.code || 'INTERNAL_ERROR', {
             message:
               json.error?.message || 'Unknown error from WhatsApp service',
@@ -111,11 +135,23 @@ class WhatsAppGoClient {
           throw error;
         }
 
+        this.logger.debug('Go service request successful', {
+          method,
+          path,
+          duration,
+        });
+
         return json.data as T;
       })
       .catch(error => {
         // Convert CircuitBreakerError to ORPCError for consistent API
         if (error instanceof CircuitBreakerError) {
+          this.logger.error('Circuit breaker open', {
+            circuitState: this.circuitBreaker.getState(),
+          });
+
+          recordError('circuit_breaker_open', 'high');
+
           throw new ORPCError('SERVICE_UNAVAILABLE', {
             message: 'WhatsApp service is temporarily unavailable',
             data: { circuitState: this.circuitBreaker.getState() },
@@ -257,24 +293,68 @@ function mapPrismaSession(session: {
 }
 
 class WhatsAppSessionService {
+  private logger = logger.child('WhatsAppSessionService');
+
   async createSession(
     userId: string,
     input: CreateSessionInput,
   ): Promise<Session> {
-    const session = await prisma.whatsAppSession.create({
-      data: {
-        name: input.name,
-        autoConnect: input.auto_connect ?? false,
-        enableHistorySync: input.enable_history_sync ?? false,
+    const startTime = Date.now();
+
+    try {
+      const session = await prisma.whatsAppSession.create({
+        data: {
+          name: input.name,
+          autoConnect: input.auto_connect ?? false,
+          enableHistorySync: input.enable_history_sync ?? false,
+          userId,
+          status: 'pending',
+        },
+      });
+
+      const duration = Date.now() - startTime;
+      dbQueriesTotal.inc({
+        operation: 'create',
+        table: 'whatsapp_session',
+        status: 'success',
+      });
+      dbQueryDuration.observe(
+        { operation: 'create', table: 'whatsapp_session', status: 'success' },
+        duration / 1000,
+      );
+
+      this.logger.info('Session created', {
+        sessionId: session.id,
         userId,
-        status: 'pending',
-      },
-    });
+        name: input.name,
+        duration,
+      });
 
-    // Notify Go service (non-blocking)
-    goClient.registerSession(session.id, session.name).catch(() => {});
+      // Notify Go service (non-blocking)
+      goClient.registerSession(session.id, session.name).catch(() => {});
 
-    return mapPrismaSession(session);
+      return mapPrismaSession(session);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      dbQueriesTotal.inc({
+        operation: 'create',
+        table: 'whatsapp_session',
+        status: 'error',
+      });
+      dbQueryDuration.observe(
+        { operation: 'create', table: 'whatsapp_session', status: 'error' },
+        duration / 1000,
+      );
+
+      this.logger.error('Failed to create session', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        duration,
+      });
+
+      recordError('session_create_failed', 'high');
+      throw error;
+    }
   }
 
   async listSessions(userId: string): Promise<Session[]> {
@@ -331,22 +411,64 @@ class WhatsAppSessionService {
   }
 
   async deleteSession(userId: string, id: string): Promise<void> {
-    const session = await prisma.whatsAppSession.findFirst({
-      where: { id, userId },
-    });
+    const startTime = Date.now();
 
-    if (!session) {
-      throw new ORPCError('SESSION_NOT_FOUND', {
-        message: 'Session not found',
+    try {
+      const session = await prisma.whatsAppSession.findFirst({
+        where: { id, userId },
       });
+
+      if (!session) {
+        throw new ORPCError('SESSION_NOT_FOUND', {
+          message: 'Session not found',
+        });
+      }
+
+      // Notify Go service to disconnect and cleanup
+      await goClient.unregisterSession(id).catch(() => {});
+
+      await prisma.whatsAppSession.delete({
+        where: { id },
+      });
+
+      const duration = Date.now() - startTime;
+      dbQueriesTotal.inc({
+        operation: 'delete',
+        table: 'whatsapp_session',
+        status: 'success',
+      });
+      dbQueryDuration.observe(
+        { operation: 'delete', table: 'whatsapp_session', status: 'success' },
+        duration / 1000,
+      );
+
+      this.logger.info('Session deleted', { sessionId: id, userId, duration });
+    } catch (error) {
+      const duration = Date.now() - startTime;
+
+      if (!(error instanceof ORPCError && error.code === 'SESSION_NOT_FOUND')) {
+        dbQueriesTotal.inc({
+          operation: 'delete',
+          table: 'whatsapp_session',
+          status: 'error',
+        });
+        dbQueryDuration.observe(
+          { operation: 'delete', table: 'whatsapp_session', status: 'error' },
+          duration / 1000,
+        );
+
+        this.logger.error('Failed to delete session', {
+          sessionId: id,
+          userId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          duration,
+        });
+
+        recordError('session_delete_failed', 'medium');
+      }
+
+      throw error;
     }
-
-    // Notify Go service to disconnect and cleanup
-    await goClient.unregisterSession(id).catch(() => {});
-
-    await prisma.whatsAppSession.delete({
-      where: { id },
-    });
   }
 
   async reconnectSession(
@@ -366,6 +488,12 @@ class WhatsAppSessionService {
     // Store original status to restore on HTTP error
     const originalStatus = session.status;
 
+    this.logger.info('Reconnecting session', {
+      sessionId: id,
+      userId,
+      originalStatus,
+    });
+
     // Update status to connecting before calling Go service
     await prisma.whatsAppSession.update({
       where: { id },
@@ -375,13 +503,32 @@ class WhatsAppSessionService {
     try {
       // Pass JID to Go service for device lookup after restart
       // Status updates (connected/disconnected) will come via WebSocket events
-      return await goClient.reconnectSession(id, session.jid ?? undefined);
+      const result = await goClient.reconnectSession(
+        id,
+        session.jid ?? undefined,
+      );
+
+      this.logger.info('Session reconnect initiated', {
+        sessionId: id,
+        userId,
+        success: result.success,
+      });
+
+      return result;
     } catch (error) {
       // On HTTP error, restore original status (requirement 3.4)
       await prisma.whatsAppSession.update({
         where: { id },
         data: { status: originalStatus },
       });
+
+      this.logger.error('Failed to reconnect session', {
+        sessionId: id,
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      recordError('session_reconnect_failed', 'high');
       throw error;
     }
   }
@@ -400,9 +547,30 @@ class WhatsAppSessionService {
       });
     }
 
-    // Forward request to Go service
-    // Status update to 'disconnected' will come via WebSocket events
-    return goClient.disconnectSession(id);
+    this.logger.info('Disconnecting session', { sessionId: id, userId });
+
+    try {
+      // Forward request to Go service
+      // Status update to 'disconnected' will come via WebSocket events
+      const result = await goClient.disconnectSession(id);
+
+      this.logger.info('Session disconnect initiated', {
+        sessionId: id,
+        userId,
+        success: result.success,
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to disconnect session', {
+        sessionId: id,
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      recordError('session_disconnect_failed', 'medium');
+      throw error;
+    }
   }
 
   async updateSessionStatus(

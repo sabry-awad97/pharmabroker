@@ -12,6 +12,8 @@
 import { whatsappGroupsService } from './whatsapp-groups.service';
 import { whatsappEventPublisher } from '../routers/whatsapp.router';
 import { randomUUID } from 'crypto';
+import { logger } from '@pharmabroker/logger';
+import { whatsappSyncDuration, recordError } from '@pharmabroker/metrics';
 
 // ============================================================================
 // Types
@@ -85,6 +87,8 @@ const SYNC_CONFIG = {
 // ============================================================================
 
 export class AsyncGroupSyncService {
+  private log = logger.child('async-group-sync');
+
   /** In-memory sync state storage */
   private syncStates: Map<string, SyncState> = new Map();
 
@@ -131,11 +135,15 @@ export class AsyncGroupSyncService {
 
     // Start the sync in background (don't await)
     this.runSyncWithTimeout(syncId, sessionId).catch(error => {
-      console.error(
-        `[AsyncGroupSync] Unexpected error in background sync ${syncId}:`,
-        error,
-      );
+      this.log.error('Unexpected error in background sync', {
+        syncId,
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      recordError('async_group_sync', 'high');
     });
+
+    this.log.info('Started async group sync', { syncId, sessionId });
 
     return {
       syncId,
@@ -195,12 +203,18 @@ export class AsyncGroupSyncService {
     const state = this.syncStates.get(syncId);
     if (!state) return 'completed';
 
+    const startTime = Date.now();
+
     try {
       // Emit initial progress event
       this.emitProgressEvent(state);
 
+      this.log.info('Running group sync', { syncId, sessionId });
+
       // Run the actual sync
       const result = await whatsappGroupsService.syncGroupsInternal(sessionId);
+
+      const duration = Date.now() - startTime;
 
       // Update state with completion
       state.status = 'completed';
@@ -208,6 +222,19 @@ export class AsyncGroupSyncService {
       state.progress = 100;
       state.groupsProcessed = result.synced;
       state.totalGroups = result.synced;
+
+      // Record metrics
+      whatsappSyncDuration.observe(
+        { session_id: sessionId, sync_type: 'groups' },
+        duration / 1000,
+      );
+
+      this.log.info('Group sync completed', {
+        syncId,
+        sessionId,
+        groupsSynced: result.synced,
+        duration,
+      });
 
       // Emit completion event
       this.emitCompleteEvent(state, result.errors);
@@ -217,10 +244,24 @@ export class AsyncGroupSyncService {
 
       return 'completed';
     } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+
       // Update state with failure
       state.status = 'failed';
       state.completedAt = new Date();
-      state.error = error instanceof Error ? error.message : 'Unknown error';
+      state.error = errorMessage;
+
+      // Record metrics
+      recordError('group_sync', 'high');
+
+      this.log.error('Group sync failed', {
+        syncId,
+        sessionId,
+        error: errorMessage,
+        duration,
+      });
 
       // Emit failure event
       this.emitCompleteEvent(state, [state.error]);

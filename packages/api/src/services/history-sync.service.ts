@@ -9,10 +9,13 @@
  * - Connection timestamp tracking
  * - Sync status and progress tracking
  * - Event publishing for frontend updates
+ * - Metrics tracking for monitoring
  */
 
 import prisma from '@pharmabroker/db';
 import type { HistorySyncStatus } from '@pharmabroker/schemas/whatsapp';
+import { logger } from '@pharmabroker/logger';
+import { recordHistorySync } from '@pharmabroker/metrics';
 import { whatsappEventPublisher } from '../routers/whatsapp.router';
 
 // ============================================================================
@@ -38,6 +41,13 @@ interface SyncStats {
 // ============================================================================
 
 class HistorySyncService {
+  // Track sync metadata for metrics
+  private syncMetadata = new Map<
+    string,
+    { syncType: SyncStrategy; startTime: number }
+  >();
+
+  private logger = logger.child('HistorySyncService');
   /**
    * Determine sync strategy based on session state
    *
@@ -86,18 +96,14 @@ class HistorySyncService {
         },
       });
 
-      console.log(
-        `[HistorySync] Updated connection timestamp for ${sessionId}`,
-      );
+      this.logger.info('Updated connection timestamp', { sessionId });
     } else {
       await prisma.whatsAppSession.update({
         where: { id: sessionId },
         data: { lastDisconnectedAt: now },
       });
 
-      console.log(
-        `[HistorySync] Updated disconnection timestamp for ${sessionId}`,
-      );
+      this.logger.info('Updated disconnection timestamp', { sessionId });
     }
   }
 
@@ -138,7 +144,13 @@ class HistorySyncService {
    * Trigger full history sync
    */
   async triggerFullHistorySync(sessionId: string): Promise<void> {
-    console.log(`[HistorySync] Starting full history sync for ${sessionId}`);
+    this.logger.info('Starting full history sync', { sessionId });
+
+    // Track sync start time for metrics
+    this.syncMetadata.set(sessionId, {
+      syncType: 'full_history',
+      startTime: Date.now(),
+    });
 
     await this.updateSyncStatus(sessionId, 'in_progress', {
       progress: 0,
@@ -160,9 +172,16 @@ class HistorySyncService {
    * Trigger incremental sync
    */
   async triggerIncrementalSync(sessionId: string, since: Date): Promise<void> {
-    console.log(
-      `[HistorySync] Starting incremental sync for ${sessionId} since ${since.toISOString()}`,
-    );
+    this.logger.info('Starting incremental sync', {
+      sessionId,
+      since: since.toISOString(),
+    });
+
+    // Track sync start time for metrics
+    this.syncMetadata.set(sessionId, {
+      syncType: 'incremental',
+      startTime: Date.now(),
+    });
 
     await this.updateSyncStatus(sessionId, 'in_progress', {
       progress: 0,
@@ -181,7 +200,7 @@ class HistorySyncService {
    * Skip history sync
    */
   async skipHistorySync(sessionId: string): Promise<void> {
-    console.log(`[HistorySync] Skipping history sync for ${sessionId}`);
+    this.logger.info('Skipping history sync', { sessionId });
 
     await this.updateSyncStatus(sessionId, 'skipped', {
       completedAt: new Date(),
@@ -193,15 +212,20 @@ class HistorySyncService {
       data: {},
       timestamp: new Date().toISOString(),
     });
+
+    // Record metrics for skipped sync
+    recordHistorySync(sessionId, 'skip', 'skipped', 0, 0);
   }
 
   /**
    * Complete sync
    */
   async completeSync(sessionId: string, stats: SyncStats): Promise<void> {
-    console.log(
-      `[HistorySync] Sync completed for ${sessionId}: ${stats.stored} stored, ${stats.dropped} dropped`,
-    );
+    this.logger.info('Sync completed', {
+      sessionId,
+      stored: stats.stored,
+      dropped: stats.dropped,
+    });
 
     await this.updateSyncStatus(sessionId, 'completed', {
       progress: stats.stored,
@@ -218,13 +242,27 @@ class HistorySyncService {
       },
       timestamp: new Date().toISOString(),
     });
+
+    // Record metrics for successful sync
+    const metadata = this.syncMetadata.get(sessionId);
+    if (metadata) {
+      const duration = Date.now() - metadata.startTime;
+      recordHistorySync(
+        sessionId,
+        metadata.syncType,
+        'success',
+        duration,
+        stats.stored,
+      );
+      this.syncMetadata.delete(sessionId);
+    }
   }
 
   /**
    * Fail sync
    */
   async failSync(sessionId: string, error: string): Promise<void> {
-    console.error(`[HistorySync] Sync failed for ${sessionId}: ${error}`);
+    this.logger.error('Sync failed', { sessionId, error });
 
     await this.updateSyncStatus(sessionId, 'failed', {
       completedAt: new Date(),
@@ -236,13 +274,21 @@ class HistorySyncService {
       data: { error },
       timestamp: new Date().toISOString(),
     });
+
+    // Record metrics for failed sync
+    const metadata = this.syncMetadata.get(sessionId);
+    if (metadata) {
+      const duration = Date.now() - metadata.startTime;
+      recordHistorySync(sessionId, metadata.syncType, 'failure', duration, 0);
+      this.syncMetadata.delete(sessionId);
+    }
   }
 
   /**
    * Cancel sync
    */
   async cancelSync(sessionId: string): Promise<void> {
-    console.log(`[HistorySync] Cancelling sync for ${sessionId}`);
+    this.logger.info('Cancelling sync', { sessionId });
 
     await this.updateSyncStatus(sessionId, 'cancelled', {
       completedAt: new Date(),
@@ -254,6 +300,14 @@ class HistorySyncService {
       data: {},
       timestamp: new Date().toISOString(),
     });
+
+    // Record metrics for cancelled sync
+    const metadata = this.syncMetadata.get(sessionId);
+    if (metadata) {
+      const duration = Date.now() - metadata.startTime;
+      recordHistorySync(sessionId, metadata.syncType, 'cancelled', duration, 0);
+      this.syncMetadata.delete(sessionId);
+    }
   }
 }
 

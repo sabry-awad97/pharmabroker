@@ -19,6 +19,8 @@
     "@pharmabroker/auth": "workspace:*",
     "@pharmabroker/db": "workspace:*",
     "@pharmabroker/env": "workspace:*",
+    "@pharmabroker/logger": "workspace:*",
+    "@pharmabroker/metrics": "workspace:*",
     "@pharmabroker/schemas": "workspace:*",
     "dotenv": "catalog:",
     "hono": "^4.11.3",
