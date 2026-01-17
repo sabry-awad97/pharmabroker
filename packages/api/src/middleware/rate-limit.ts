@@ -209,11 +209,17 @@ export function rateLimit(
 
 /**
  * Strict rate limit for authentication endpoints
+ * Increased to accommodate frequent session checks from SPA
  */
 export const authRateLimit = rateLimit({
-  maxRequests: 5,
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  maxRequests: 100, // Increased from 5
+  windowMs: 60 * 1000, // Changed to 1 minute (from 15 minutes)
   message: 'Too many authentication attempts, please try again later',
+  skip: c => {
+    // Skip rate limiting for session checks (read-only)
+    const path = c.req.path;
+    return path.includes('/get-session');
+  },
 });
 
 /**
