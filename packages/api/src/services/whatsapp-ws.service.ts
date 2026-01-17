@@ -22,6 +22,7 @@ import {
   type ParsedMessageEvent,
 } from './whatsapp-messages.service';
 import { messageQueueService } from './message-queue.service';
+import { queueMetricsTracker } from '../utils/queue-metrics';
 import { env } from '@pharmabroker/env/server';
 
 // ============================================================================
@@ -340,6 +341,13 @@ export class WhatsAppWebSocketService {
         case 'session.authenticated':
           newStatus = 'connected';
           jid = event.data?.jid;
+          // Trigger auto-sync of groups on authentication
+          this.triggerGroupSync(event.session_id).catch(err => {
+            console.error(
+              `[WhatsAppWS] Auto-sync failed for session ${event.session_id}:`,
+              err,
+            );
+          });
           break;
 
         case 'connection.logged_out':
@@ -498,9 +506,22 @@ export class WhatsAppWebSocketService {
    * Process queued messages after group sync completes
    */
   async processMessageQueue(sessionId: string): Promise<void> {
+    console.log(
+      `[WhatsAppWS] Starting message queue processing for session ${sessionId}`,
+    );
+
+    const queueSizeBefore = messageQueueService.size(sessionId);
+    console.log(
+      `[WhatsAppWS] Queue size before drain: ${queueSizeBefore} messages`,
+    );
+
     const messages = messageQueueService.drain(sessionId);
 
     if (messages.length === 0) {
+      console.log(
+        `[WhatsAppWS] No messages to process for session ${sessionId}`,
+      );
+
       // No messages to process - mark as ready
       this.setSyncState(sessionId, {
         status: 'ready',
@@ -524,7 +545,7 @@ export class WhatsAppWebSocketService {
     }
 
     console.log(
-      `[WhatsAppWS] Processing ${messages.length} queued messages for session ${sessionId}`,
+      `[WhatsAppWS] Drained ${messages.length} messages from queue for session ${sessionId}`,
     );
 
     // Emit progress event for message processing phase
@@ -539,8 +560,20 @@ export class WhatsAppWebSocketService {
     });
 
     // Process messages through the messages service
+    const startTime = Date.now();
     const result =
       await whatsappMessagesService.processQueuedMessages(messages);
+    const duration = Date.now() - startTime;
+
+    // Record metrics
+    queueMetricsTracker.recordProcessed(sessionId, result.stored, duration);
+
+    console.log(
+      `[WhatsAppWS] Queue processing completed in ${duration}ms for session ${sessionId}`,
+    );
+
+    // Log session metrics
+    queueMetricsTracker.logSessionMetrics(sessionId);
 
     // Update state
     this.setSyncState(sessionId, {
@@ -562,7 +595,7 @@ export class WhatsAppWebSocketService {
     });
 
     console.log(
-      `[WhatsAppWS] Message queue processed for session ${sessionId}: ${result.stored} stored, ${result.dropped} dropped`,
+      `[WhatsAppWS] ✓ Message queue processed for session ${sessionId}: ${result.stored} stored, ${result.dropped} dropped (${duration}ms)`,
     );
   }
 

@@ -9,9 +9,11 @@
  * - Configurable timeout for message expiration
  * - Maximum queue size to prevent memory exhaustion
  * - Automatic cleanup of expired messages
+ * - Metrics tracking for monitoring
  */
 
 import type { ParsedMessageEvent } from './whatsapp-messages.service';
+import { queueMetricsTracker } from '../utils/queue-metrics';
 
 // ============================================================================
 // Types
@@ -44,8 +46,8 @@ export interface ProcessQueueResult {
 // ============================================================================
 
 const DEFAULT_CONFIG: MessageQueueConfig = {
-  messageTimeoutMs: 5 * 60 * 1000, // 5 minutes
-  maxMessagesPerSession: 10000,
+  messageTimeoutMs: 15 * 60 * 1000, // 15 minutes (increased for large history syncs)
+  maxMessagesPerSession: 100000, // 100k messages (increased for large history syncs)
 };
 
 // ============================================================================
@@ -96,15 +98,22 @@ export class MessageQueueService {
     if (!queue) {
       queue = [];
       this.queues.set(sessionId, queue);
+      console.log(`[MessageQueue] Created new queue for session ${sessionId}`);
     }
 
     // Check if queue is full
     if (queue.length >= this.config.maxMessagesPerSession) {
       console.warn(
-        `[MessageQueue] Queue full for session ${sessionId}, dropping oldest message`,
+        `[MessageQueue] Queue full for session ${sessionId} (${queue.length}/${this.config.maxMessagesPerSession}), dropping oldest message`,
       );
       // Drop oldest message to make room
-      queue.shift();
+      const dropped = queue.shift();
+      if (dropped) {
+        console.warn(
+          `[MessageQueue] Dropped message ${dropped.event.messageId} from group ${dropped.event.chatJid}`,
+        );
+        queueMetricsTracker.recordDropped(sessionId);
+      }
     }
 
     const queuedMessage: QueuedMessage = {
@@ -114,6 +123,15 @@ export class MessageQueueService {
     };
 
     queue.push(queuedMessage);
+    queueMetricsTracker.recordQueued(sessionId, queue.length);
+
+    // Log every 100 messages
+    if (queue.length % 100 === 0) {
+      console.log(
+        `[MessageQueue] Session ${sessionId}: ${queue.length} messages queued`,
+      );
+    }
+
     return true;
   }
 
@@ -127,8 +145,15 @@ export class MessageQueueService {
     const queue = this.queues.get(sessionId);
 
     if (!queue || queue.length === 0) {
+      console.log(
+        `[MessageQueue] No messages to drain for session ${sessionId}`,
+      );
       return [];
     }
+
+    console.log(
+      `[MessageQueue] Draining ${queue.length} messages for session ${sessionId}`,
+    );
 
     // Remove the queue for this session
     this.queues.delete(sessionId);
@@ -144,14 +169,22 @@ export class MessageQueueService {
         validMessages.push(queuedMsg.event);
       } else {
         expiredCount++;
+        console.warn(
+          `[MessageQueue] Expired message ${queuedMsg.event.messageId} (age: ${Math.round(age / 1000)}s)`,
+        );
       }
     }
 
     if (expiredCount > 0) {
+      queueMetricsTracker.recordExpired(sessionId, expiredCount);
       console.warn(
-        `[MessageQueue] Discarded ${expiredCount} expired messages for session ${sessionId}`,
+        `[MessageQueue] Dropped ${expiredCount} expired messages for session ${sessionId}`,
       );
     }
+
+    console.log(
+      `[MessageQueue] Drained ${validMessages.length} valid messages, ${expiredCount} expired for session ${sessionId}`,
+    );
 
     return validMessages;
   }
@@ -177,6 +210,7 @@ export class MessageQueueService {
       totalRemoved += removed;
 
       if (removed > 0) {
+        queueMetricsTracker.recordExpired(sessionId, removed);
         console.warn(
           `[MessageQueue] Cleaned up ${removed} expired messages for session ${sessionId}`,
         );
@@ -200,6 +234,15 @@ export class MessageQueueService {
   size(sessionId: string): number {
     const queue = this.queues.get(sessionId);
     return queue?.length ?? 0;
+  }
+
+  /**
+   * Alias for size() - get the number of queued messages for a session
+   * @param sessionId The session ID
+   * @returns Number of messages in queue
+   */
+  getQueueSize(sessionId: string): number {
+    return this.size(sessionId);
   }
 
   /**
@@ -258,6 +301,27 @@ export class MessageQueueService {
    */
   getConfig(): MessageQueueConfig {
     return { ...this.config };
+  }
+
+  /**
+   * Get metrics for a session
+   */
+  getMetrics(sessionId: string) {
+    return queueMetricsTracker.getMetrics(sessionId);
+  }
+
+  /**
+   * Get metrics summary
+   */
+  getMetricsSummary() {
+    return queueMetricsTracker.getSummary();
+  }
+
+  /**
+   * Log metrics summary
+   */
+  logMetrics(): void {
+    queueMetricsTracker.logSummary();
   }
 }
 

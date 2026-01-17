@@ -414,17 +414,22 @@ class WhatsAppMessagesService {
         sessionId,
         jid: chatJid,
       },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!group) {
       // Queue message for later processing instead of dropping
       messageQueueService.enqueue(sessionId, event);
+      const queueSize = messageQueueService.getQueueSize(sessionId);
       console.log(
-        `[WhatsApp Messages] Queued message for unknown group: ${chatJid} (session: ${sessionId})`,
+        `[WhatsApp Messages] Queued message ${messageId} for unknown group ${chatJid} (session: ${sessionId}, queue size: ${queueSize})`,
       );
       return;
     }
+
+    console.log(
+      `[WhatsApp Messages] Storing message ${messageId} in group ${group.name} (${chatJid})`,
+    );
 
     // Try to find participant by JID
     const participant = await prisma.whatsAppGroupParticipant.findFirst({
@@ -494,6 +499,10 @@ class WhatsAppMessagesService {
         // Don't update source - keep original
       },
     });
+
+    console.log(
+      `[WhatsApp Messages] ✓ Stored message ${messageId} (source: ${source}, type: ${messageType})`,
+    );
   }
 
   /**
@@ -505,10 +514,23 @@ class WhatsAppMessagesService {
   async processQueuedMessages(
     messages: ParsedMessageEvent[],
   ): Promise<{ stored: number; dropped: number }> {
+    console.log(
+      `[WhatsApp Messages] Processing batch of ${messages.length} queued messages`,
+    );
+
     let stored = 0;
     let dropped = 0;
+    let batchCount = 0;
 
     for (const event of messages) {
+      batchCount++;
+
+      // Log progress every 100 messages
+      if (batchCount % 100 === 0) {
+        console.log(
+          `[WhatsApp Messages] Batch progress: ${batchCount}/${messages.length} (${stored} stored, ${dropped} dropped)`,
+        );
+      }
       const { sessionId, chatJid, messageId } = event;
 
       // Find the group by JID
@@ -603,6 +625,13 @@ class WhatsAppMessagesService {
         });
 
         stored++;
+
+        // Log every 50th successful store
+        if (stored % 50 === 0) {
+          console.log(
+            `[WhatsApp Messages] Stored ${stored} messages so far...`,
+          );
+        }
       } catch (error) {
         console.error(
           `[WhatsApp Messages] Failed to store queued message ${messageId}:`,
@@ -613,7 +642,7 @@ class WhatsAppMessagesService {
     }
 
     console.log(
-      `[WhatsApp Messages] Processed queued messages: ${stored} stored, ${dropped} dropped`,
+      `[WhatsApp Messages] ✓ Batch complete: ${stored} stored, ${dropped} dropped out of ${messages.length} total`,
     );
 
     return { stored, dropped };

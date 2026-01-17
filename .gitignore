@@ -57,3 +57,6 @@ bun.lock
 
 # Kiro
 .kiro
+
+# Debug
+debug
