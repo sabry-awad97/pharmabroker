@@ -29,7 +29,7 @@ describe('useRealtimeSync', () => {
       const event = {
         type: 'qr',
         data: 'base64-qr-code',
-      } as WhatsAppEvent;
+      } as unknown as WhatsAppEvent;
 
       const sessionId = extractSessionId(event);
 

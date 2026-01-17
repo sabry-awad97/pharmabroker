@@ -141,6 +141,75 @@ export function useWhatsappMessages(filters: MessageFilters) {
 }
 
 /**
+ * Fetch ALL messages matching filters (for "Select All" feature)
+ * WARNING: This can be expensive for large datasets
+ */
+export function useFetchAllMessages() {
+  return useCallback(
+    async (
+      filters: Omit<MessageFilters, 'limit' | 'cursor'>,
+    ): Promise<WhatsAppMessageWithGroup[]> => {
+      const allMessages: WhatsAppMessageWithGroup[] = [];
+      let cursor: string | undefined = undefined;
+      const limit = 100; // Fetch in batches
+
+      // Fetch all pages
+      while (true) {
+        const response = await client.whatsapp.messages.list({
+          sessionId: filters.sessionId,
+          groupId: filters.groupId,
+          search: filters.search,
+          messageType:
+            filters.messageType && filters.messageType !== 'all'
+              ? (filters.messageType as
+                  | 'text'
+                  | 'image'
+                  | 'video'
+                  | 'audio'
+                  | 'document'
+                  | 'sticker'
+                  | 'contact'
+                  | 'location'
+                  | 'poll'
+                  | 'reaction'
+                  | 'protocol'
+                  | 'unknown')
+              : undefined,
+          aiStatus:
+            filters.aiStatus && filters.aiStatus !== 'all'
+              ? (filters.aiStatus as
+                  | 'pending'
+                  | 'processing'
+                  | 'completed'
+                  | 'failed'
+                  | 'skipped')
+              : undefined,
+          source:
+            filters.source && filters.source !== 'all'
+              ? (filters.source as 'realtime' | 'history')
+              : undefined,
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          limit,
+          cursor,
+        });
+
+        allMessages.push(...response.messages);
+
+        if (!response.nextCursor) {
+          break;
+        }
+
+        cursor = response.nextCursor;
+      }
+
+      return allMessages;
+    },
+    [],
+  );
+}
+
+/**
  * Fetch single message detail
  */
 export function useWhatsappMessage(messageId: string | undefined) {

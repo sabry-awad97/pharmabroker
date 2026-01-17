@@ -1,7 +1,6 @@
 package presentation
 
 import (
-	"context"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +19,6 @@ var Module = fx.Module("presentation",
 		NewHTTPHandler,
 		NewRouter,
 		NewQRHandler,
-		NewEventHub,
 		NewEventHandler,
 	),
 )
@@ -76,39 +74,6 @@ func NewQRHandler(sessionUC *usecase.SessionUseCase, cfg *config.Config) *ws.QRH
 	}
 
 	return ws.NewQRHandler(sessionUC, qrConfig)
-}
-
-// NewEventHub creates a new EventHub for WebSocket event broadcasting
-func NewEventHub(lc fx.Lifecycle, cfg *config.Config) *infraWs.EventHub {
-	// Get API key from config - use the first key if available
-	apiKey := ""
-	if cfg.APIKey.Enabled && len(cfg.APIKey.Keys) > 0 {
-		apiKey = cfg.APIKey.Keys[0]
-	}
-
-	hubConfig := infraWs.EventHubConfig{
-		APIKey:       apiKey,
-		PingInterval: cfg.WebSocket.PingInterval,
-		WriteTimeout: cfg.WebSocket.PongTimeout,
-		AuthTimeout:  10 * time.Second,
-	}
-
-	hub := infraWs.NewEventHub(hubConfig)
-
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			// Start the event hub's main loop
-			go hub.Run()
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			// Stop the event hub
-			hub.Stop()
-			return nil
-		},
-	})
-
-	return hub
 }
 
 // NewEventHandler creates a new Event WebSocket handler

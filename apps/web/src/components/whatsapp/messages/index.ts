@@ -58,3 +58,6 @@ export { ScheduleAIDialog } from './schedule-ai-dialog';
 
 // AI Settings dialog
 export { AISettingsDialog } from './ai-settings-dialog';
+
+// Keyboard shortcuts dialog
+export { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog';

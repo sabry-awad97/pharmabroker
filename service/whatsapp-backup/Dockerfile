@@ -21,7 +21,9 @@ RUN mkdir -p /backups && chmod 755 /backups
 
 # Copy backup script
 COPY backup.sh /app/backup.sh
-RUN chmod +x /app/backup.sh
+
+# Fix line endings and make executable
+RUN sed -i 's/\r$//' /app/backup.sh && chmod +x /app/backup.sh
 
 # Create non-root user
 RUN adduser -D -g '' backupuser && \

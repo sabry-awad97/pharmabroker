@@ -2,7 +2,12 @@
  * Messages Data Table Component
  *
  * TanStack Table implementation for WhatsApp messages with
- * sorting, pagination, row selection, and beautiful actions.
+ * sorting, pagination, row selection, virtualization, and beautiful actions.
+ *
+ * Features:
+ * - Row virtualization for performance with large datasets
+ * - "Select all X messages" across all pages
+ * - Optimistic UI updates
  */
 
 import type {
@@ -17,6 +22,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ArrowUpDown,
   ChevronLeft,
@@ -34,8 +40,9 @@ import {
   Users,
   Loader2,
   Clock,
+  CheckCircle2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import type { WhatsAppMessageWithGroup } from '@pharmabroker/schemas/whatsapp';
 
@@ -77,6 +84,7 @@ interface MessagesDataTableProps {
   onBulkProcess?: (messages: WhatsAppMessageWithGroup[]) => void;
   onBulkDelete?: (messages: WhatsAppMessageWithGroup[]) => void;
   onScheduleAI?: (messages: WhatsAppMessageWithGroup[]) => void;
+  onSelectAll?: () => Promise<WhatsAppMessageWithGroup[]>; // NEW: Fetch all messages for selection
   pageSize?: number;
   onPageSizeChange?: (pageSize: number) => void;
   totalCount?: number;
@@ -87,7 +95,10 @@ interface MessagesDataTableProps {
   isLoadingPage?: boolean;
   isProcessing?: boolean;
   processingMessageId?: string | null;
+  enableVirtualization?: boolean; // NEW: Toggle virtualization
 }
+
+type SelectionMode = 'page' | 'all';
 
 export function MessagesDataTable({
   data,
@@ -99,6 +110,7 @@ export function MessagesDataTable({
   onBulkProcess,
   onBulkDelete,
   onScheduleAI,
+  onSelectAll,
   pageSize = 20,
   onPageSizeChange,
   totalCount = 0,
@@ -109,11 +121,19 @@ export function MessagesDataTable({
   isLoadingPage = false,
   isProcessing = false,
   processingMessageId = null,
+  enableVirtualization = pageSize >= 50, // Auto-enable for large page sizes
 }: MessagesDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'messageTimestamp', desc: true },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>('page');
+  const [allMessages, setAllMessages] = useState<WhatsAppMessageWithGroup[]>(
+    [],
+  );
+  const [isLoadingAll, setIsLoadingAll] = useState(false);
+
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   // Define actions for each row
   const getRowActions = (
@@ -413,23 +433,128 @@ export function MessagesDataTable({
     pageCount: -1, // Unknown page count with cursor pagination
   });
 
+  // Virtualization setup
+  const { rows } = table.getRowModel();
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 60, // Estimated row height in pixels
+    overscan: 5,
+    enabled: enableVirtualization,
+  });
+
+  const virtualRows = enableVirtualization
+    ? rowVirtualizer.getVirtualItems()
+    : rows.map((_, index) => ({ index, size: 60, start: index * 60 }));
+
+  // Selection handlers
   const selectedRows = table.getFilteredSelectedRowModel().rows;
   const hasSelection = selectedRows.length > 0;
+  const isAllPageRowsSelected = table.getIsAllPageRowsSelected();
+  const canSelectAll = totalCount > data.length && onSelectAll;
+
+  const handleSelectAllMessages = useCallback(async () => {
+    if (!onSelectAll) return;
+
+    setIsLoadingAll(true);
+    try {
+      const messages = await onSelectAll();
+      setAllMessages(messages);
+      setSelectionMode('all');
+
+      // Select all rows by ID
+      const selection: RowSelectionState = {};
+      messages.forEach((_, index) => {
+        selection[index] = true;
+      });
+      setRowSelection(selection);
+
+      toast.success(`Selected all ${messages.length} messages`);
+    } catch (error) {
+      toast.error('Failed to load all messages');
+      console.error('Select all error:', error);
+    } finally {
+      setIsLoadingAll(false);
+    }
+  }, [onSelectAll]);
+
+  const handleClearSelection = useCallback(() => {
+    setRowSelection({});
+    setSelectionMode('page');
+    setAllMessages([]);
+  }, []);
+
+  // Get selected messages based on selection mode
+  const getSelectedMessages = useCallback(() => {
+    if (selectionMode === 'all' && allMessages.length > 0) {
+      return allMessages.filter((_, index) => rowSelection[index]);
+    }
+    return selectedRows.map(row => row.original);
+  }, [selectionMode, allMessages, rowSelection, selectedRows]);
+
+  const selectedMessages = getSelectedMessages();
+  const selectedCount = selectedMessages.length;
 
   return (
     <div className="space-y-4">
+      {/* Select All Banner */}
+      {isAllPageRowsSelected && canSelectAll && selectionMode === 'page' && (
+        <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 dark:border-blue-800 dark:bg-blue-950/20">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm text-blue-900 dark:text-blue-100">
+              All <span className="font-medium">{data.length}</span> messages on
+              this page are selected.
+            </span>
+          </div>
+          <Button
+            variant="link"
+            size="sm"
+            onClick={handleSelectAllMessages}
+            disabled={isLoadingAll}
+            className="h-auto p-0 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            {isLoadingAll ? (
+              <>
+                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              `Select all ${totalCount.toLocaleString()} messages`
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* Bulk actions bar */}
       {hasSelection && (
         <div className="bg-muted/50 border-border flex items-center justify-between rounded-lg border px-4 py-2">
-          <span className="text-sm">
-            <span className="font-medium">{selectedRows.length}</span> message
-            {selectedRows.length !== 1 ? 's' : ''} selected
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm">
+              <span className="font-medium">{selectedCount}</span> message
+              {selectedCount !== 1 ? 's' : ''} selected
+              {selectionMode === 'all' && (
+                <span className="text-muted-foreground ml-1">
+                  (across all pages)
+                </span>
+              )}
+            </span>
+            {hasSelection && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="h-7 text-xs"
+              >
+                Clear selection
+              </Button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onBulkProcess?.(selectedRows.map(r => r.original))}
+              onClick={() => onBulkProcess?.(selectedMessages)}
               disabled={isProcessing}
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
@@ -438,7 +563,7 @@ export function MessagesDataTable({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onScheduleAI?.(selectedRows.map(r => r.original))}
+              onClick={() => onScheduleAI?.(selectedMessages)}
             >
               <Clock className="mr-1.5 h-3.5 w-3.5" />
               Schedule
@@ -446,7 +571,7 @@ export function MessagesDataTable({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onBulkDelete?.(selectedRows.map(r => r.original))}
+              onClick={() => onBulkDelete?.(selectedMessages)}
               className="text-destructive hover:bg-destructive/10"
             >
               <Trash2 className="mr-1.5 h-3.5 w-3.5" />
@@ -457,9 +582,15 @@ export function MessagesDataTable({
       )}
 
       {/* Table */}
-      <div className="border-border overflow-hidden rounded-lg border">
+      <div
+        ref={tableContainerRef}
+        className="border-border overflow-auto rounded-lg border"
+        style={{
+          maxHeight: enableVirtualization ? '600px' : undefined,
+        }}
+      >
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-background sticky top-0 z-10">
             {table.getHeaderGroups().map(headerGroup => (
               <TableRow
                 key={headerGroup.id}
@@ -478,35 +609,85 @@ export function MessagesDataTable({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map(row => {
-                const isRowProcessing = processingMessageId === row.original.id;
-                return (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && 'selected'}
-                    className={cn(isRowProcessing && 'relative')}
-                  >
-                    {isRowProcessing && (
-                      <td className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[1px]">
-                        <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                          <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
-                          <span>Processing with AI...</span>
-                        </div>
-                      </td>
-                    )}
-                    {row.getVisibleCells().map(cell => (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                );
-              })
+          <TableBody
+            style={{
+              height: enableVirtualization
+                ? `${rowVirtualizer.getTotalSize()}px`
+                : undefined,
+              position: 'relative',
+            }}
+          >
+            {rows.length ? (
+              enableVirtualization ? (
+                // Virtualized rows
+                virtualRows.map(virtualRow => {
+                  const row = rows[virtualRow.index];
+                  const isRowProcessing =
+                    processingMessageId === row.original.id;
+                  return (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() && 'selected'}
+                      className={cn(isRowProcessing && 'relative')}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      {isRowProcessing && (
+                        <td className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[1px]">
+                          <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                            <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                            <span>Processing with AI...</span>
+                          </div>
+                        </td>
+                      )}
+                      {row.getVisibleCells().map(cell => (
+                        <TableCell key={cell.id}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                })
+              ) : (
+                // Non-virtualized rows
+                rows.map(row => {
+                  const isRowProcessing =
+                    processingMessageId === row.original.id;
+                  return (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() && 'selected'}
+                      className={cn(isRowProcessing && 'relative')}
+                    >
+                      {isRowProcessing && (
+                        <td className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[1px]">
+                          <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                            <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                            <span>Processing with AI...</span>
+                          </div>
+                        </td>
+                      )}
+                      {row.getVisibleCells().map(cell => (
+                        <TableCell key={cell.id}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                })
+              )
             ) : (
               <TableRow>
                 <TableCell
