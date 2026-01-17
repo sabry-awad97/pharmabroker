@@ -171,7 +171,6 @@ export const whatsappGroupsRouter = o.router({
       if (!status) {
         throw new ORPCError('SYNC_NOT_FOUND', {
           message: `Sync operation ${input.syncId} not found`,
-          code: 'NOT_FOUND',
         });
       }
       return {

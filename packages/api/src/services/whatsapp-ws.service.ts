@@ -95,6 +95,10 @@ export class WhatsAppWebSocketService {
   /** Per-session sync state tracking */
   private syncStates: Map<string, SyncState> = new Map();
 
+  /** Message deduplication cache - stores messageId for last 10 minutes */
+  private processedMessages: Map<string, number> = new Map();
+  private readonly MESSAGE_DEDUP_TTL = 10 * 60 * 1000; // 10 minutes
+
   constructor(apiKey: string) {
     this.apiKey = apiKey;
   }
@@ -379,6 +383,18 @@ export class WhatsAppWebSocketService {
       return;
     }
 
+    // Don't re-sync if already completed recently (within 5 minutes)
+    if (
+      currentState.status === 'ready' &&
+      currentState.lastSyncAt &&
+      Date.now() - currentState.lastSyncAt.getTime() < 5 * 60 * 1000
+    ) {
+      console.log(
+        `[WhatsAppWS] Skipping sync for session ${sessionId} - recently completed`,
+      );
+      return;
+    }
+
     // Update state to syncing
     this.setSyncState(sessionId, {
       status: 'syncing_groups',
@@ -586,6 +602,26 @@ export class WhatsAppWebSocketService {
         return;
       }
 
+      // Deduplication: Check if we've already processed this message recently
+      const dedupKey = `${sessionId}:${messageId}`;
+      const now = Date.now();
+      const lastProcessed = this.processedMessages.get(dedupKey);
+
+      if (lastProcessed && now - lastProcessed < this.MESSAGE_DEDUP_TTL) {
+        console.log(
+          `[WhatsAppWS] Skipping duplicate message: ${messageId} (session: ${sessionId})`,
+        );
+        return;
+      }
+
+      // Mark as processed
+      this.processedMessages.set(dedupKey, now);
+
+      // Cleanup old entries periodically (every 100 messages)
+      if (this.processedMessages.size % 100 === 0) {
+        this.cleanupDedupCache();
+      }
+
       // Only process group messages (JIDs ending with @g.us)
       if (!chatJid.endsWith('@g.us')) {
         // Skip non-group messages silently
@@ -660,6 +696,30 @@ export class WhatsAppWebSocketService {
       console.error(
         `[WhatsAppWS] Failed to update status for ${sessionId}:`,
         error,
+      );
+    }
+  }
+
+  /**
+   * Cleanup expired entries from deduplication cache
+   */
+  private cleanupDedupCache(): void {
+    const now = Date.now();
+    const toDelete: string[] = [];
+
+    for (const [key, timestamp] of this.processedMessages.entries()) {
+      if (now - timestamp > this.MESSAGE_DEDUP_TTL) {
+        toDelete.push(key);
+      }
+    }
+
+    for (const key of toDelete) {
+      this.processedMessages.delete(key);
+    }
+
+    if (toDelete.length > 0) {
+      console.log(
+        `[WhatsAppWS] Cleaned up ${toDelete.length} expired deduplication entries`,
       );
     }
   }

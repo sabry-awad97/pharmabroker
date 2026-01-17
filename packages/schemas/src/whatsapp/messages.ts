@@ -90,6 +90,7 @@ export const whatsAppMessage = z.object({
   aiScheduledFor: z.coerce.date().nullable(),
   aiScheduledAt: z.coerce.date().nullable(),
   aiPriority: z.number().int().min(0).max(10).default(0),
+  contentHash: z.string(),
 });
 
 /** WhatsApp message with group info for list display */

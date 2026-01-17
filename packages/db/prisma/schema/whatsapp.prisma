@@ -175,7 +175,7 @@ model WhatsAppMessage {
     // -------------------------------------------------------------------------
     // AI Processing Fields
     // -------------------------------------------------------------------------
-    
+
     // Processing status
     aiStatus      WhatsAppAIStatus @default(pending) @map("ai_status")
     aiProcessedAt DateTime?        @map("ai_processed_at")
@@ -188,6 +188,9 @@ model WhatsAppMessage {
     aiScheduledAt  DateTime? @map("ai_scheduled_at") // When scheduling was set
     aiPriority     Int       @default(0) @map("ai_priority") // Higher = process first
 
+    // Content-based deduplication
+    contentHash String @map("content_hash") // SHA-256 hash (32 chars) for deduplication
+
     // Relations
     extractedData WhatsAppExtractedData[]
 
@@ -199,6 +202,8 @@ model WhatsAppMessage {
     @@index([messageTimestamp])
     @@index([source])
     @@index([aiStatus])
+    @@index([contentHash])
+    @@index([sessionId, contentHash])
     @@map("whatsapp_message")
 }
 
@@ -273,12 +278,12 @@ enum WhatsAppMessageSource {
 }
 
 enum WhatsAppAIStatus {
-    pending    // Not yet processed
-    scheduled  // Scheduled for future processing
+    pending // Not yet processed
+    scheduled // Scheduled for future processing
     processing // Currently being processed
-    completed  // Successfully processed
-    failed     // Processing failed
-    skipped    // Skipped (e.g., media-only, system message)
+    completed // Successfully processed
+    failed // Processing failed
+    skipped // Skipped (e.g., media-only, system message)
 
     @@map("whatsapp_ai_status")
 }

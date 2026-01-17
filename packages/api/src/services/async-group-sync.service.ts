@@ -257,20 +257,16 @@ export class AsyncGroupSyncService {
    * Emit progress event to frontend clients.
    */
   private emitProgressEvent(state: SyncState): void {
-    const event: SyncProgressEvent = {
-      type: 'group_sync.progress',
-      syncId: state.syncId,
-      sessionId: state.sessionId,
-      progress: state.progress,
-      groupsProcessed: state.groupsProcessed,
-      totalGroups: state.totalGroups,
-    };
-
     whatsappEventPublisher.publish('whatsapp-event', {
-      type: event.type as any,
+      type: 'sync.progress' as any,
       session_id: state.sessionId,
-      data: event,
       timestamp: new Date().toISOString(),
+      data: {
+        phase: 'groups' as const,
+        current: state.groupsProcessed,
+        total: state.totalGroups,
+        groupsSynced: state.groupsProcessed,
+      },
     });
   }
 
@@ -278,25 +274,21 @@ export class AsyncGroupSyncService {
    * Emit completion event to frontend clients.
    */
   private emitCompleteEvent(state: SyncState, errors?: string[]): void {
-    const durationMs = state.completedAt
-      ? state.completedAt.getTime() - state.startedAt.getTime()
-      : 0;
-
-    const event: SyncCompleteEvent = {
-      type: 'group_sync.complete',
-      syncId: state.syncId,
-      sessionId: state.sessionId,
-      success: state.status === 'completed',
-      groupCount: state.groupsProcessed,
-      durationMs,
-      errors: errors && errors.length > 0 ? errors : undefined,
-    };
-
     whatsappEventPublisher.publish('whatsapp-event', {
-      type: event.type as any,
+      type:
+        state.status === 'completed'
+          ? ('sync.completed' as any)
+          : ('sync.failed' as any),
       session_id: state.sessionId,
-      data: event,
       timestamp: new Date().toISOString(),
+      data:
+        state.status === 'completed'
+          ? {
+              groupsSynced: state.groupsProcessed,
+            }
+          : {
+              error: errors?.join(', '),
+            },
     });
   }
 
@@ -304,18 +296,13 @@ export class AsyncGroupSyncService {
    * Emit timeout event to frontend clients.
    */
   private emitTimeoutEvent(state: SyncState): void {
-    const event: SyncTimeoutEvent = {
-      type: 'group_sync.timeout',
-      syncId: state.syncId,
-      sessionId: state.sessionId,
-      timeoutMs: SYNC_CONFIG.TIMEOUT_MS,
-    };
-
     whatsappEventPublisher.publish('whatsapp-event', {
-      type: event.type as any,
+      type: 'sync.failed' as any,
       session_id: state.sessionId,
-      data: event,
       timestamp: new Date().toISOString(),
+      data: {
+        error: `Sync operation timed out after ${SYNC_CONFIG.TIMEOUT_MS}ms`,
+      },
     });
   }
 

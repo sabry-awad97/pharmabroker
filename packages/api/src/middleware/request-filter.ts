@@ -112,7 +112,7 @@ function getClientIp(c: Context): string {
   // Check common proxy headers
   const forwarded = c.req.header('x-forwarded-for');
   if (forwarded) {
-    return forwarded.split(',')[0].trim();
+    return forwarded.split(',')[0]?.trim() ?? 'unknown';
   }
 
   const realIp = c.req.header('x-real-ip');

@@ -32,6 +32,7 @@ export interface ProcessMessageResult {
   model: string | null;
   error: string | null;
   extractedCount: number;
+  wasReused?: boolean; // True if result was reused from existing message
   data?: MessageExtraction;
 }
 
@@ -111,6 +112,47 @@ class AIProcessorService {
       };
     }
 
+    // Check for existing AI results with same content hash (deduplication)
+    if (message.contentHash) {
+      const existingResult = await this.findExistingAIResult(
+        userId,
+        message.contentHash,
+        messageId,
+      );
+
+      if (existingResult) {
+        console.log(
+          `[AI Processor] Reusing AI result for content hash ${message.contentHash} (message: ${messageId})`,
+        );
+
+        // Copy extracted data from existing message
+        const copiedCount = await this.copyExtractedData(
+          existingResult.sourceMessageId,
+          messageId,
+        );
+
+        // Update message status
+        await prisma.whatsAppMessage.update({
+          where: { id: messageId },
+          data: {
+            aiStatus: 'completed',
+            aiModel: existingResult.model,
+            aiProcessedAt: new Date(),
+            aiError: null,
+          },
+        });
+
+        return {
+          status: 'completed',
+          model: existingResult.model,
+          error: null,
+          extractedCount: copiedCount,
+          wasReused: true,
+        };
+      }
+    }
+
+    // No existing result - process with AI
     // Update status to processing
     await prisma.whatsAppMessage.update({
       where: { id: messageId },
@@ -176,6 +218,7 @@ class AIProcessorService {
         model: result.model,
         error: null,
         extractedCount,
+        wasReused: false,
         data: result.data,
       };
     } catch (error) {
@@ -266,6 +309,134 @@ class AIProcessorService {
     });
 
     return { queued, skipped, errors };
+  }
+
+  /**
+   * Process multiple messages in bulk with content-based deduplication
+   * Groups messages by content hash and processes once per unique content
+   *
+   * @param userId - User ID for authorization
+   * @param messageIds - Array of message IDs to process
+   * @returns Result with queued, skipped, deduplicated counts and errors
+   */
+  async bulkProcessOptimized(
+    userId: string,
+    messageIds: string[],
+  ): Promise<BulkProcessResult & { deduplicated: number }> {
+    const errors: string[] = [];
+    let queued = 0;
+    let skipped = 0;
+    let deduplicated = 0;
+
+    // Fetch messages with content hashes
+    const messages = await prisma.whatsAppMessage.findMany({
+      where: {
+        id: { in: messageIds },
+        session: { userId },
+      },
+      select: {
+        id: true,
+        aiStatus: true,
+        text: true,
+        caption: true,
+        contentHash: true,
+      },
+    });
+
+    // Group messages by content hash
+    const contentGroups = new Map<string, string[]>();
+    const noHashMessages: string[] = [];
+
+    for (const message of messages) {
+      // Skip already processed
+      if (
+        message.aiStatus === 'completed' ||
+        message.aiStatus === 'processing'
+      ) {
+        skipped++;
+        continue;
+      }
+
+      // Skip messages without content
+      if (!message.text && !message.caption) {
+        await prisma.whatsAppMessage.update({
+          where: { id: message.id },
+          data: { aiStatus: 'skipped' },
+        });
+        skipped++;
+        continue;
+      }
+
+      if (!message.contentHash) {
+        noHashMessages.push(message.id);
+      } else {
+        const group = contentGroups.get(message.contentHash) || [];
+        group.push(message.id);
+        contentGroups.set(message.contentHash, group);
+      }
+    }
+
+    // Process one message per content group
+    for (const [contentHash, messageIdsInGroup] of contentGroups.entries()) {
+      if (messageIdsInGroup.length === 0) continue;
+
+      const primaryMessageId = messageIdsInGroup[0]!;
+
+      try {
+        // Process first message in group
+        await this.processMessage(userId, primaryMessageId);
+        queued++;
+
+        // Copy results to other messages with same content
+        if (messageIdsInGroup.length > 1) {
+          for (let i = 1; i < messageIdsInGroup.length; i++) {
+            const targetId = messageIdsInGroup[i]!;
+
+            await this.copyExtractedData(primaryMessageId, targetId);
+
+            await prisma.whatsAppMessage.update({
+              where: { id: targetId },
+              data: {
+                aiStatus: 'completed',
+                aiProcessedAt: new Date(),
+              },
+            });
+
+            deduplicated++;
+          }
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        errors.push(`Content group ${contentHash}: ${errorMsg}`);
+      }
+    }
+
+    // Process messages without hash normally
+    for (const id of noHashMessages) {
+      try {
+        await this.processMessage(userId, id);
+        queued++;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        errors.push(`Message ${id}: ${errorMsg}`);
+      }
+    }
+
+    console.log(
+      `[AI Processor] Bulk processing complete: ${queued} processed, ${deduplicated} deduplicated, ${skipped} skipped`,
+    );
+
+    // Calculate deduplication metrics
+    const totalProcessed = queued + deduplicated;
+    const deduplicationRate =
+      totalProcessed > 0 ? (deduplicated / totalProcessed) * 100 : 0;
+    const apiCallsSaved = deduplicated;
+
+    console.log(
+      `[AI Processor] Deduplication metrics: ${deduplicationRate.toFixed(1)}% rate, ${apiCallsSaved} API calls saved`,
+    );
+
+    return { queued, skipped, deduplicated, errors };
   }
 
   /**
@@ -578,6 +749,84 @@ class AIProcessorService {
   // ─────────────────────────────────────────────────────────────────────────
   // Private Methods
   // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Find existing AI processing result for the same content
+   * Returns the most recent completed result within 30 days
+   *
+   * @param userId - User ID for privacy boundary
+   * @param contentHash - Content hash to match
+   * @param excludeMessageId - Current message ID to exclude from search
+   * @returns Source message ID and model, or null if not found
+   */
+  private async findExistingAIResult(
+    userId: string,
+    contentHash: string,
+    excludeMessageId: string,
+  ): Promise<{ sourceMessageId: string; model: string } | null> {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const existingMessage = await prisma.whatsAppMessage.findFirst({
+      where: {
+        session: { userId },
+        contentHash,
+        aiStatus: 'completed',
+        id: { not: excludeMessageId },
+        aiProcessedAt: { gte: thirtyDaysAgo },
+      },
+      select: { id: true, aiModel: true },
+      orderBy: { aiProcessedAt: 'desc' },
+    });
+
+    if (!existingMessage) {
+      return null;
+    }
+
+    return {
+      sourceMessageId: existingMessage.id,
+      model: existingMessage.aiModel || 'unknown',
+    };
+  }
+
+  /**
+   * Copy extracted data from source message to target message
+   *
+   * @param sourceMessageId - Source message with existing extracted data
+   * @param targetMessageId - Target message to copy data to
+   * @returns Count of records copied
+   */
+  private async copyExtractedData(
+    sourceMessageId: string,
+    targetMessageId: string,
+  ): Promise<number> {
+    const sourceData = await prisma.whatsAppExtractedData.findMany({
+      where: { messageId: sourceMessageId },
+      select: {
+        dataType: true,
+        data: true,
+        confidence: true,
+        model: true,
+        promptHash: true,
+      },
+    });
+
+    if (sourceData.length === 0) {
+      return 0;
+    }
+
+    await prisma.whatsAppExtractedData.createMany({
+      data: sourceData.map(item => ({
+        messageId: targetMessageId,
+        dataType: item.dataType,
+        data: item.data as any,
+        confidence: item.confidence,
+        model: item.model,
+        promptHash: item.promptHash,
+      })),
+    });
+
+    return sourceData.length;
+  }
 
   /**
    * Format error with full stack trace for debugging

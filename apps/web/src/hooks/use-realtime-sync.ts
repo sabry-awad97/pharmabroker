@@ -47,6 +47,78 @@ export interface UseRealtimeSyncReturn {
 }
 
 // ============================================================================
+// Event Deduplication
+// ============================================================================
+
+/**
+ * Cache for tracking processed message events to prevent duplicate handling
+ */
+const processedMessageEvents = new Map<string, number>();
+const MESSAGE_EVENT_TTL = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Check if a message event has been processed recently
+ */
+function isMessageEventDuplicate(event: WhatsAppEvent): boolean {
+  if (event.type !== 'message.received') {
+    return false; // Only deduplicate message events
+  }
+
+  const data = event.data as { messageId?: string } | undefined;
+  const messageId = data?.messageId;
+  const sessionId = 'session_id' in event ? event.session_id : undefined;
+
+  if (!messageId || !sessionId) {
+    return false; // Can't deduplicate without IDs
+  }
+
+  const dedupKey = `${sessionId}:${messageId}`;
+  const now = Date.now();
+  const lastProcessed = processedMessageEvents.get(dedupKey);
+
+  if (lastProcessed && now - lastProcessed < MESSAGE_EVENT_TTL) {
+    console.log(
+      `[useRealtimeSync] Skipping duplicate message event: ${messageId}`,
+    );
+    return true;
+  }
+
+  // Mark as processed
+  processedMessageEvents.set(dedupKey, now);
+
+  // Cleanup old entries periodically
+  if (processedMessageEvents.size % 50 === 0) {
+    cleanupMessageEventCache();
+  }
+
+  return false;
+}
+
+/**
+ * Cleanup expired entries from message event cache
+ */
+function cleanupMessageEventCache(): void {
+  const now = Date.now();
+  const toDelete: string[] = [];
+
+  for (const [key, timestamp] of processedMessageEvents.entries()) {
+    if (now - timestamp > MESSAGE_EVENT_TTL) {
+      toDelete.push(key);
+    }
+  }
+
+  for (const key of toDelete) {
+    processedMessageEvents.delete(key);
+  }
+
+  if (toDelete.length > 0) {
+    console.log(
+      `[useRealtimeSync] Cleaned up ${toDelete.length} expired message event entries`,
+    );
+  }
+}
+
+// ============================================================================
 // Event Invalidation Map
 // ============================================================================
 
@@ -84,6 +156,11 @@ export const EVENT_INVALIDATION_MAP: Record<
   'connection.logged_out': sessionId => [
     [...whatsappKeys.sessions.list()],
     ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
+  ],
+
+  // Message received: invalidate messages list for the session
+  'message.received': sessionId => [
+    ...(sessionId ? [[...whatsappKeys.messages.list({ sessionId })]] : []),
   ],
 };
 
@@ -162,6 +239,11 @@ export function useRealtimeSync(
   // Handle incoming events
   const handleEvent = useCallback(
     (event: WhatsAppEvent) => {
+      // Deduplicate message events
+      if (isMessageEventDuplicate(event)) {
+        return; // Skip duplicate
+      }
+
       // Call user's onEvent callback
       onEventRef.current?.(event);
 

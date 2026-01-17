@@ -30,6 +30,7 @@ import type {
 } from '@pharmabroker/schemas/whatsapp';
 import { escapeSqlWildcards } from '../utils/prisma';
 import { messageQueueService } from './message-queue.service';
+import { generateContentHash } from '../utils/content-hash';
 
 // ============================================================================
 // Types for Prisma queries
@@ -438,6 +439,13 @@ class WhatsAppMessagesService {
     const mediaKeyBuffer = mediaKey ? Buffer.from(mediaKey) : null;
     const mediaSha256Buffer = mediaSha256 ? Buffer.from(mediaSha256) : null;
 
+    // Generate content hash for deduplication
+    const contentHash = generateContentHash({
+      text: text ?? null,
+      caption: caption ?? null,
+      messageType,
+    });
+
     // Upsert the message
     await prisma.whatsAppMessage.upsert({
       where: {
@@ -474,6 +482,7 @@ class WhatsAppMessagesService {
             ? Prisma.JsonNull
             : (rawPayload as Prisma.InputJsonValue),
         aiStatus: 'pending',
+        contentHash,
       },
       update: {
         // Update fields that might change
@@ -481,6 +490,7 @@ class WhatsAppMessagesService {
         participantId: participant?.id ?? null,
         text: text ?? null,
         caption: caption ?? null,
+        contentHash, // Update hash if content changed
         // Don't update source - keep original
       },
     });
@@ -537,6 +547,13 @@ class WhatsAppMessagesService {
           ? Buffer.from(event.mediaSha256)
           : null;
 
+        // Generate content hash for deduplication
+        const contentHash = generateContentHash({
+          text: event.text ?? null,
+          caption: event.caption ?? null,
+          messageType: event.messageType,
+        });
+
         // Upsert the message
         await prisma.whatsAppMessage.upsert({
           where: {
@@ -573,6 +590,7 @@ class WhatsAppMessagesService {
                 ? Prisma.JsonNull
                 : (event.rawPayload as Prisma.InputJsonValue),
             aiStatus: 'pending',
+            contentHash,
           },
           update: {
             // Update fields that might change
@@ -580,6 +598,7 @@ class WhatsAppMessagesService {
             participantId: participant?.id ?? null,
             text: event.text ?? null,
             caption: event.caption ?? null,
+            contentHash, // Update hash if content changed
           },
         });
 
