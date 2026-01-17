@@ -28,7 +28,6 @@ import type {
   AIStatus,
   MessageSource,
 } from '@pharmabroker/schemas/whatsapp';
-import { escapeSqlWildcards } from '../utils/prisma';
 import { messageQueueService } from './message-queue.service';
 import { generateContentHash } from '../utils/content-hash';
 import { logger } from '@pharmabroker/logger';
@@ -216,34 +215,16 @@ class WhatsAppMessagesService {
     }
 
     // Search in text, caption, and sender name using Full Text Search
+    let searchQuery: string | undefined;
     if (search) {
       // Use PostgreSQL Full Text Search for better performance
       // Convert search query to tsquery format (handles multiple words)
-      const searchQuery = search
+      searchQuery = search
         .trim()
         .split(/\s+/)
         .filter(word => word.length > 0)
         .map(word => `${word}:*`) // Prefix matching
         .join(' & '); // AND operator
-
-      // Use raw query for FTS - much faster than ILIKE on large tables
-      // Note: This requires the search_vector column and trigger to be set up
-      const ftsCondition = Prisma.sql`search_vector @@ to_tsquery('english', ${searchQuery})`;
-
-      // Add FTS condition to where clause
-      // We'll use a raw query approach for this specific case
-      (where as any).AND = [
-        {
-          OR: [
-            { text: { not: null } },
-            { caption: { not: null } },
-            { senderPushName: { not: null } },
-          ],
-        },
-      ];
-
-      // Store search query for raw SQL usage
-      (where as any)._ftsQuery = searchQuery;
     }
 
     // Generate cache key for count
@@ -253,13 +234,10 @@ class WhatsAppMessagesService {
     let total = getCachedCount(cacheKey);
 
     if (total === null) {
+      this.log.debug('Count cache miss', { userId, hasSearch: !!search });
       // Count not in cache, fetch from database
-      if (search && (where as any)._ftsQuery) {
+      if (searchQuery) {
         // Use raw query for FTS count
-        const searchQuery = (where as any)._ftsQuery;
-        delete (where as any)._ftsQuery;
-        delete (where as any).AND;
-
         const countResult = await prisma.$queryRaw<[{ count: bigint }]>`
           SELECT COUNT(*) as count
           FROM whatsapp_message wm
@@ -282,6 +260,8 @@ class WhatsAppMessagesService {
 
       // Cache the count
       setCachedCount(cacheKey, total);
+    } else {
+      this.log.debug('Count cache hit', { userId, total, hasSearch: !!search });
     }
 
     // Validate cursor exists if provided
@@ -307,12 +287,8 @@ class WhatsAppMessagesService {
 
     let messages;
 
-    if (search && (where as any)._ftsQuery) {
+    if (searchQuery) {
       // Use raw query for FTS search with pagination
-      const searchQuery = (where as any)._ftsQuery;
-      delete (where as any)._ftsQuery;
-      delete (where as any).AND;
-
       // Build the FTS query with all filters
       messages = await prisma.$queryRaw<any[]>`
         SELECT 
@@ -653,6 +629,26 @@ class WhatsAppMessagesService {
       messageType,
     });
 
+    // Check if quoted message exists (to avoid foreign key constraint violation)
+    let validQuotedMessageId: string | null = null;
+    if (quotedMessageId) {
+      const quotedMessage = await prisma.whatsAppMessage.findFirst({
+        where: {
+          sessionId,
+          messageId: quotedMessageId,
+        },
+        select: { id: true },
+      });
+      validQuotedMessageId = quotedMessage?.id ?? null;
+
+      if (!quotedMessage) {
+        this.log.debug('Quoted message not found, setting to null', {
+          messageId,
+          quotedMessageId,
+        });
+      }
+    }
+
     // Upsert the message
     await prisma.whatsAppMessage.upsert({
       where: {
@@ -681,7 +677,7 @@ class WhatsAppMessagesService {
         isForwarded,
         isViewOnce,
         isBroadcast,
-        quotedMessageId: quotedMessageId ?? null,
+        quotedMessageId: validQuotedMessageId,
         messageTimestamp: new Date(messageTimestamp),
         source: source as any,
         rawPayload:
@@ -790,6 +786,19 @@ class WhatsAppMessagesService {
           messageType: event.messageType,
         });
 
+        // Check if quoted message exists (to avoid foreign key constraint violation)
+        let validQuotedMessageId: string | null = null;
+        if (event.quotedMessageId) {
+          const quotedMessage = await prisma.whatsAppMessage.findFirst({
+            where: {
+              sessionId,
+              messageId: event.quotedMessageId,
+            },
+            select: { id: true },
+          });
+          validQuotedMessageId = quotedMessage?.id ?? null;
+        }
+
         // Upsert the message
         await prisma.whatsAppMessage.upsert({
           where: {
@@ -818,7 +827,7 @@ class WhatsAppMessagesService {
             isForwarded: event.isForwarded,
             isViewOnce: event.isViewOnce,
             isBroadcast: event.isBroadcast,
-            quotedMessageId: event.quotedMessageId ?? null,
+            quotedMessageId: validQuotedMessageId,
             messageTimestamp: new Date(event.messageTimestamp),
             source: event.source as any,
             rawPayload:
