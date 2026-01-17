@@ -132,15 +132,27 @@ func NewMediaUploader(waClient *whatsapp.WhatsmeowClient, cfg *config.Config) re
 	return mediaUploader
 }
 
-// WireEventHubToWhatsAppClient connects the EventHub to receive events from the WhatsApp client
-// This enables real-time event broadcasting to connected WebSocket clients
+// WireEventHubToWhatsAppClient connects the EventHub and EventPublisher to receive events from the WhatsApp client
+// This enables real-time event broadcasting to connected WebSocket clients AND the API server
 func WireEventHubToWhatsAppClient(
 	waClient *whatsapp.WhatsmeowClient,
 	hub *websocket.EventHub,
+	publisher repository.EventPublisher,
 ) {
-	// Register an event handler that broadcasts events to the EventHub
+	// Register an event handler that broadcasts events to the EventHub (for frontend WebSocket clients)
 	waClient.RegisterEventHandler(func(event *entity.Event) {
 		// Broadcast the event to all connected WebSocket clients
 		hub.Broadcast(event)
+	})
+
+	// Register an event handler that publishes events to the API server via WebSocket
+	waClient.RegisterEventHandler(func(event *entity.Event) {
+		// Publish the event to the API server (non-blocking)
+		go func() {
+			ctx := context.Background()
+			if err := publisher.Publish(ctx, event); err != nil {
+				// Log error but don't block (events are queued internally)
+			}
+		}()
 	})
 }

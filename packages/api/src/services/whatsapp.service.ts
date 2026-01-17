@@ -233,29 +233,27 @@ function mapPrismaSession(session: {
   createdAt: Date;
   updatedAt: Date;
 }): Session {
-  const result: Record<string, unknown> = {
+  return {
     id: session.id,
+    jid: session.jid ?? undefined,
     name: session.name,
     status: session.status as SessionStatus,
     auto_connect: session.autoConnect,
     enable_history_sync: session.enableHistorySync,
-    first_connected_at: session.firstConnectedAt?.toISOString(),
-    last_connected_at: session.lastConnectedAt?.toISOString(),
-    last_disconnected_at: session.lastDisconnectedAt?.toISOString(),
+    first_connected_at: session.firstConnectedAt?.toISOString() ?? undefined,
+    last_connected_at: session.lastConnectedAt?.toISOString() ?? undefined,
+    last_disconnected_at:
+      session.lastDisconnectedAt?.toISOString() ?? undefined,
     history_sync_status: session.historySyncStatus,
     history_sync_progress: session.historySyncProgress,
-    history_sync_total: session.historySyncTotal,
-    history_sync_started_at: session.historySyncStartedAt?.toISOString(),
-    history_sync_completed_at: session.historySyncCompletedAt?.toISOString(),
+    history_sync_total: session.historySyncTotal ?? undefined,
+    history_sync_started_at:
+      session.historySyncStartedAt?.toISOString() ?? undefined,
+    history_sync_completed_at:
+      session.historySyncCompletedAt?.toISOString() ?? undefined,
     created_at: session.createdAt.toISOString(),
     updated_at: session.updatedAt.toISOString(),
-  };
-
-  if (session.jid) {
-    result.jid = session.jid;
-  }
-
-  return result as Session;
+  } as Session;
 }
 
 class WhatsAppSessionService {

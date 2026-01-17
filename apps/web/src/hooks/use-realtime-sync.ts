@@ -159,11 +159,10 @@ export const EVENT_INVALIDATION_MAP: Record<
     ...(sessionId ? [[...whatsappKeys.sessions.detail(sessionId)]] : []),
   ],
 
-  // Message received: invalidate messages list for the session
+  // Message received: invalidate all message lists and stats
   'message.received': sessionId => [
-    ...(sessionId
-      ? [[...messageKeys.list({ sessionId, limit: 50, cursor: undefined })]]
-      : []),
+    [...messageKeys.lists()],
+    ...(sessionId ? [[...messageKeys.stats(sessionId)]] : []),
   ],
 
   // History sync events: invalidate sessions list and detail
