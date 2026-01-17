@@ -226,6 +226,56 @@ services:
     profiles:
       - prod
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 💾 WhatsApp Session Backup Service - Development
+  # ─────────────────────────────────────────────────────────────────────────────
+  whatsapp-backup-dev:
+    build:
+      context: ./service/whatsapp-backup
+      dockerfile: Dockerfile
+    container_name: pharmabroker-whatsapp-backup-dev
+    environment:
+      TZ: Africa/Cairo
+      DB_PATH: /data/whatsmeow.db
+      BACKUP_DIR: /backups
+      BACKUP_INTERVAL: ${WHATSAPP_BACKUP_INTERVAL:-3600}  # Default: 1 hour
+      BACKUP_RETENTION_DAYS: ${WHATSAPP_BACKUP_RETENTION_DAYS:-7}  # Default: 7 days
+      LOG_LEVEL: info
+    volumes:
+      - whatsapp_data_dev:/data:ro  # Read-only access to database
+      - whatsapp_backups_dev:/backups  # Separate volume for backups
+    depends_on:
+      - whatsapp-dev
+    restart: unless-stopped
+    networks:
+      - pharmabroker
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 💾 WhatsApp Session Backup Service - Production
+  # ─────────────────────────────────────────────────────────────────────────────
+  whatsapp-backup:
+    build:
+      context: ./service/whatsapp-backup
+      dockerfile: Dockerfile
+    container_name: pharmabroker-whatsapp-backup-prod
+    environment:
+      TZ: Africa/Cairo
+      DB_PATH: /data/whatsmeow.db
+      BACKUP_DIR: /backups
+      BACKUP_INTERVAL: ${WHATSAPP_BACKUP_INTERVAL:-3600}  # Default: 1 hour
+      BACKUP_RETENTION_DAYS: ${WHATSAPP_BACKUP_RETENTION_DAYS:-7}  # Default: 7 days
+      LOG_LEVEL: info
+    volumes:
+      - whatsapp_data:/data:ro  # Read-only access to database
+      - whatsapp_backups:/backups  # Separate volume for backups
+    depends_on:
+      - whatsapp
+    restart: unless-stopped
+    networks:
+      - pharmabroker
+    profiles:
+      - prod
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Networks
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -240,6 +290,10 @@ volumes:
   whatsapp_data:
     driver: local
   whatsapp_data_dev:
+    driver: local
+  whatsapp_backups:
+    driver: local
+  whatsapp_backups_dev:
     driver: local
 
 # ═══════════════════════════════════════════════════════════════════════════════
