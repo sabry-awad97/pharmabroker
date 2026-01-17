@@ -107,12 +107,33 @@ const isoDateStringArb = fc
   .integer({ min: 1577836800000, max: 1893456000000 })
   .map(ts => new Date(ts).toISOString());
 
+/** Arbitrary for history sync status */
+const historySyncStatusArb = fc.constantFrom(
+  'not_started',
+  'in_progress',
+  'completed',
+  'failed',
+  'skipped',
+  'cancelled',
+);
+
 /** Arbitrary for session */
 const sessionArb = fc.record<Session>({
   id: uuidArb,
   name: fc.string({ minLength: 1, maxLength: 100 }),
   status: sessionStatusArb,
   auto_connect: fc.boolean(),
+  enable_history_sync: fc.boolean(),
+  history_sync_status: historySyncStatusArb,
+  history_sync_progress: fc.integer({ min: 0, max: 100000 }),
+  history_sync_total: fc.option(fc.integer({ min: 0, max: 100000 }), {
+    nil: undefined,
+  }),
+  first_connected_at: fc.option(isoDateStringArb, { nil: undefined }),
+  last_connected_at: fc.option(isoDateStringArb, { nil: undefined }),
+  last_disconnected_at: fc.option(isoDateStringArb, { nil: undefined }),
+  history_sync_started_at: fc.option(isoDateStringArb, { nil: undefined }),
+  history_sync_completed_at: fc.option(isoDateStringArb, { nil: undefined }),
   created_at: isoDateStringArb,
   updated_at: isoDateStringArb,
   jid: fc.option(fc.string(), { nil: undefined }),
@@ -143,6 +164,9 @@ describe('WhatsApp Optimistic Updates', () => {
         name: 'Test Session',
         status: 'connected',
         auto_connect: true,
+        enable_history_sync: false,
+        history_sync_status: 'not_started',
+        history_sync_progress: 0,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
       };

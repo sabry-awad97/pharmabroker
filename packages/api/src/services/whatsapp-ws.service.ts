@@ -23,7 +23,9 @@ import {
 } from './whatsapp-messages.service';
 import { messageQueueService } from './message-queue.service';
 import { queueMetricsTracker } from '../utils/queue-metrics';
+import { historySyncService } from './history-sync.service';
 import { env } from '@pharmabroker/env/server';
+import prisma from '@pharmabroker/db';
 
 // ============================================================================
 // Types
@@ -319,7 +321,43 @@ export class WhatsAppWebSocketService {
 
         case 'connection.connected':
           newStatus = 'connected';
-          // Trigger auto-sync of groups on connection
+
+          // Update connection timestamp
+          await historySyncService.updateConnectionTimestamps(
+            event.session_id,
+            'connected',
+          );
+
+          // Determine and trigger sync strategy
+          const session = await prisma.whatsAppSession.findUnique({
+            where: { id: event.session_id },
+            select: {
+              id: true,
+              enableHistorySync: true,
+              firstConnectedAt: true,
+              lastDisconnectedAt: true,
+            },
+          });
+
+          if (session) {
+            const strategy = historySyncService.determineSyncStrategy(session);
+
+            if (strategy === 'full_history') {
+              await historySyncService.triggerFullHistorySync(event.session_id);
+            } else if (
+              strategy === 'incremental' &&
+              session.lastDisconnectedAt
+            ) {
+              await historySyncService.triggerIncrementalSync(
+                event.session_id,
+                session.lastDisconnectedAt,
+              );
+            } else {
+              await historySyncService.skipHistorySync(event.session_id);
+            }
+          }
+
+          // Trigger group sync
           this.triggerGroupSync(event.session_id).catch(err => {
             console.error(
               `[WhatsAppWS] Auto-sync failed for session ${event.session_id}:`,
@@ -330,6 +368,13 @@ export class WhatsAppWebSocketService {
 
         case 'connection.disconnected':
           newStatus = 'disconnected';
+
+          // Update disconnection timestamp
+          await historySyncService.updateConnectionTimestamps(
+            event.session_id,
+            'disconnected',
+          );
+
           // Clear sync state on disconnect
           this.clearSyncState(event.session_id);
           break;
@@ -341,7 +386,44 @@ export class WhatsAppWebSocketService {
         case 'session.authenticated':
           newStatus = 'connected';
           jid = event.data?.jid;
-          // Trigger auto-sync of groups on authentication
+
+          // Update connection timestamp
+          await historySyncService.updateConnectionTimestamps(
+            event.session_id,
+            'connected',
+          );
+
+          // Determine and trigger sync strategy
+          const authSession = await prisma.whatsAppSession.findUnique({
+            where: { id: event.session_id },
+            select: {
+              id: true,
+              enableHistorySync: true,
+              firstConnectedAt: true,
+              lastDisconnectedAt: true,
+            },
+          });
+
+          if (authSession) {
+            const strategy =
+              historySyncService.determineSyncStrategy(authSession);
+
+            if (strategy === 'full_history') {
+              await historySyncService.triggerFullHistorySync(event.session_id);
+            } else if (
+              strategy === 'incremental' &&
+              authSession.lastDisconnectedAt
+            ) {
+              await historySyncService.triggerIncrementalSync(
+                event.session_id,
+                authSession.lastDisconnectedAt,
+              );
+            } else {
+              await historySyncService.skipHistorySync(event.session_id);
+            }
+          }
+
+          // Trigger group sync
           this.triggerGroupSync(event.session_id).catch(err => {
             console.error(
               `[WhatsAppWS] Auto-sync failed for session ${event.session_id}:`,
@@ -574,6 +656,9 @@ export class WhatsAppWebSocketService {
 
     // Log session metrics
     queueMetricsTracker.logSessionMetrics(sessionId);
+
+    // Complete history sync
+    await historySyncService.completeSync(sessionId, result);
 
     // Update state
     this.setSyncState(sessionId, {

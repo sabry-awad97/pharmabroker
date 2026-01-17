@@ -221,6 +221,15 @@ function mapPrismaSession(session: {
   jid: string | null;
   status: string;
   autoConnect: boolean;
+  enableHistorySync: boolean;
+  firstConnectedAt: Date | null;
+  lastConnectedAt: Date | null;
+  lastDisconnectedAt: Date | null;
+  historySyncStatus: string;
+  historySyncProgress: number;
+  historySyncTotal: number | null;
+  historySyncStartedAt: Date | null;
+  historySyncCompletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): Session {
@@ -229,6 +238,15 @@ function mapPrismaSession(session: {
     name: session.name,
     status: session.status as SessionStatus,
     auto_connect: session.autoConnect,
+    enable_history_sync: session.enableHistorySync,
+    first_connected_at: session.firstConnectedAt?.toISOString(),
+    last_connected_at: session.lastConnectedAt?.toISOString(),
+    last_disconnected_at: session.lastDisconnectedAt?.toISOString(),
+    history_sync_status: session.historySyncStatus,
+    history_sync_progress: session.historySyncProgress,
+    history_sync_total: session.historySyncTotal,
+    history_sync_started_at: session.historySyncStartedAt?.toISOString(),
+    history_sync_completed_at: session.historySyncCompletedAt?.toISOString(),
     created_at: session.createdAt.toISOString(),
     updated_at: session.updatedAt.toISOString(),
   };
@@ -249,6 +267,7 @@ class WhatsAppSessionService {
       data: {
         name: input.name,
         autoConnect: input.auto_connect ?? false,
+        enableHistorySync: input.enable_history_sync ?? false,
         userId,
         status: 'pending',
       },
@@ -303,6 +322,9 @@ class WhatsAppSessionService {
         ...(input.name !== undefined && { name: input.name }),
         ...(input.auto_connect !== undefined && {
           autoConnect: input.auto_connect,
+        }),
+        ...(input.enable_history_sync !== undefined && {
+          enableHistorySync: input.enable_history_sync,
         }),
       },
     });

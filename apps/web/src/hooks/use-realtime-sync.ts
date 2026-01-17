@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { createBatchInvalidator } from '../utils/batch-invalidate';
 import { useWhatsappEvents, whatsappKeys } from './whatsapp';
+import { messageKeys } from './whatsapp-messages';
 
 // ============================================================================
 // Types
@@ -160,7 +161,9 @@ export const EVENT_INVALIDATION_MAP: Record<
 
   // Message received: invalidate messages list for the session
   'message.received': sessionId => [
-    ...(sessionId ? [[...whatsappKeys.messages.list({ sessionId })]] : []),
+    ...(sessionId
+      ? [[...messageKeys.list({ sessionId, limit: 50, cursor: undefined })]]
+      : []),
   ],
 };
 

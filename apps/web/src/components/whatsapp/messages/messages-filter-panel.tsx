@@ -124,7 +124,7 @@ export function MessagesFilterPanel({
           onValueChange={v => onMessageTypeChange(v as MessageType | 'all')}
         >
           <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Type" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {messageTypes.map(type => (
@@ -141,7 +141,7 @@ export function MessagesFilterPanel({
           onValueChange={v => onAIStatusChange(v as AIStatus | 'all')}
         >
           <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="AI Status" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {aiStatuses.map(status => (
@@ -158,7 +158,7 @@ export function MessagesFilterPanel({
           onValueChange={v => onSourceChange(v as MessageSource)}
         >
           <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Source" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {sources.map(s => (

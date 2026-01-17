@@ -66,7 +66,7 @@ export function MessagePreview({
     return str.slice(0, maxLength).trim() + '…';
   };
 
-  if (display.type === 'media' && 'icon' in display) {
+  if (display.type === 'media' && 'icon' in display && display.icon) {
     const Icon = display.icon;
     return (
       <div

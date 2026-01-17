@@ -10,8 +10,24 @@ model WhatsAppSession {
     autoConnect Boolean               @default(false) @map("auto_connect") // Auto-reconnect on Go service startup
     userId      String
     user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-    createdAt   DateTime              @default(now())
-    updatedAt   DateTime              @updatedAt
+
+    // History Sync Configuration
+    enableHistorySync Boolean @default(false) @map("enable_history_sync") // User preference for initial history sync
+
+    // Connection Tracking
+    firstConnectedAt   DateTime? @map("first_connected_at") // First successful connection timestamp
+    lastConnectedAt    DateTime? @map("last_connected_at") // Most recent connection timestamp
+    lastDisconnectedAt DateTime? @map("last_disconnected_at") // Most recent disconnection timestamp
+
+    // Sync Status Tracking
+    historySyncStatus      HistorySyncStatus @default(not_started) @map("history_sync_status")
+    historySyncProgress    Int               @default(0) @map("history_sync_progress") // Messages synced so far
+    historySyncTotal       Int?              @map("history_sync_total") // Total messages to sync
+    historySyncStartedAt   DateTime?         @map("history_sync_started_at") // When sync started
+    historySyncCompletedAt DateTime?         @map("history_sync_completed_at") // When sync completed
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
 
     // Relations
     groups   WhatsAppGroup[]
@@ -19,6 +35,7 @@ model WhatsAppSession {
 
     @@index([userId])
     @@index([status])
+    @@index([historySyncStatus])
     @@map("whatsapp_session")
 }
 
@@ -31,6 +48,17 @@ enum WhatsAppSessionStatus {
     expired
 
     @@map("whatsapp_session_status")
+}
+
+enum HistorySyncStatus {
+    not_started // Never synced
+    in_progress // Currently syncing
+    completed // Sync completed successfully
+    failed // Sync failed
+    skipped // User chose to skip
+    cancelled // User cancelled during sync
+
+    @@map("history_sync_status")
 }
 
 // WhatsApp Group Management
