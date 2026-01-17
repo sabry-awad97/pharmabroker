@@ -29,6 +29,8 @@ import {
   aiDeduplicationRate,
   recordError,
 } from '@pharmabroker/metrics';
+import { calculateBackoffWithJitter } from '../utils/backoff';
+import { CircuitBreaker, CircuitBreakerError } from '../utils/circuit-breaker';
 
 // ============================================================================
 // Types
@@ -60,15 +62,36 @@ export interface CancelScheduleResult {
 }
 
 // ============================================================================
+// Configuration
+// ============================================================================
+
+const AI_RETRY_CONFIG = {
+  /** Maximum number of retry attempts for AI processing */
+  MAX_RETRIES: 3,
+  /** Initial delay for first retry (ms) */
+  INITIAL_DELAY_MS: 1000,
+  /** Maximum delay cap (ms) */
+  MAX_DELAY_MS: 30_000,
+  /** Timeout for AI requests (ms) - 60 seconds for cold starts */
+  REQUEST_TIMEOUT_MS: 60_000,
+} as const;
+
+// ============================================================================
 // AI Processor Service
 // ============================================================================
 
 class AIProcessorService {
   private client: AIClient;
   private log = logger.child('ai-processor');
+  private circuitBreaker: CircuitBreaker;
 
   constructor() {
     this.client = getAIClient();
+    this.circuitBreaker = new CircuitBreaker({
+      failureThreshold: 5,
+      resetTimeoutMs: 60_000, // 1 minute
+      name: 'AI-Service',
+    });
   }
 
   /**
@@ -187,12 +210,8 @@ class AIProcessorService {
         groupName: message.group.name,
       });
 
-      // Process with AI using medication extraction schema
-      const result = await this.client.processMessage(input, {
-        schema: messageExtractionSchema,
-        systemPrompt: medicationSystemPrompt,
-        promptTemplate: medicationPromptTemplate,
-      });
+      // Process with AI using retry logic and circuit breaker
+      const result = await this.processWithRetry(input, message.aiRetryCount);
 
       const duration = Date.now() - startTime;
 
@@ -832,6 +851,239 @@ class AIProcessorService {
   // ─────────────────────────────────────────────────────────────────────────
   // Private Methods
   // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Process message with AI using retry logic and circuit breaker
+   *
+   * @param input - Message input for AI processing
+   * @param currentRetryCount - Current retry count from database
+   * @returns AI processing result
+   */
+  private async processWithRetry(
+    input: MessageInput,
+    currentRetryCount: number,
+  ): Promise<{
+    status: 'completed' | 'failed';
+    model: string;
+    error?: string;
+    data?: MessageExtraction;
+  }> {
+    let lastError: Error | null = null;
+    const maxRetries = AI_RETRY_CONFIG.MAX_RETRIES;
+
+    // Start from current retry count (for messages that have been retried before)
+    for (
+      let attempt = currentRetryCount;
+      attempt <= currentRetryCount + maxRetries;
+      attempt++
+    ) {
+      try {
+        // Check circuit breaker state before attempting
+        const circuitState = this.circuitBreaker.getState();
+        if (circuitState === 'open') {
+          this.log.warn('Circuit breaker is open, scheduling for later retry', {
+            messageId: input.id,
+            attempt,
+          });
+
+          // Return a special status to indicate circuit is open
+          return {
+            status: 'failed',
+            model: this.client.modelName,
+            error:
+              'AI service circuit breaker is open. Message will be retried later.',
+          };
+        }
+
+        this.log.debug('Attempting AI processing', {
+          messageId: input.id,
+          attempt,
+          maxRetries,
+          circuitState,
+        });
+
+        // Execute AI processing through circuit breaker with timeout
+        const result = await this.circuitBreaker.execute(async () => {
+          return await this.executeWithTimeout(
+            this.client.processMessage(input, {
+              schema: messageExtractionSchema,
+              systemPrompt: medicationSystemPrompt,
+              promptTemplate: medicationPromptTemplate,
+            }),
+            AI_RETRY_CONFIG.REQUEST_TIMEOUT_MS,
+          );
+        });
+
+        // Success - return result
+        this.log.info('AI processing succeeded', {
+          messageId: input.id,
+          attempt,
+          model: result.model,
+        });
+
+        return {
+          status: result.status === 'failed' ? 'failed' : 'completed',
+          model: result.model,
+          error: result.error,
+          data: result.data ?? undefined,
+        };
+      } catch (error) {
+        lastError = error as Error;
+
+        // Check if it's a circuit breaker error
+        if (error instanceof CircuitBreakerError) {
+          this.log.warn('Circuit breaker prevented request', {
+            messageId: input.id,
+            attempt,
+            error: error.message,
+          });
+
+          return {
+            status: 'failed',
+            model: this.client.modelName,
+            error:
+              'AI service is temporarily unavailable. Message will be retried later.',
+          };
+        }
+
+        // Determine if error is retryable
+        const isRetryable = this.isRetryableError(error);
+        const isLastAttempt = attempt >= currentRetryCount + maxRetries;
+
+        this.log.warn('AI processing attempt failed', {
+          messageId: input.id,
+          attempt,
+          maxRetries,
+          isRetryable,
+          isLastAttempt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        // If not retryable or last attempt, fail immediately
+        if (!isRetryable || isLastAttempt) {
+          return {
+            status: 'failed',
+            model: this.client.modelName,
+            error: this.formatErrorWithStack(error),
+          };
+        }
+
+        // Calculate backoff delay with jitter
+        const delay = calculateBackoffWithJitter(
+          attempt - currentRetryCount,
+          AI_RETRY_CONFIG.INITIAL_DELAY_MS,
+          AI_RETRY_CONFIG.MAX_DELAY_MS,
+        );
+
+        this.log.info('Retrying after backoff', {
+          messageId: input.id,
+          attempt,
+          nextAttempt: attempt + 1,
+          delayMs: delay,
+        });
+
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    // All retries exhausted
+    return {
+      status: 'failed',
+      model: this.client.modelName,
+      error: lastError
+        ? this.formatErrorWithStack(lastError)
+        : 'All retry attempts exhausted',
+    };
+  }
+
+  /**
+   * Execute a promise with timeout
+   */
+  private async executeWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+  ): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `AI request timed out after ${timeoutMs}ms (possible cold start)`,
+              ),
+            ),
+          timeoutMs,
+        ),
+      ),
+    ]);
+  }
+
+  /**
+   * Determine if an error is retryable
+   */
+  private isRetryableError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    const errorObj = error as any;
+
+    // Timeout errors are retryable (cold starts)
+    if (message.includes('timeout') || message.includes('timed out')) {
+      return true;
+    }
+
+    // Network errors are retryable
+    if (
+      message.includes('network') ||
+      message.includes('econnrefused') ||
+      message.includes('enotfound') ||
+      message.includes('econnreset')
+    ) {
+      return true;
+    }
+
+    // Rate limit errors are retryable
+    if (
+      message.includes('rate limit') ||
+      message.includes('too many requests') ||
+      errorObj.status === 429
+    ) {
+      return true;
+    }
+
+    // Service unavailable errors are retryable
+    if (
+      message.includes('service unavailable') ||
+      message.includes('temporarily unavailable') ||
+      errorObj.status === 503
+    ) {
+      return true;
+    }
+
+    // Internal server errors might be transient
+    if (errorObj.status === 500 || errorObj.status === 502) {
+      return true;
+    }
+
+    // Bad gateway errors are retryable
+    if (errorObj.status === 502 || errorObj.status === 504) {
+      return true;
+    }
+
+    // Default: not retryable (e.g., validation errors, auth errors)
+    return false;
+  }
+
+  /**
+   * Get circuit breaker status for monitoring
+   */
+  getCircuitBreakerStatus() {
+    return this.circuitBreaker.getStatus();
+  }
 
   /**
    * Find existing AI processing result for the same content
