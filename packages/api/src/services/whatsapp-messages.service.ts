@@ -14,7 +14,6 @@
  * - Export to JSON/CSV
  */
 
-import { ORPCError } from '@orpc/server';
 import prisma, { Prisma } from '@pharmabroker/db';
 import type {
   MessageFilterInput,
@@ -32,6 +31,8 @@ import { messageQueueService } from './message-queue.service';
 import { generateContentHash } from '../utils/content-hash';
 import { logger } from '@pharmabroker/logger';
 import { whatsappMessagesReceived, recordError } from '@pharmabroker/metrics';
+import { ApiError, ErrorCodes } from '../errors';
+import type { Context } from '../context';
 
 // ============================================================================
 // Count Cache for Performance
@@ -390,6 +391,7 @@ class WhatsAppMessagesService {
   async getMessage(
     userId: string,
     messageId: string,
+    context?: Context,
   ): Promise<WhatsAppMessageDetail> {
     const message = await prisma.whatsAppMessage.findFirst({
       where: {
@@ -416,8 +418,9 @@ class WhatsAppMessagesService {
     });
 
     if (!message) {
-      throw new ORPCError('MESSAGE_NOT_FOUND', {
-        message: 'Message not found',
+      throw new ApiError(ErrorCodes.MESSAGE_NOT_FOUND, 'Message not found', {
+        requestId: context?.requestId,
+        details: { messageId },
       });
     }
 
@@ -498,7 +501,11 @@ class WhatsAppMessagesService {
    * Delete a single message
    * Verifies ownership before deletion
    */
-  async deleteMessage(userId: string, messageId: string): Promise<void> {
+  async deleteMessage(
+    userId: string,
+    messageId: string,
+    context?: Context,
+  ): Promise<void> {
     const message = await prisma.whatsAppMessage.findFirst({
       where: {
         id: messageId,
@@ -508,8 +515,9 @@ class WhatsAppMessagesService {
     });
 
     if (!message) {
-      throw new ORPCError('MESSAGE_NOT_FOUND', {
-        message: 'Message not found',
+      throw new ApiError(ErrorCodes.MESSAGE_NOT_FOUND, 'Message not found', {
+        requestId: context?.requestId,
+        details: { messageId },
       });
     }
 
@@ -1008,6 +1016,7 @@ class WhatsAppMessagesService {
   async getSyncStatus(
     userId: string,
     sessionId: string,
+    context?: Context,
   ): Promise<{ synced: number; errors: string[] }> {
     // Verify session belongs to user and is connected
     const session = await prisma.whatsAppSession.findFirst({
@@ -1022,16 +1031,21 @@ class WhatsAppMessagesService {
     });
 
     if (!session) {
-      throw new ORPCError('SESSION_NOT_FOUND', {
-        message: 'Session not found',
+      throw new ApiError(ErrorCodes.SESSION_NOT_FOUND, 'Session not found', {
+        requestId: context?.requestId,
+        details: { sessionId },
       });
     }
 
     if (session.status !== 'connected') {
-      throw new ORPCError('SESSION_NOT_CONNECTED', {
-        message:
-          'Session must be connected to sync messages. History sync happens automatically when the session connects.',
-      });
+      throw new ApiError(
+        ErrorCodes.SESSION_NOT_CONNECTED,
+        'Session must be connected to sync messages. History sync happens automatically when the session connects.',
+        {
+          requestId: context?.requestId,
+          details: { sessionId, status: session.status },
+        },
+      );
     }
 
     // Count messages synced from history for this session
